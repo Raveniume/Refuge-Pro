@@ -70,6 +70,7 @@ import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeCompactUtilityPill
+import com.refuge.next.material.RefugeContentSurface
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeImagePlaceholder
 import com.refuge.next.material.RefugeLightweightGlassSurface
@@ -105,9 +106,9 @@ fun BoxScope.RootBottomNav(
         onSelected = onNavigate,
         modifier = Modifier
             .align(Alignment.BottomCenter)
-            .fillMaxWidth(.94f)
+            .fillMaxWidth(.84f)
             .navigationBarsPadding()
-            .padding(bottom = 10.dp),
+            .padding(bottom = 8.dp),
     ) { selectedIndex, select ->
         rootTabs.forEachIndexed { index, (icon, label) ->
             ReferenceSelectionItem(
@@ -146,7 +147,7 @@ private fun ProductionHeader(
                     }
                     .clickable(enabled = onAvatarClick != null) { onAvatarClick?.invoke() },
             )
-            Box(Modifier.size(9.dp).background(if (isOnline) palette.positive else palette.textMuted, CircleShape).border(1.dp, palette.background, CircleShape))
+            Box(Modifier.size(9.dp).background(if (isOnline) palette.positive else palette.textMuted, CircleShape).border(.5.dp, palette.background.copy(alpha = .72f), CircleShape))
         }
         Spacer(Modifier.width(RefugeSpacing.md))
         Column(Modifier.weight(1f)) {
@@ -405,7 +406,7 @@ private fun RowScope.ProfileStatCell(palette: RefugePalette, value: String, labe
 private fun ProfileAccountGroup(backdrop: LayerBackdrop, palette: RefugePalette, profile: ProfileData) {
     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
         Text("账户", style = RefugeTypography.headline(palette))
-            RefugeStandardGlassSurface(backdrop, palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+            RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
             Column {
                 AccountRow(palette, RefugeIcons.notification, "注册时间", profile.registerDate)
                 AccountRow(palette, RefugeIcons.success, "UEC", profile.uec)
@@ -430,11 +431,9 @@ private fun AccountRow(palette: RefugePalette, icon: androidx.compose.ui.graphic
 
 @Composable
 private fun ProfileOrganization(backdrop: LayerBackdrop, palette: RefugePalette) {
-    RefugeStandardGlassSurface(backdrop = backdrop, palette = palette, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(14.dp)) {
+    RefugeLightweightGlassSurface(palette = palette, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(46.dp).background(palette.accentSoft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                Icon(RefugeIcons.home, null, tint = palette.accent)
-            }
+            Icon(RefugeIcons.home, null, tint = palette.textSecondary, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(RefugeSpacing.md))
             Column {
                 Text("星环城", style = RefugeTypography.title(palette))
@@ -493,7 +492,7 @@ fun ToolsScreen(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
                         Text(group, style = RefugeTypography.headline(palette))
-                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(horizontal = 12.dp, vertical = 2.dp)) {
                             Column {
                                 visibleTools.forEachIndexed { index, tool ->
                                     ToolRow(palette, tool) { selectedTool = tool }
@@ -522,9 +521,7 @@ fun ToolsScreen(
 @Composable
 private fun ToolRow(palette: RefugePalette, tool: ToolItem, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 11.dp).semantics { role = Role.Button; contentDescription = tool.title }, verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(34.dp).background(palette.accentSoft, RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) {
-            Icon(if (tool.id == "test-center") RefugeIcons.success else RefugeIcons.tools, null, tint = palette.accent, modifier = Modifier.size(18.dp))
-        }
+        Icon(toolIcon(tool), null, tint = palette.textSecondary, modifier = Modifier.size(21.dp))
         Spacer(Modifier.width(RefugeSpacing.md))
         Column(Modifier.weight(1f)) {
             Text(tool.title, style = RefugeTypography.body(palette).copy(color = palette.text))
@@ -532,6 +529,18 @@ private fun ToolRow(palette: RefugePalette, tool: ToolItem, onClick: () -> Unit)
         }
         Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
     }
+}
+
+private fun toolIcon(tool: ToolItem) = when (tool.id) {
+    "crowdfunding" -> RefugeIcons.analytics
+    "player-search" -> RefugeIcons.personSearch
+    "social" -> RefugeIcons.people
+    "gift-redeem" -> RefugeIcons.gift
+    "ships" -> RefugeIcons.ship
+    "equipment" -> RefugeIcons.inventory
+    "referrals", "referral-reverse" -> RefugeIcons.personAdd
+    "test-center" -> RefugeIcons.science
+    else -> RefugeIcons.description
 }
 
 @Composable
@@ -733,7 +742,7 @@ fun CcuScreen(
                 }
             }
             item {
-                RefugeStandardGlassSurface(backdrop, palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(14.dp)) {
+                RefugeContentSurface(palette = palette, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(14.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                         Text("成本分析", style = RefugeTypography.headline(palette))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {

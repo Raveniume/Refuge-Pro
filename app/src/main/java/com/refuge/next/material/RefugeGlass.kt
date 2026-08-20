@@ -232,13 +232,12 @@ fun RefugeLightweightGlassSurface(
         .background(
             Brush.linearGradient(
                 listOf(
-                    palette.glassStrong.copy(alpha = if (palette.background.luminance() < .5f) .22f else .52f),
-                    palette.contentSurface.copy(alpha = if (palette.background.luminance() < .5f) .70f else .78f),
-                    palette.glass.copy(alpha = if (palette.background.luminance() < .5f) .12f else .38f),
+                    palette.glassStrong.copy(alpha = if (palette.background.luminance() < .5f) .14f else .24f),
+                    palette.contentSurface.copy(alpha = if (palette.background.luminance() < .5f) .34f else .42f),
+                    palette.glass.copy(alpha = if (palette.background.luminance() < .5f) .08f else .18f),
                 ),
             ),
         )
-        .border(1.dp, palette.outline.copy(alpha = .72f), shape)
         .then(highlight.modifier)
         .then(highlight.gestureModifier)
         .then(
@@ -278,13 +277,12 @@ fun RefugeContentSurface(
             .background(
                 Brush.linearGradient(
                     listOf(
-                        palette.glassStrong.copy(alpha = if (palette.background.luminance() < .5f) .18f else .48f),
-                        fill,
-                        fill.copy(alpha = fill.alpha * .86f),
+                        palette.glassStrong.copy(alpha = if (palette.background.luminance() < .5f) .10f else .18f),
+                        fill.copy(alpha = if (palette.background.luminance() < .5f) .34f else .46f),
+                        palette.glass.copy(alpha = if (palette.background.luminance() < .5f) .07f else .14f),
                     ),
                 ),
             )
-            .border(1.dp, palette.outline.copy(alpha = .56f), shape)
             .padding(padding),
         contentAlignment = Alignment.Center,
         content = content,

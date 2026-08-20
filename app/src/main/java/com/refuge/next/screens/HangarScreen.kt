@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -63,7 +66,6 @@ import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeGlassControl
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
-import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
 import com.refuge.next.reference.ReferenceLiquidButton
@@ -133,16 +135,7 @@ fun HangarScreen(
                         palette = palette,
                         ship = ship,
                         onClick = {
-                            selectedDetail = HangarDetail(
-                                title = ship.name,
-                                subtitle = ship.packageName,
-                                price = ship.paidValue,
-                                date = "2026年08月02日",
-                                imageRes = ship.imageRes,
-                                description = "${ship.name} 已加入本地机库。保险：${ship.insurance}。",
-                                isGiftable = true,
-                                isReclaimable = true,
-                            )
+                            selectedDetail = detailForShip(ship)
                         },
                     )
                 }
@@ -230,6 +223,10 @@ fun HangarScreen(
                 selectedDetail = null
                 onOpenCcu()
             },
+            onLog = {
+                selectedDetail = null
+                showLogs = true
+            },
         )
     }
     if (showLogs) {
@@ -252,6 +249,27 @@ private data class HangarDetail(
     val description: String,
     val isGiftable: Boolean,
     val isReclaimable: Boolean,
+    val meltValue: String,
+    val currentValue: String,
+    val savings: String,
+    val insurance: String,
+    val includedItems: List<String>,
+)
+
+private fun detailForShip(ship: OwnedShip) = HangarDetail(
+    title = ship.name,
+    subtitle = ship.packageName,
+    price = ship.paidValue,
+    date = "2026年08月02日",
+    imageRes = ship.imageRes,
+    description = "${ship.name} 已加入本地机库。保留原始购买、保险与礼包内容信息。",
+    isGiftable = true,
+    isReclaimable = true,
+    meltValue = ship.paidValue,
+    currentValue = ship.currentValue,
+    savings = "$160",
+    insurance = ship.insurance,
+    includedItems = listOf("${ship.name} 游戏包", "数字下载", "${ship.insurance} 保险"),
 )
 
 private fun HangarItem.toHangarDetail() = HangarDetail(
@@ -263,6 +281,11 @@ private fun HangarItem.toHangarDetail() = HangarDetail(
     description = "${title} · 已同步到本地机库。",
     isGiftable = isGiftable,
     isReclaimable = isReclaimable,
+    meltValue = price,
+    currentValue = price,
+    savings = "$0",
+    insurance = "—",
+    includedItems = listOf(title, "本地同步项目"),
 )
 
 private val rebuyItems = listOf(
@@ -301,7 +324,7 @@ private fun HangarRebuyRow(palette: RefugePalette, item: HangarItem, onClick: ()
 
 @Composable
 private fun HangarUpgradePanel(backdrop: LayerBackdrop, palette: RefugePalette, onOpen: () -> Unit) {
-    RefugeStandardGlassSurface(backdrop = backdrop, palette = palette, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(18.dp)) {
+    RefugeContentSurface(palette = palette, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(18.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
             Text("升级 / CCU", style = RefugeTypography.title(palette))
             Text("选择起始舰船和目标舰船，按已拥有 CCU 计算实际还需支付金额。", style = RefugeTypography.body(palette))
@@ -332,8 +355,7 @@ private fun HangarHeader(
                 .clip(CircleShape)
                 .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
                 .semantics { contentDescription = "切换在线状态"; role = Role.Button }
-                .clickable(onClick = onToggleOnline)
-                .border(1.dp, palette.outline, CircleShape),
+                .clickable(onClick = onToggleOnline),
         )
         Spacer(Modifier.width(RefugeSpacing.md))
         Column(Modifier.weight(1f)) {
@@ -347,7 +369,7 @@ private fun HangarHeader(
         ReferenceLiquidButton(
             backdrop = backdrop,
             onClick = onToggleTheme,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(44.dp),
         ) {
             Icon(
                 if (palette.background == com.refuge.next.design.RefugeColors.dark.background) RefugeIcons.light else RefugeIcons.dark,
@@ -359,7 +381,7 @@ private fun HangarHeader(
         ReferenceLiquidButton(
             backdrop = backdrop,
             onClick = onOpenDesignLab,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(44.dp),
         ) {
             Icon(RefugeIcons.more, "更多操作", tint = palette.textSecondary)
         }
@@ -519,42 +541,124 @@ private fun HangarDetailSheet(
     detail: HangarDetail,
     onDismiss: () -> Unit,
     onUpgrade: () -> Unit,
+    onLog: () -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
             RefugeModalSurface(
                 palette = palette,
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(.88f)
+                    .padding(horizontal = 10.dp, vertical = 12.dp),
                 radius = RefugeRadius.floating,
                 fill = palette.contentSurfaceStrong,
-                padding = PaddingValues(20.dp),
+                padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
-                    Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
-                    Row(verticalAlignment = Alignment.Top) {
-                        HangarImage(detail.imageRes, "${detail.title} 图片", Modifier.size(96.dp))
-                        Spacer(Modifier.width(RefugeSpacing.md))
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
-                            Text(detail.title, style = RefugeTypography.title(palette))
-                            Text(detail.subtitle, style = RefugeTypography.secondary(palette))
-                            Text(detail.price, style = RefugeTypography.value(palette).copy(color = palette.accent))
-                            Text(detail.date, style = RefugeTypography.caption(palette))
+                Column(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .width(34.dp)
+                            .height(4.dp)
+                            .background(palette.outline.copy(alpha = .45f), RoundedCornerShape(2.dp)),
+                    )
+                    Spacer(Modifier.height(RefugeSpacing.md))
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
+                    ) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            HangarImage(detail.imageRes, "${detail.title} 图片", Modifier.size(112.dp))
+                            Spacer(Modifier.width(RefugeSpacing.md))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
+                                Text(detail.title, style = RefugeTypography.title(palette))
+                                Text(detail.subtitle, style = RefugeTypography.secondary(palette))
+                                Text("${detail.insurance} · ${detail.date}", style = RefugeTypography.caption(palette))
+                            }
                         }
+                        Text(detail.description, style = RefugeTypography.body(palette))
+                        DetailValueSummary(palette, detail)
+                        Text("内含项目", style = RefugeTypography.headline(palette))
+                        detail.includedItems.forEachIndexed { index, item ->
+                            DetailIncludedRow(
+                                palette = palette,
+                                imageRes = detail.imageRes,
+                                title = item,
+                                isLast = index == detail.includedItems.lastIndex,
+                            )
+                        }
+                        Text("其他信息", style = RefugeTypography.headline(palette))
+                        DetailMetadataRow(palette, "入库日期", detail.date)
+                        DetailMetadataRow(palette, "保险", detail.insurance)
+                        DetailMetadataRow(palette, "状态", "已同步到本地机库")
                     }
-                    Text(detail.description, style = RefugeTypography.body(palette))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
-                        if (detail.isGiftable) {
-                            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.gift, "赠送", onDismiss, Modifier.weight(1f))
-                        }
-                        if (detail.isReclaimable) {
-                            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.reclaim, "回收", onDismiss, Modifier.weight(1f))
-                        }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = RefugeSpacing.sm),
+                        horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs),
+                    ) {
+                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.gift, "赠送", onDismiss, Modifier.weight(1f))
+                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.reclaim, "回收", onDismiss, Modifier.weight(1f))
                         RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.upgrade, "升级", onUpgrade, Modifier.weight(1f))
-                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.weight(1f))
+                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.log, "日志", onLog, Modifier.weight(1f))
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DetailValueSummary(palette: RefugePalette, detail: HangarDetail) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
+        DetailMetric(palette, detail.meltValue, "可融")
+        DetailMetric(palette, detail.currentValue, "当前舰值", palette.accent)
+        DetailMetric(palette, detail.savings, "节省", palette.positive)
+    }
+}
+
+@Composable
+private fun RowScope.DetailMetric(
+    palette: RefugePalette,
+    value: String,
+    label: String,
+    color: Color = palette.text,
+) {
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
+        Text(value, style = RefugeTypography.value(palette).copy(color = color), maxLines = 1, softWrap = false)
+        Text(label, style = RefugeTypography.caption(palette))
+    }
+}
+
+@Composable
+private fun DetailIncludedRow(
+    palette: RefugePalette,
+    imageRes: Int,
+    title: String,
+    isLast: Boolean,
+) {
+    Column {
+        Row(Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
+            HangarImage(imageRes, "$title 图片", Modifier.size(52.dp))
+            Spacer(Modifier.width(RefugeSpacing.sm))
+            Text(title, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
+            Icon(RefugeIcons.chevron, null, tint = palette.textMuted, modifier = Modifier.size(RefugeIconSize.small))
+        }
+        if (!isLast) Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+    }
+}
+
+@Composable
+private fun DetailMetadataRow(palette: RefugePalette, label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.xxs), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = RefugeTypography.secondary(palette))
+        Spacer(Modifier.weight(1f))
+        Text(value, style = RefugeTypography.body(palette).copy(color = palette.text))
     }
 }
 
@@ -638,7 +742,7 @@ private fun FilterSheet(
                                     .size(24.dp)
                                     .clip(RoundedCornerShape(7.dp))
                                     .background(if (checked) palette.accent else Color.Transparent)
-                                    .border(1.dp, if (checked) palette.accent else palette.outline, RoundedCornerShape(7.dp)),
+                                    .border(.5.dp, if (checked) palette.accent.copy(alpha = .42f) else palette.outline.copy(alpha = .18f), RoundedCornerShape(7.dp)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (checked) Icon(RefugeIcons.check, null, tint = palette.background, modifier = Modifier.size(RefugeIconSize.small))

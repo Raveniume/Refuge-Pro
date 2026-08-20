@@ -49,6 +49,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastCoerceAtMost
 import androidx.compose.ui.util.fastRoundToInt
@@ -78,8 +79,8 @@ import kotlin.math.sign
 import kotlin.math.tanh
 
 private val OfficialAccent = Color(0xFF0088FF)
-private val OfficialDarkContainer = Color(0xFF121212).copy(alpha = 0.4f)
-private val OfficialLightContainer = Color(0xFFFAFAFA).copy(alpha = 0.4f)
+private val OfficialDarkContainer = Color.White.copy(alpha = 0.03f)
+private val OfficialLightContainer = Color.White.copy(alpha = 0.04f)
 
 @Composable
 fun ReferenceLiquidButton(
@@ -99,8 +100,8 @@ fun ReferenceLiquidButton(
                 shape = { Capsule() },
                 effects = {
                     vibrancy()
-                    blur(2.dp.toPx())
-                    lens(12.dp.toPx(), 24.dp.toPx())
+                    blur(1.5.dp.toPx())
+                    lens(8.dp.toPx(), 12.dp.toPx())
                 },
                 layerBlock = {
                     val progress = highlight.progress
@@ -132,8 +133,8 @@ fun ReferenceLiquidButton(
             )
             .then(highlight.modifier)
             .then(highlight.gestureModifier)
-            .height(48.dp)
-            .padding(horizontal = 16.dp),
+            .height(42.dp)
+            .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
@@ -146,7 +147,7 @@ fun ReferenceLiquidSelectionBar(
     isDark: Boolean,
     tabsCount: Int,
     modifier: Modifier = Modifier,
-    height: Dp = 64.dp,
+    height: Dp = 54.dp,
     initialIndex: Int = 0,
     onSelected: (Int) -> Unit = {},
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
@@ -211,11 +212,11 @@ fun ReferenceLiquidSelectionBar(
                 .graphicsLayer { translationX = panelOffset }
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { Capsule() },
+                    shape = { RoundedCornerShape(12.dp) },
                     effects = {
                         vibrancy()
-                        blur(8.dp.toPx())
-                        lens(24.dp.toPx(), 24.dp.toPx())
+                        blur(5.dp.toPx())
+                        lens(14.dp.toPx(), 18.dp.toPx())
                     },
                     layerBlock = {
                         val scale = lerp(1f, 1f + 16.dp.toPx() / size.width, drag.pressProgress)
@@ -227,7 +228,7 @@ fun ReferenceLiquidSelectionBar(
                 .then(highlight.modifier)
                 .height(height)
                 .fillMaxWidth()
-                .padding(4.dp),
+                .padding(3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             renderTabs { }
@@ -239,9 +240,9 @@ fun ReferenceLiquidSelectionBar(
                 .alpha(0f)
                 .layerBackdrop(tabsBackdrop)
                 .graphicsLayer { translationX = panelOffset }
-                .height(height - 8.dp)
+                .height(height - 6.dp)
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp),
+                .padding(horizontal = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             renderTabs { }
@@ -249,7 +250,8 @@ fun ReferenceLiquidSelectionBar(
 
         Box(
             Modifier
-                .padding(horizontal = 4.dp)
+                .padding(horizontal = 3.dp)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
                 .graphicsLayer {
                     translationX = if (isLtr) drag.value * tabWidth + panelOffset else size.width - (drag.value + 1f) * tabWidth + panelOffset
                 }
@@ -257,9 +259,9 @@ fun ReferenceLiquidSelectionBar(
                 .then(drag.modifier)
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
-                    shape = { Capsule() },
+                    shape = { RoundedCornerShape(18.dp) },
                     effects = {
-                        lens(10.dp.toPx() * drag.pressProgress, 14.dp.toPx() * drag.pressProgress, chromaticAberration = drag.pressProgress > 0.01f)
+                        lens(8.dp.toPx() * drag.pressProgress, 12.dp.toPx() * drag.pressProgress, chromaticAberration = drag.pressProgress > 0.01f)
                     },
                     highlight = { Highlight.Default.copy(alpha = drag.pressProgress) },
                     shadow = { Shadow(alpha = drag.pressProgress) },
@@ -272,12 +274,12 @@ fun ReferenceLiquidSelectionBar(
                         scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
                     },
                     onDrawSurface = {
-                        drawRect(if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.1f), alpha = 1f - drag.pressProgress)
-                        drawRect(Color.Black.copy(alpha = 0.03f * drag.pressProgress))
+                        drawRect(if (isDark) Color.White.copy(alpha = 0.045f) else Color.Black.copy(alpha = 0.035f), alpha = 1f - drag.pressProgress)
+                        drawRect(Color.Black.copy(alpha = 0.015f * drag.pressProgress))
                     },
                 )
-                .height(height - 8.dp)
-                .fillMaxWidth(1f / tabsCount),
+                    .height(height - 18.dp)
+                    .fillMaxWidth(1f / tabsCount),
         )
     }
 }
@@ -296,7 +298,7 @@ fun ReferenceSegmentedControl(
         isDark = isDark,
         tabsCount = labels.size,
         modifier = modifier,
-        height = 52.dp,
+        height = 48.dp,
         initialIndex = initialIndex,
         onSelected = onSelected,
     ) { selected, select ->
@@ -304,7 +306,7 @@ fun ReferenceSegmentedControl(
             Box(
                 Modifier
                     .weight(1f)
-                    .height(44.dp)
+                    .height(40.dp)
                     .semantics { this.selected = index == selected }
                     .clickable(
                         interactionSource = null,
@@ -315,8 +317,8 @@ fun ReferenceSegmentedControl(
             ) {
                 Text(
                     label,
-                    color = if (index == selected) {
-                        OfficialAccent
+                        color = if (index == selected) {
+                            OfficialAccent
                     } else if (isDark) {
                         Color.White.copy(alpha = 0.78f)
                     } else {
@@ -420,7 +422,7 @@ fun RowScope.ReferenceSelectionItem(
     val itemModifier = with(this@ReferenceSelectionItem) { Modifier.weight(1f) }
     Column(
         itemModifier
-            .height(56.dp)
+        .height(48.dp)
             .semantics { this.selected = selected }
             .clickable(
                 interactionSource = null,
@@ -428,11 +430,11 @@ fun RowScope.ReferenceSelectionItem(
                 role = Role.Tab,
                 onClick = onClick,
             ),
-        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val tint = if (selected) OfficialAccent else if (isDark) Color.White.copy(alpha = 0.78f) else Color.Black.copy(alpha = 0.72f)
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(24.dp))
-        Text(label, color = tint)
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(if (selected) 21.dp else 19.dp))
+        Text(label, color = tint, style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp))
     }
 }

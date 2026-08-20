@@ -255,8 +255,7 @@ private fun StoreHeader(
                     .clip(CircleShape)
                     .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
                     .semantics { contentDescription = "切换在线状态"; role = Role.Button }
-                    .clickable(onClick = onToggleOnline)
-                    .border(1.dp, palette.outline, CircleShape),
+                    .clickable(onClick = onToggleOnline),
             )
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.weight(1f)) {
@@ -509,7 +508,6 @@ private fun StoreChoicePill(palette: RefugePalette, label: String, selected: Boo
         Modifier
             .clip(RoundedCornerShape(50))
             .background(if (selected) palette.accentSoft else Color.Transparent)
-            .border(1.dp, if (selected) palette.accent else palette.outline, RoundedCornerShape(50))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 7.dp),
     ) {

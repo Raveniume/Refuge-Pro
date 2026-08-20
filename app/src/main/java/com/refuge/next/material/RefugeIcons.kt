@@ -2,6 +2,7 @@ package com.refuge.next.material
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -14,6 +15,12 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PersonSearch
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.DirectionsBoat
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.Recycling
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -46,4 +53,12 @@ object RefugeIcons {
     val alert: ImageVector = Icons.Outlined.WarningAmber
     val notification: ImageVector = Icons.Outlined.NotificationsNone
     val log: ImageVector = Icons.Outlined.Description
+    val analytics: ImageVector = Icons.Outlined.Assessment
+    val personSearch: ImageVector = Icons.Outlined.PersonSearch
+    val people: ImageVector = Icons.Outlined.People
+    val personAdd: ImageVector = Icons.Outlined.PersonAdd
+    val ship: ImageVector = Icons.Outlined.DirectionsBoat
+    val inventory: ImageVector = Icons.Outlined.Inventory2
+    val science: ImageVector = Icons.Outlined.Science
+    val description: ImageVector = Icons.Outlined.Description
 }
