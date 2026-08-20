@@ -1,0 +1,39 @@
+# Gradle and Kotlin build state
+.gradle/
+.kotlin/
+**/build/
+local.properties
+
+# IDE and editor state
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Android packages and generated reports
+*.apk
+*.aab
+*.ap_
+captures/
+screenshots/
+recordings/
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Runtime evidence is local unless explicitly promoted below.
+/evidence-*.png
+/artifacts/*
+!/artifacts/reference-lab-v4/
+!/artifacts/reference-lab-v4/**
+
+# Read-only upstream checkout; never import its nested Git history.
+/third_party/AndroidLiquidGlass/
