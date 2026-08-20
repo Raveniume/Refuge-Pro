@@ -315,10 +315,11 @@ private fun HangarListHeader(
             palette = palette,
             onClick = onFilter,
             contentDescription = "筛选",
-            modifier = Modifier.height(40.dp),
+            modifier = Modifier.height(35.dp),
+            padding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(RefugeIcons.filter, null, tint = palette.textSecondary, modifier = Modifier.size(RefugeIconSize.small))
+                Icon(RefugeIcons.filter, null, tint = palette.textSecondary, modifier = Modifier.size(16.dp))
                 Text("筛选", style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
             }
         }
@@ -328,10 +329,11 @@ private fun HangarListHeader(
             palette = palette,
             onClick = onSort,
             contentDescription = "排序：默认",
-            modifier = Modifier.height(40.dp),
+            modifier = Modifier.height(35.dp),
+            padding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(RefugeIcons.sort, null, tint = palette.textSecondary, modifier = Modifier.size(RefugeIconSize.small))
+                Icon(RefugeIcons.sort, null, tint = palette.textSecondary, modifier = Modifier.size(16.dp))
                 Text("排序：默认", style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
             }
         }
