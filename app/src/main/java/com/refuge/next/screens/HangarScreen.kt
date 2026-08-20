@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -28,14 +30,16 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -45,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.refuge.next.R
 import com.refuge.next.data.HangarItem
 import com.refuge.next.data.HangarRepository
 import com.refuge.next.data.OwnedShip
@@ -56,21 +61,25 @@ import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeContentSurface
 import com.refuge.next.material.RefugeGlassControl
 import com.refuge.next.material.RefugeIcons
-import com.refuge.next.material.RefugeImagePlaceholder
-import com.refuge.next.material.RefugeM80Thumbnail
 import com.refuge.next.material.RefugeModalSurface
-import com.refuge.next.material.RefugeSegmentedControl
+import com.refuge.next.material.RefugeQuietControl
+import com.refuge.next.reference.ReferenceLiquidSelectionBar
+import com.refuge.next.reference.ReferenceSelectionItem
+import com.refuge.next.reference.ReferenceSegmentedControl
 
 @Composable
 fun HangarScreen(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     repository: HangarRepository,
+    isDark: Boolean,
+    selectedBottomTab: Int,
+    onNavigate: (Int) -> Unit,
+    onToggleTheme: () -> Unit,
     onOpenDesignLab: () -> Unit,
 ) {
     var ownedShips by remember { mutableStateOf(emptyList<OwnedShip>()) }
     var inventory by remember { mutableStateOf(emptyList<HangarItem>()) }
-    var selectedSegment by remember { mutableIntStateOf(0) }
     var showFilter by remember { mutableStateOf(false) }
     var showSort by remember { mutableStateOf(false) }
     var showDetail by remember { mutableStateOf(false) }
@@ -87,7 +96,7 @@ fun HangarScreen(
                 start = RefugeSpacing.page,
                 top = RefugeSpacing.lg,
                 end = RefugeSpacing.page,
-                bottom = 112.dp,
+                bottom = 132.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
         ) {
@@ -95,16 +104,15 @@ fun HangarScreen(
                 HangarHeader(
                     backdrop = backdrop,
                     palette = palette,
+                    onToggleTheme = onToggleTheme,
                     onOpenDesignLab = onOpenDesignLab,
                 )
             }
             item {
-                RefugeSegmentedControl(
+                ReferenceSegmentedControl(
                     backdrop = backdrop,
-                    palette = palette,
+                    isDark = isDark,
                     labels = listOf("机库", "回购", "升级"),
-                    selectedIndex = selectedSegment,
-                    onSelected = { selectedSegment = it },
                 )
             }
             items(ownedShips, key = { it.name }) { ship ->
@@ -115,37 +123,13 @@ fun HangarScreen(
                 )
             }
             item {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("舰船清单", style = RefugeTypography.headline(palette))
-                        Text("${inventory.size} 个已同步项目", style = RefugeTypography.caption(palette))
-                    }
-                    Spacer(Modifier.width(RefugeSpacing.sm))
-                    RefugeGlassControl(
-                        backdrop = backdrop,
-                        palette = palette,
-                        onClick = { showFilter = true },
-                        contentDescription = "筛选舰库",
-                        modifier = Modifier.size(46.dp),
-                        padding = PaddingValues(0.dp),
-                    ) {
-                        Icon(RefugeIcons.filter, null, tint = palette.text)
-                    }
-                    Spacer(Modifier.width(RefugeSpacing.xs))
-                    RefugeGlassControl(
-                        backdrop = backdrop,
-                        palette = palette,
-                        onClick = { showSort = true },
-                        contentDescription = "排序舰库",
-                        modifier = Modifier.size(46.dp),
-                        padding = PaddingValues(0.dp),
-                    ) {
-                        Icon(RefugeIcons.sort, null, tint = palette.text)
-                    }
-                }
+                HangarListHeader(
+                    backdrop = backdrop,
+                    palette = palette,
+                    count = inventory.size,
+                    onFilter = { showFilter = true },
+                    onSort = { showSort = true },
+                )
             }
             item {
                 RefugeContentSurface(
@@ -156,11 +140,46 @@ fun HangarScreen(
                     padding = PaddingValues(horizontal = RefugeSpacing.md),
                 ) {
                     Column(Modifier.fillMaxWidth()) {
-                        inventory.forEach { item ->
-                            HangarInventoryRow(palette = palette, item = item)
+                        inventory.forEachIndexed { index, item ->
+                            HangarInventoryRow(
+                                palette = palette,
+                                item = item,
+                                isLast = index == inventory.lastIndex,
+                            )
                         }
                     }
                 }
+            }
+        }
+
+        ReferenceLiquidSelectionBar(
+            backdrop = backdrop,
+            isDark = isDark,
+            tabsCount = 3,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(.92f)
+                .navigationBarsPadding()
+                .padding(bottom = 10.dp),
+        ) { selected, select ->
+            LaunchedEffect(selected, selectedBottomTab) {
+                if (selected != selectedBottomTab) onNavigate(selected)
+            }
+            listOf(
+                RefugeIcons.home to "机库",
+                RefugeIcons.design to "设计",
+                RefugeIcons.tools to "工具",
+            ).forEachIndexed { index, (icon, label) ->
+                ReferenceSelectionItem(
+                    icon = icon,
+                    label = label,
+                    selected = index == selectedBottomTab && index == selected,
+                    isDark = isDark,
+                    onClick = {
+                        select(index)
+                        onNavigate(index)
+                    },
+                )
             }
         }
     }
@@ -194,22 +213,23 @@ fun HangarScreen(
 private fun HangarHeader(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
+    onToggleTheme: () -> Unit,
     onOpenDesignLab: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
+        Image(
+            painter = painterResource(R.drawable.user_profile_pic),
+            contentDescription = "用户头像",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
                 .size(46.dp)
                 .clip(CircleShape)
-                .background(palette.accentSoft)
+                .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
                 .border(1.dp, palette.outline, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(RefugeIcons.profile, "用户资料", tint = palette.accent, modifier = Modifier.size(RefugeIconSize.medium))
-        }
+        )
         Spacer(Modifier.width(RefugeSpacing.md))
         Column(Modifier.weight(1f)) {
             Text("我的机库", style = RefugeTypography.largeTitle(palette))
@@ -218,12 +238,27 @@ private fun HangarHeader(
         RefugeGlassControl(
             backdrop = backdrop,
             palette = palette,
-            onClick = onOpenDesignLab,
-            contentDescription = "打开 Design Lab",
-            modifier = Modifier.size(46.dp),
+            onClick = onToggleTheme,
+            contentDescription = "切换明暗主题",
+            modifier = Modifier.size(48.dp),
             padding = PaddingValues(0.dp),
         ) {
-            Icon(RefugeIcons.more, null, tint = palette.textSecondary)
+            Icon(
+                if (palette.background == com.refuge.next.design.RefugeColors.dark.background) RefugeIcons.light else RefugeIcons.dark,
+                "切换明暗主题",
+                tint = palette.textSecondary,
+            )
+        }
+        Spacer(Modifier.width(RefugeSpacing.xs))
+        RefugeGlassControl(
+            backdrop = backdrop,
+            palette = palette,
+            onClick = onOpenDesignLab,
+            contentDescription = "打开 Design Lab",
+            modifier = Modifier.size(48.dp),
+            padding = PaddingValues(0.dp),
+        ) {
+            Icon(RefugeIcons.more, "更多操作", tint = palette.textSecondary)
         }
     }
 }
@@ -244,14 +279,13 @@ private fun OwnedShipHero(
         padding = PaddingValues(RefugeSpacing.sm),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            RefugeM80Thumbnail(
-                palette = palette,
-                modifier = Modifier.size(96.dp),
+            HangarImage(
+                imageRes = ship.imageRes,
+                contentDescription = "${ship.name} 图片",
+                modifier = Modifier.size(92.dp),
             )
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.weight(1f)) {
-                Text("FEATURED SHIP", style = RefugeTypography.caption(palette).copy(color = palette.accent))
-                Spacer(Modifier.height(RefugeSpacing.xxs))
                 Text(ship.name, style = RefugeTypography.title(palette))
                 Text(ship.packageName, style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(RefugeSpacing.sm))
@@ -260,6 +294,50 @@ private fun OwnedShipHero(
                     HeroMetric("已付", ship.paidValue, palette)
                     HeroMetric("保险", ship.insurance, palette, palette.positive)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HangarListHeader(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    count: Int,
+    onFilter: () -> Unit,
+    onSort: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("舰船清单", style = RefugeTypography.headline(palette))
+        Spacer(Modifier.width(RefugeSpacing.xs))
+        Text("$count 项", style = RefugeTypography.caption(palette))
+        Spacer(Modifier.weight(1f))
+        RefugeQuietControl(
+            backdrop = backdrop,
+            palette = palette,
+            onClick = onFilter,
+            contentDescription = "筛选",
+            modifier = Modifier.height(40.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(RefugeIcons.filter, null, tint = palette.textSecondary, modifier = Modifier.size(RefugeIconSize.small))
+                Text("筛选", style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
+            }
+        }
+        Spacer(Modifier.width(RefugeSpacing.xs))
+        RefugeQuietControl(
+            backdrop = backdrop,
+            palette = palette,
+            onClick = onSort,
+            contentDescription = "排序：默认",
+            modifier = Modifier.height(40.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(RefugeIcons.sort, null, tint = palette.textSecondary, modifier = Modifier.size(RefugeIconSize.small))
+                Text("排序：默认", style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
             }
         }
     }
@@ -282,38 +360,73 @@ private fun RowScope.HeroMetric(
 private fun HangarInventoryRow(
     palette: RefugePalette,
     item: HangarItem,
+    isLast: Boolean,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(116.dp)
+            .semantics { contentDescription = item.title },
     ) {
-        if (item.title.contains("M80")) {
-            RefugeM80Thumbnail(palette = palette, modifier = Modifier.size(68.dp))
-        } else {
-            RefugeImagePlaceholder(palette = palette, modifier = Modifier.size(68.dp))
-        }
-        Spacer(Modifier.width(RefugeSpacing.md))
-        Column(Modifier.weight(1f)) {
-            Text(
-                item.title,
-                style = RefugeTypography.headline(palette),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+        Row(
+            Modifier.fillMaxSize().padding(vertical = RefugeSpacing.sm),
+            verticalAlignment = Alignment.Top,
+        ) {
+            HangarImage(
+                imageRes = item.imageRes,
+                contentDescription = "${item.title} 图片",
+                modifier = Modifier.size(88.dp),
             )
-            Spacer(Modifier.height(RefugeSpacing.xs))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(item.price, style = RefugeTypography.value(palette))
-                Spacer(Modifier.width(RefugeSpacing.md))
-                Text(item.date, style = RefugeTypography.secondary(palette))
+            Spacer(Modifier.width(RefugeSpacing.md))
+            Column(Modifier.fillMaxSize()) {
+                Text(
+                    item.title,
+                    style = RefugeTypography.headline(palette),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Spacer(Modifier.weight(1f))
-                InventoryAction(RefugeIcons.gift, "赠送", palette, item.isGiftable)
-                InventoryAction(RefugeIcons.reclaim, "回收", palette, item.isReclaimable)
-                InventoryAction(RefugeIcons.chevron, "查看详情", palette, true)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(item.price, style = RefugeTypography.value(palette))
+                    Spacer(Modifier.width(RefugeSpacing.md))
+                    Text(item.date, style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.weight(1f))
+                    InventoryAction(RefugeIcons.gift, "赠送", palette, item.isGiftable)
+                    InventoryAction(RefugeIcons.reclaim, "回收", palette, item.isReclaimable)
+                    InventoryAction(RefugeIcons.chevron, "查看详情", palette, true)
+                }
             }
-            Spacer(Modifier.height(RefugeSpacing.sm))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+        }
+        if (!isLast) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .fillMaxWidth()
+                    .padding(start = 104.dp)
+                    .height(1.dp)
+                    .background(palette.divider),
+            )
         }
     }
+}
+
+@Composable
+private fun HangarImage(
+    imageRes: Int,
+    contentDescription: String,
+    modifier: Modifier,
+) {
+    Image(
+        painter = painterResource(imageRes),
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(RefugeRadius.image)),
+    )
 }
 
 @Composable
@@ -325,14 +438,19 @@ private fun InventoryAction(
 ) {
     Box(
         Modifier
-            .size(38.dp)
+            .size(36.dp)
             .semantics {
                 role = Role.Button
                 contentDescription = label
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, tint = if (enabled) palette.textSecondary else palette.textMuted.copy(alpha = .42f), modifier = Modifier.size(RefugeIconSize.small))
+        Icon(
+            icon,
+            null,
+            tint = if (enabled) palette.textSecondary else palette.textMuted.copy(alpha = .42f),
+            modifier = Modifier.size(RefugeIconSize.small),
+        )
     }
 }
 

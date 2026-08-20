@@ -11,14 +11,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.refuge.next.data.PreviewHangarRepository
 import com.refuge.next.design.RefugeColors
-import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeScene
 import com.refuge.next.screens.DesignLabScreen
 import com.refuge.next.screens.HangarScreen
@@ -27,7 +24,7 @@ import com.refuge.next.screens.ReferenceLabScreen
 @Composable
 fun RefugeApp() {
     var isDark by remember { mutableStateOf(true) }
-    var selectedTab by remember { mutableIntStateOf(1) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     val palette = if (isDark) RefugeColors.dark else RefugeColors.light
     val view = LocalView.current
     SideEffect {
@@ -40,6 +37,7 @@ fun RefugeApp() {
     val repository = remember {
         PreviewHangarRepository(
             fallbackImage = R.drawable.ship_placeholder,
+            m80Image = R.drawable.m80_hero,
         )
     }
 
@@ -52,6 +50,7 @@ fun RefugeApp() {
         RefugeScene(palette) { backdrop ->
             RefugeContent(
                 selectedTab = selectedTab,
+                onNavigate = { selectedTab = it },
                 onOpenDesignLab = { selectedTab = 1 },
                 backdrop = backdrop,
                 palette = palette,
@@ -66,6 +65,7 @@ fun RefugeApp() {
 @Composable
 private fun BoxScope.RefugeContent(
     selectedTab: Int,
+    onNavigate: (Int) -> Unit,
     onOpenDesignLab: () -> Unit,
     backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     palette: com.refuge.next.design.RefugePalette,
@@ -78,6 +78,10 @@ private fun BoxScope.RefugeContent(
             backdrop = backdrop,
             palette = palette,
             repository = repository,
+            isDark = isDark,
+            selectedBottomTab = selectedTab,
+            onNavigate = onNavigate,
+            onToggleTheme = onToggleTheme,
             onOpenDesignLab = onOpenDesignLab,
         )
 

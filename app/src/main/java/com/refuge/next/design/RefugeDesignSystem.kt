@@ -35,11 +35,11 @@ data class RefugePalette(
 
 object RefugeColors {
     val dark = RefugePalette(
-        background = Color(0xFF101114),
-        backgroundEdge = Color(0xFF1C1C1E),
-        backgroundLight = Color(0xFF2C2C2E),
-        contentSurface = Color(0xFF1C1C1E).copy(alpha = .72f),
-        contentSurfaceStrong = Color(0xFF2C2C2E).copy(alpha = .92f),
+        background = Color(0xFF080F1B),
+        backgroundEdge = Color(0xFF101D30),
+        backgroundLight = Color(0xFF1A2A41),
+        contentSurface = Color(0xFF132236).copy(alpha = .74f),
+        contentSurfaceStrong = Color(0xFF182A42).copy(alpha = .94f),
         glass = Color.White.copy(alpha = .055f),
         glassStrong = Color.White.copy(alpha = .10f),
         glassSelection = Color.White.copy(alpha = .12f),

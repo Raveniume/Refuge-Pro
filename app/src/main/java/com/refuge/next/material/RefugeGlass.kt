@@ -83,7 +83,7 @@ fun RefugeQuietControl(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(50)
     Box(
         modifier
             .clip(shape)

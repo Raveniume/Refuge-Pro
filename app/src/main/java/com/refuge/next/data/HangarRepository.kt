@@ -29,16 +29,17 @@ interface HangarRepository {
  */
 class PreviewHangarRepository(
     private val fallbackImage: Int,
+    private val m80Image: Int = fallbackImage,
 ) : HangarRepository {
     override suspend fun ownedShips() = listOf(
-        OwnedShip("M80", "游戏包 - 公民新手包", "$300", "$140", "LTI", fallbackImage),
+        OwnedShip("M80", "游戏包 - 公民新手包", "$300", "$140", "LTI", m80Image),
     )
 
     override suspend fun inventory() = listOf(
         HangarItem("装备包 - SteelTek - 掳绑包", "$30", "2026年08月16日", fallbackImage),
         HangarItem("涂装包 - M80 - Dynasty Paint", "$7.50", "2026年08月12日", fallbackImage),
         HangarItem("毛线帽套装 - 莫基节新手指导奖励", "$0", "2026年08月07日", fallbackImage),
-        HangarItem("M80 - 公民新手包", "$140", "2026年08月02日", fallbackImage),
+        HangarItem("M80 - 公民新手包", "$140", "2026年08月02日", m80Image),
         HangarItem("舰船组件 - 轻型量子驱动", "$25", "2026年07月22日", fallbackImage),
     )
 }

@@ -18,8 +18,10 @@ is imported into this project.
 ## Slice 1 status
 
 - `PreviewHangarRepository` is intentionally read-only sample data.
-- `HangarScreen` freezes the existing inventory information order while using
-  new Compose components and tokens.
+- `HangarScreen` is the Hangar Golden Master: it preserves the existing
+  inventory information order while using the V4 Compose components and
+  tokens. The page includes the real local avatar and M80 image assets;
+  network/cache-backed data remains behind `HangarRepository`.
 - Heavy Liquid Glass is limited to segmented navigation, controls, bottom
   navigation, and transient actions. Inventory and hero surfaces use lightweight
   content material.
@@ -27,11 +29,18 @@ is imported into this project.
   controls may use Liquid Glass without sampling the app root as modal content.
 - `DampedDragAnimation` drives bottom-tab tap, drag, release, and fast-tap
   continuity. The visible selection slider is rendered above the tab icons.
+- Production background uses a restrained deep navy/blue-black field with
+  low-frequency light and texture; the Reference Lab optical test is not used
+  as the Hangar background.
 
-## Next adapter work
+## Deferred adapter work
 
-This work is gated on user confirmation of the Reference Replication Lab. The V4 report records AndroidLiquidGlass behavior as review-ready, but Apple component-level geometry remains unverified; do not begin this adapter or any Hangar migration yet.
+The V4 Reference Replication Lab is accepted as the implementation baseline.
+Apple component-level geometry remains unverified and is explicitly not a
+blocker. Store, Terminal, Profile, Tools, and CCU remain out of scope until
+the Hangar Golden Master receives manual confirmation.
 
-The next implementation step is a Kotlin read-only adapter for the existing
-hangar/cache contract. It must preserve filtering, stacking, translation,
-pricing, and image identity before Store or Terminal migration begins.
+When this slice is reopened, the next implementation step is a Kotlin
+read-only adapter for the existing hangar/cache contract. It must preserve
+filtering, stacking, translation, pricing, and image identity without changing
+the approved Hangar geometry.
