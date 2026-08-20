@@ -1,6 +1,7 @@
 package com.refuge.next.material
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,10 +12,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.refuge.next.R
 import com.refuge.next.design.RefugePalette
 
 /** Temporary approximation of the iOS/iPadOS 27 reference wallpaper. */
@@ -78,12 +82,24 @@ fun RefugeScene(
 ) {
     Box(Modifier.fillMaxSize()) {
         val backdrop = rememberLayerBackdrop()
-        Canvas(
-            Modifier
-                .fillMaxSize()
-                .layerBackdrop(backdrop),
-        ) {
-            ReferenceWallpaper(palette)
+        val isDark = palette.background.luminance() < .5f
+        if (isDark) {
+            Canvas(
+                Modifier
+                    .fillMaxSize()
+                    .layerBackdrop(backdrop),
+            ) {
+                ReferenceWallpaper(palette)
+            }
+        } else {
+            Image(
+                painter = painterResource(R.drawable.reference_wallpaper_light),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .layerBackdrop(backdrop),
+            )
         }
         content(backdrop)
     }
