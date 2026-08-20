@@ -64,6 +64,7 @@ import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeQuietControl
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
+import com.refuge.next.reference.ReferenceLiquidButton
 import com.refuge.next.reference.ReferenceSelectionItem
 import com.refuge.next.reference.ReferenceSegmentedControl
 
@@ -235,13 +236,10 @@ private fun HangarHeader(
             Text("我的机库", style = RefugeTypography.largeTitle(palette))
             Text("舰队资料 · 本地同步", style = RefugeTypography.secondary(palette))
         }
-        RefugeGlassControl(
+        ReferenceLiquidButton(
             backdrop = backdrop,
-            palette = palette,
             onClick = onToggleTheme,
-            contentDescription = "切换明暗主题",
             modifier = Modifier.size(48.dp),
-            padding = PaddingValues(0.dp),
         ) {
             Icon(
                 if (palette.background == com.refuge.next.design.RefugeColors.dark.background) RefugeIcons.light else RefugeIcons.dark,
@@ -250,13 +248,10 @@ private fun HangarHeader(
             )
         }
         Spacer(Modifier.width(RefugeSpacing.xs))
-        RefugeGlassControl(
+        ReferenceLiquidButton(
             backdrop = backdrop,
-            palette = palette,
             onClick = onOpenDesignLab,
-            contentDescription = "打开 Design Lab",
             modifier = Modifier.size(48.dp),
-            padding = PaddingValues(0.dp),
         ) {
             Icon(RefugeIcons.more, "更多操作", tint = palette.textSecondary)
         }
