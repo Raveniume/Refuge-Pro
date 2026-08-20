@@ -2,6 +2,7 @@ package com.refuge.next.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +55,9 @@ import com.refuge.next.data.CcuPlan
 import com.refuge.next.data.CcuShip
 import com.refuge.next.data.OwnedCcu
 import com.refuge.next.data.ProfileData
+import com.refuge.next.data.calculateRemainingPayment
+import com.refuge.next.data.calculateShipValue
+import com.refuge.next.data.eligibleTargetShips
 import com.refuge.next.data.TerminalCategory
 import com.refuge.next.data.TerminalItem
 import com.refuge.next.data.TerminalRepository
@@ -69,6 +73,8 @@ import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeImagePlaceholder
 import com.refuge.next.material.RefugeLightweightGlassSurface
+import com.refuge.next.material.RefugeLiquidToggle
+import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.reference.ReferenceLiquidButton
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
@@ -120,20 +126,28 @@ private fun ProductionHeader(
     palette: RefugePalette,
     title: String,
     subtitle: String,
+    isOnline: Boolean = true,
     onAvatarClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Image(
-            painter = painterResource(R.drawable.user_profile_pic),
-            contentDescription = "用户头像",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
-                .clickable(enabled = onAvatarClick != null) { onAvatarClick?.invoke() },
-        )
+        Box(Modifier.size(46.dp), contentAlignment = Alignment.BottomEnd) {
+            Image(
+                painter = painterResource(R.drawable.user_profile_pic),
+                contentDescription = "用户头像",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "切换在线状态"
+                    }
+                    .clickable(enabled = onAvatarClick != null) { onAvatarClick?.invoke() },
+            )
+            Box(Modifier.size(9.dp).background(if (isOnline) palette.positive else palette.textMuted, CircleShape).border(1.dp, palette.background, CircleShape))
+        }
         Spacer(Modifier.width(RefugeSpacing.md))
         Column(Modifier.weight(1f)) {
             Text(title, style = RefugeTypography.largeTitle(palette), maxLines = 1)
@@ -151,6 +165,8 @@ fun TerminalScreen(
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
     repository: TerminalRepository = remember { CachedTerminalRepository() },
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
     var categoryIndex by remember { mutableIntStateOf(0) }
     var items by remember { mutableStateOf(emptyList<TerminalItem>()) }
@@ -158,6 +174,9 @@ fun TerminalScreen(
     var query by remember { mutableStateOf("") }
     var showSearch by remember { mutableStateOf(false) }
     var showFilter by remember { mutableStateOf(false) }
+    var sortDescending by remember { mutableStateOf(false) }
+    var pricedOnly by remember { mutableStateOf(false) }
+    var taggedOnly by remember { mutableStateOf(false) }
     var selectedItem by remember { mutableStateOf<TerminalItem?>(null) }
 
     LaunchedEffect(repository) {
@@ -166,8 +185,14 @@ fun TerminalScreen(
         loading = false
     }
     val category = TerminalCategory.entries[categoryIndex]
-    val visible = remember(items, categoryIndex, query) {
-        items.filter { it.category == category && (query.isBlank() || it.name.contains(query, true) || it.manufacturer.contains(query, true)) }
+    val visible = remember(items, categoryIndex, query, sortDescending, pricedOnly, taggedOnly) {
+        val filtered = items.filter {
+            it.category == category &&
+                (query.isBlank() || it.name.contains(query, true) || it.manufacturer.contains(query, true)) &&
+                (!pricedOnly || it.usd != "—") &&
+                (!taggedOnly || it.tags.isNotEmpty())
+        }
+        if (sortDescending) filtered.sortedByDescending { it.name } else filtered.sortedBy { it.name }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -181,6 +206,8 @@ fun TerminalScreen(
                     palette = palette,
                     title = "终端",
                     subtitle = "舰船与装备资料 · 本地缓存",
+                    isOnline = isOnline,
+                    onAvatarClick = onToggleOnline,
                     actions = {
                         HeaderAction(backdrop, palette, RefugeIcons.search, "搜索", { showSearch = !showSearch })
                         Spacer(Modifier.width(RefugeSpacing.xs))
@@ -209,7 +236,7 @@ fun TerminalScreen(
                     Spacer(Modifier.weight(1f))
                     RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.filter, "筛选", { showFilter = true })
                     Spacer(Modifier.width(RefugeSpacing.xs))
-                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.sort, "排序：默认", {})
+                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.sort, if (sortDescending) "排序：Z-A" else "排序：默认", { sortDescending = !sortDescending })
                 }
             }
             if (loading) {
@@ -226,9 +253,7 @@ fun TerminalScreen(
     }
 
     selectedItem?.let { TerminalDetailSheet(backdrop, palette, it) { selectedItem = null } }
-    if (showFilter) {
-        ProductionNoticeSheet(backdrop, palette, "终端选项", "版本 · 当前缓存 1.0.7\n数据按类别加载，舰载类别使用独立稳定列表。") { showFilter = false }
-    }
+    if (showFilter) TerminalFilterSheet(backdrop, palette, pricedOnly, taggedOnly, { pricedOnly = it }, { taggedOnly = it }, { showFilter = false })
 }
 
 @Composable
@@ -296,8 +321,10 @@ fun ProfileScreen(
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
     onToggleTheme: () -> Unit,
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
-    val profile = remember { ProfileData() }
+    val profile = remember(isOnline) { ProfileData(isOnline = isOnline) }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
@@ -309,10 +336,12 @@ fun ProfileScreen(
                     palette = palette,
                     title = "我的",
                     subtitle = "${profile.handle} · 本地资料",
+                    isOnline = isOnline,
+                    onAvatarClick = onToggleOnline,
                     actions = {
                         HeaderAction(backdrop, palette, if (isDark) RefugeIcons.light else RefugeIcons.dark, "切换主题", onToggleTheme)
                         Spacer(Modifier.width(RefugeSpacing.xs))
-                        HeaderAction(backdrop, palette, RefugeIcons.more, "设置", { onNavigate(5) })
+                    HeaderAction(backdrop, palette, RefugeIcons.more, "设置", { onNavigate(5) })
                     },
                 )
             }
@@ -376,7 +405,7 @@ private fun RowScope.ProfileStatCell(palette: RefugePalette, value: String, labe
 private fun ProfileAccountGroup(backdrop: LayerBackdrop, palette: RefugePalette, profile: ProfileData) {
     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
         Text("账户", style = RefugeTypography.headline(palette))
-        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+            RefugeStandardGlassSurface(backdrop, palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
             Column {
                 AccountRow(palette, RefugeIcons.notification, "注册时间", profile.registerDate)
                 AccountRow(palette, RefugeIcons.success, "UEC", profile.uec)
@@ -422,35 +451,71 @@ fun ToolsScreen(
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
     var selectedTool by remember { mutableStateOf<ToolItem?>(null) }
+    var showSearch by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
         ) {
-            item { ProductionHeader(palette, "工具", "查询、资料与测试中心", actions = { HeaderAction(backdrop, palette, RefugeIcons.search, "搜索", {}) }) }
+            item {
+                ProductionHeader(
+                    palette,
+                    "工具",
+                    "查询、资料与测试中心",
+                    isOnline = isOnline,
+                    onAvatarClick = onToggleOnline,
+                    actions = { HeaderAction(backdrop, palette, RefugeIcons.search, "搜索", { showSearch = !showSearch }) },
+                )
+            }
+            if (showSearch) {
+                item {
+                    ReferenceSearchField(
+                        backdrop = backdrop,
+                        isDark = isDark,
+                        value = query,
+                        onValueChange = { query = it },
+                        searchIcon = RefugeIcons.search,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
             toolGroups.forEach { (group, tools) ->
+                val visibleTools = tools.filter {
+                    query.isBlank() || it.title.contains(query, ignoreCase = true) || it.subtitle.contains(query, ignoreCase = true)
+                }
+                if (visibleTools.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
                         Text(group, style = RefugeTypography.headline(palette))
                         RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
                             Column {
-                                tools.forEachIndexed { index, tool ->
+                                visibleTools.forEachIndexed { index, tool ->
                                     ToolRow(palette, tool) { selectedTool = tool }
-                                    if (index != tools.lastIndex) DividerLine(palette)
+                                    if (index != visibleTools.lastIndex) DividerLine(palette)
                                 }
                             }
                         }
                     }
+                }
                 }
             }
         }
         RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
     }
     selectedTool?.let { tool ->
-        ProductionNoticeSheet(backdrop, palette, tool.title, "${tool.subtitle}\n\n此入口已接入新的业务 adapter，执行结果将在数据源可用时更新。") { selectedTool = null }
+        if (tool.id == "social") {
+            SocialToolSheet(backdrop, palette) { selectedTool = null }
+        } else if (tool.id == "gift-redeem" || tool.id == "referral-reverse") {
+            ToolDataSheet(backdrop, palette, tool) { selectedTool = null }
+        } else {
+            ProductionNoticeSheet(backdrop, palette, tool.title, "${tool.subtitle}\n\n此入口已接入新的业务 adapter，执行结果将在数据源可用时更新。") { selectedTool = null }
+        }
     }
 }
 
@@ -470,6 +535,75 @@ private fun ToolRow(palette: RefugePalette, tool: ToolItem, onClick: () -> Unit)
 }
 
 @Composable
+private fun SocialToolSheet(backdrop: LayerBackdrop, palette: RefugePalette, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
+            RefugeModalSurface(
+                palette = palette,
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                radius = RefugeRadius.floating,
+                fill = palette.contentSurfaceStrong,
+                padding = PaddingValues(20.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
+                    Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
+                    Text("社交", style = RefugeTypography.title(palette))
+                    Text("组织与邀请", style = RefugeTypography.secondary(palette))
+                    listOf(
+                        "组织" to "星环城 · 社区等级 4",
+                        "待处理邀请" to "2 条",
+                        "最近联系" to "NocturnePilot · 在线",
+                    ).forEach { (label, value) ->
+                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
+                                Text(value, style = RefugeTypography.secondary(palette))
+                            }
+                        }
+                    }
+                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolDataSheet(backdrop: LayerBackdrop, palette: RefugePalette, tool: ToolItem, onDismiss: () -> Unit) {
+    val rows = if (tool.id == "gift-redeem") {
+        listOf("待兑换礼包" to "2 条", "最近礼物码" to "RAVEN-7K2Q", "状态" to "本地待处理")
+    } else {
+        listOf("邀请人" to "Raveniume", "关系记录" to "3 条", "最近同步" to "2026-08-20")
+    }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
+            RefugeModalSurface(
+                palette = palette,
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                radius = RefugeRadius.floating,
+                fill = palette.contentSurfaceStrong,
+                padding = PaddingValues(20.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
+                    Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
+                    Text(tool.title, style = RefugeTypography.title(palette))
+                    Text(tool.subtitle, style = RefugeTypography.secondary(palette))
+                    rows.forEach { (label, value) ->
+                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
+                                Text(value, style = RefugeTypography.secondary(palette))
+                            }
+                        }
+                    }
+                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun SettingsScreen(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
@@ -477,6 +611,8 @@ fun SettingsScreen(
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
     onToggleTheme: () -> Unit,
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
     var syncLogs by remember { mutableStateOf(true) }
     var localOnly by remember { mutableStateOf(true) }
@@ -488,22 +624,22 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
         ) {
             item {
-                ProductionHeader(palette, "设置", "RefugeNext · Design System", actions = {
+                ProductionHeader(palette, "设置", "RefugeNext · Design System", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = {
                     HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(4) })
                 })
             }
             item {
                 SettingsGroup(palette, "外观") {
-                    SettingsToggleRow(palette, "深色主题", if (isDark) "已开启" else "已关闭", isDark, onToggleTheme)
+                    SettingsToggleRow(backdrop, palette, "深色主题", if (isDark) "已开启" else "已关闭", isDark, onToggleTheme)
                     DividerLine(palette)
                     SettingsActionRow(palette, "Liquid Glass", "Reference V4 optical pipeline") {}
                 }
             }
             item {
                 SettingsGroup(palette, "数据") {
-                    SettingsToggleRow(palette, "实时同步日志", if (syncLogs) "开启" else "关闭", syncLogs) { syncLogs = !syncLogs }
+                    SettingsToggleRow(backdrop, palette, "实时同步日志", if (syncLogs) "开启" else "关闭", syncLogs) { syncLogs = !syncLogs }
                     DividerLine(palette)
-                    SettingsToggleRow(palette, "仅使用本地资料", if (localOnly) "开启" else "关闭", localOnly) { localOnly = !localOnly }
+                    SettingsToggleRow(backdrop, palette, "仅使用本地资料", if (localOnly) "开启" else "关闭", localOnly) { localOnly = !localOnly }
                     DividerLine(palette)
                     SettingsActionRow(palette, "清理缓存", "不会删除机库或账户数据") {}
                 }
@@ -532,12 +668,10 @@ private fun SettingsGroup(palette: RefugePalette, title: String, content: @Compo
 }
 
 @Composable
-private fun SettingsToggleRow(palette: RefugePalette, title: String, subtitle: String, checked: Boolean, onClick: () -> Unit) {
+private fun SettingsToggleRow(backdrop: LayerBackdrop, palette: RefugePalette, title: String, subtitle: String, checked: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Text(title, style = RefugeTypography.body(palette).copy(color = palette.text)); Text(subtitle, style = RefugeTypography.caption(palette)) }
-        Box(Modifier.size(46.dp, 28.dp).background(if (checked) palette.accent else palette.outline, RoundedCornerShape(16.dp)).padding(3.dp)) {
-            Box(Modifier.size(22.dp).align(if (checked) Alignment.CenterEnd else Alignment.CenterStart).background(if (checked) palette.background else palette.textMuted, CircleShape))
-        }
+        RefugeLiquidToggle(backdrop, palette, checked, onClick, title)
     }
 }
 
@@ -556,6 +690,9 @@ fun CcuScreen(
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
+    rootTab: Int,
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
     val ships = remember {
         listOf(
@@ -565,13 +702,21 @@ fun CcuScreen(
         )
     }
     var seed by remember { mutableStateOf(ships[1]) }
-    var target by remember { mutableStateOf(ships[0]) }
+    var target by remember { mutableStateOf<CcuShip?>(ships[0]) }
     var showSeed by remember { mutableStateOf(false) }
     var showTarget by remember { mutableStateOf(false) }
     var showOwned by remember { mutableStateOf(false) }
     val owned = remember { listOf(OwnedCcu("ccu-1", "Aurora → M80 CCU", 500, "M80")) }
-    val additional = (target.purchasePrice - seed.purchasePrice).coerceAtLeast(0)
-    val plan = CcuPlan(seed, target, owned, additional)
+    val availableTargets = remember(seed, ships) { eligibleTargetShips(seed, ships) }
+    val availableTargetIds = remember(availableTargets) { availableTargets.map { it.id } }
+    LaunchedEffect(seed, availableTargets) {
+        if (target?.id !in availableTargetIds) {
+            target = availableTargets.firstOrNull()
+        }
+    }
+    val additional = target?.let { calculateRemainingPayment(seed, it, owned) } ?: 0
+    val plan = target?.let { CcuPlan(seed, it, owned, additional) }
+    val shipValue = plan?.shipValue ?: calculateShipValue(seed.purchasePrice, owned.map { it.purchasePrice }, additional)
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -579,22 +724,23 @@ fun CcuScreen(
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
         ) {
-            item { ProductionHeader(palette, "升级规划", "CCU route · 本地计算", actions = { HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(0) }) }) }
+            item { ProductionHeader(palette, "升级规划", "CCU route · 本地计算", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = { HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(rootTab) }) }) }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                     Text("选择舰船", style = RefugeTypography.headline(palette))
                     ShipSelectorGlassField(backdrop, palette, "起始舰船", seed.name) { showSeed = true }
-                    ShipSelectorGlassField(backdrop, palette, "目标舰船", target.name) { showTarget = true }
+                    ShipSelectorGlassField(backdrop, palette, "目标舰船", target?.name ?: "无更高原价目标") { showTarget = true }
                 }
             }
             item {
                 RefugeStandardGlassSurface(backdrop, palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(14.dp)) {
-                    Text("成本分析", style = RefugeTypography.headline(palette))
-                    Spacer(Modifier.height(RefugeSpacing.sm))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
-                        CostCell(palette, formatUsd(plan.shipValue), "飞船价值")
-                        CostCell(palette, formatUsd(owned.sumOf { it.purchasePrice }), "已有 CCU")
-                        CostCell(palette, formatUsd(additional), "还需花费")
+                    Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
+                        Text("成本分析", style = RefugeTypography.headline(palette))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
+                            CostCell(palette, formatUsd(shipValue), "飞船价值")
+                            CostCell(palette, formatUsd(owned.sumOf { it.purchasePrice }), "已有 CCU")
+                            CostCell(palette, formatUsd(additional), "还需花费")
+                        }
                     }
                 }
             }
@@ -611,7 +757,7 @@ fun CcuScreen(
         RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
     }
     if (showSeed) ShipSelectorSheet(backdrop, palette, "选择起始舰船", ships, onDismiss = { showSeed = false }) { seed = it; showSeed = false }
-    if (showTarget) ShipSelectorSheet(backdrop, palette, "选择目标舰船", ships, onDismiss = { showTarget = false }) { target = it; showTarget = false }
+    if (showTarget) ShipSelectorSheet(backdrop, palette, "选择目标舰船", availableTargets, onDismiss = { showTarget = false }) { target = it; showTarget = false }
     if (showOwned) {
         ProductionListSheet(backdrop, palette, "当前拥有 CCU", owned.map { "${it.title} · ${formatUsd(it.purchasePrice)} · ${it.appliedTo}" }) { showOwned = false }
     }
@@ -646,14 +792,18 @@ private fun ShipSelectorSheet(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeStandardGlassSurface(backdrop, palette, Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, padding = PaddingValues(20.dp)) {
+            RefugeModalSurface(palette = palette, modifier = Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, fill = palette.contentSurfaceStrong, padding = PaddingValues(20.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                     Text(title, style = RefugeTypography.title(palette))
-                    ships.forEach { ship ->
-                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth().clickable { onSelected(ship) }, padding = PaddingValues(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(ship.name, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
-                                Text(formatUsd(ship.purchasePrice), style = RefugeTypography.secondary(palette))
+                    if (ships.isEmpty()) {
+                        Text("没有原价更高的目标舰船", style = RefugeTypography.body(palette))
+                    } else {
+                        ships.forEach { ship ->
+                            RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth().clickable { onSelected(ship) }, padding = PaddingValues(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(ship.name, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
+                                    Text(formatUsd(ship.purchasePrice), style = RefugeTypography.secondary(palette))
+                                }
                             }
                         }
                     }
@@ -689,7 +839,7 @@ private fun ProductionEmptyState(palette: RefugePalette, text: String) {
 private fun ProductionNoticeSheet(backdrop: LayerBackdrop, palette: RefugePalette, title: String, body: String, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeStandardGlassSurface(backdrop, palette, Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, padding = PaddingValues(20.dp)) {
+            RefugeModalSurface(palette = palette, modifier = Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, fill = palette.contentSurfaceStrong, padding = PaddingValues(20.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
                     Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
                     Text(title, style = RefugeTypography.title(palette))
@@ -707,7 +857,7 @@ private fun ProductionNoticeSheet(backdrop: LayerBackdrop, palette: RefugePalett
 fun ProductionListSheet(backdrop: LayerBackdrop, palette: RefugePalette, title: String, entries: List<String>, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeStandardGlassSurface(backdrop, palette, Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, padding = PaddingValues(20.dp)) {
+            RefugeModalSurface(palette = palette, modifier = Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, fill = palette.contentSurfaceStrong, padding = PaddingValues(20.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                     Text(title, style = RefugeTypography.title(palette))
                     entries.forEach { entry -> RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) { Text(entry, style = RefugeTypography.body(palette)) } }
@@ -719,13 +869,30 @@ fun ProductionListSheet(backdrop: LayerBackdrop, palette: RefugePalette, title: 
 }
 
 @Composable
-private fun DividerLine(palette: RefugePalette) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+private fun TerminalFilterSheet(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    pricedOnly: Boolean,
+    taggedOnly: Boolean,
+    onPricedChanged: (Boolean) -> Unit,
+    onTaggedChanged: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
+            RefugeModalSurface(palette = palette, modifier = Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, fill = palette.contentSurfaceStrong, padding = PaddingValues(20.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
+                    Text("终端筛选", style = RefugeTypography.title(palette))
+                    SettingsToggleRow(backdrop, palette, "仅显示有 USD 价格", if (pricedOnly) "开启" else "关闭", pricedOnly) { onPricedChanged(!pricedOnly) }
+                    SettingsToggleRow(backdrop, palette, "仅显示有标签", if (taggedOnly) "开启" else "关闭", taggedOnly) { onTaggedChanged(!taggedOnly) }
+                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+                }
+            }
+        }
+    }
 }
 
 @Composable
-private fun rememberStaticBackdrop(): LayerBackdrop {
-    // Major Profile surfaces use their own optical backdrop supplied by the scene in production.
-    // A remembered empty layer keeps this helper composable-safe for nested reusable cards.
-    return com.kyant.backdrop.backdrops.rememberLayerBackdrop()
+private fun DividerLine(palette: RefugePalette) {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
 }

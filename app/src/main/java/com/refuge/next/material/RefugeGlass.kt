@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -171,6 +173,42 @@ fun RefugeCompactUtilityPill(
             Icon(icon, null, tint = palette.textSecondary, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(4.dp))
             Text(label, style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
+        }
+    }
+}
+
+@Composable
+fun RefugeLiquidToggle(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    checked: Boolean,
+    onClick: () -> Unit,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    RefugeGlassControl(
+        backdrop = backdrop,
+        palette = palette,
+        onClick = onClick,
+        contentDescription = contentDescription,
+        modifier = modifier.size(width = 52.dp, height = 44.dp),
+        padding = PaddingValues(3.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(32.dp)
+                .align(Alignment.Center)
+                .clip(RoundedCornerShape(50))
+                .background(if (checked) palette.accent.copy(alpha = .86f) else palette.outline.copy(alpha = .64f))
+                .padding(3.dp),
+        ) {
+            Box(
+                Modifier
+                    .size(20.dp)
+                    .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
+                    .background(if (checked) palette.background else palette.textMuted, androidx.compose.foundation.shape.CircleShape),
+            )
         }
     }
 }

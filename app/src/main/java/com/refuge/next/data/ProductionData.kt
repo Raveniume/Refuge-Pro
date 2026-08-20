@@ -65,11 +65,13 @@ val toolGroups: List<Pair<String, List<ToolItem>>> = listOf(
         ToolItem("crowdfunding", "众筹查询", "查看项目进度和支持统计"),
         ToolItem("player-search", "玩家搜索", "通过 Handle 查询公开资料"),
         ToolItem("social", "社交", "组织、邀请与玩家关系"),
+        ToolItem("gift-redeem", "礼物兑换", "兑换待领取的礼物码与礼包"),
     ),
     "资料中心" to listOf(
         ToolItem("ships", "舰船一览", "浏览舰船与制造商信息"),
         ToolItem("equipment", "装备资料", "查找护盾、武器和配件"),
         ToolItem("referrals", "邀请查询", "查看邀请状态和奖励"),
+        ToolItem("referral-reverse", "邀请反查", "通过邀请人或被邀请人反查关系"),
     ),
     "测试中心" to listOf(
         ToolItem("test-center", "测试中心", "验证本地缓存、Glass 和运行状态"),
@@ -81,6 +83,9 @@ data class CcuShip(val id: String, val name: String, val purchasePrice: Int, val
 
 data class OwnedCcu(val id: String, val title: String, val purchasePrice: Int, val appliedTo: String)
 
+fun eligibleTargetShips(seed: CcuShip, ships: Iterable<CcuShip>): List<CcuShip> =
+    ships.filter { it.purchasePrice > seed.purchasePrice }
+
 data class CcuPlan(
     val seed: CcuShip,
     val target: CcuShip,
@@ -88,7 +93,17 @@ data class CcuPlan(
     val additionalCost: Int,
 ) {
     val shipValue: Int
-        get() = seed.purchasePrice + owned.sumOf { it.purchasePrice } + additionalCost
+        get() = calculateShipValue(seed.purchasePrice, owned.map { it.purchasePrice }, additionalCost)
 }
+
+fun calculateRemainingPayment(seed: CcuShip, target: CcuShip, owned: Iterable<OwnedCcu>): Int =
+    (target.purchasePrice - seed.purchasePrice - owned.sumOf { it.purchasePrice }).coerceAtLeast(0)
+
+/** Business value uses actual purchase prices, never MSRP or credited delta values. */
+fun calculateShipValue(
+    seedPurchasePrice: Int,
+    ownedCcuPurchasePrices: Iterable<Int>,
+    remainingPayment: Int,
+): Int = seedPurchasePrice + ownedCcuPurchasePrices.sum() + remainingPayment
 
 fun formatUsd(cents: Int): String = "$${cents / 100}.${(cents % 100).toString().padStart(2, '0')}"

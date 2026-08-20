@@ -81,12 +81,14 @@ fun HangarScreen(
     onToggleTheme: () -> Unit,
     onOpenDesignLab: () -> Unit,
     onOpenCcu: () -> Unit,
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
     var ownedShips by remember { mutableStateOf(emptyList<OwnedShip>()) }
     var inventory by remember { mutableStateOf(emptyList<HangarItem>()) }
     var showFilter by remember { mutableStateOf(false) }
     var showSort by remember { mutableStateOf(false) }
-    var showDetail by remember { mutableStateOf(false) }
+    var selectedDetail by remember { mutableStateOf<HangarDetail?>(null) }
     var showLogs by remember { mutableStateOf(false) }
     var selectedSection by remember { mutableStateOf(0) }
 
@@ -112,6 +114,8 @@ fun HangarScreen(
                     palette = palette,
                     onToggleTheme = onToggleTheme,
                     onOpenDesignLab = onOpenDesignLab,
+                    isOnline = isOnline,
+                    onToggleOnline = onToggleOnline,
                 )
             }
             item {
@@ -128,7 +132,18 @@ fun HangarScreen(
                     OwnedShipHero(
                         palette = palette,
                         ship = ship,
-                        onClick = { showDetail = true },
+                        onClick = {
+                            selectedDetail = HangarDetail(
+                                title = ship.name,
+                                subtitle = ship.packageName,
+                                price = ship.paidValue,
+                                date = "2026年08月02日",
+                                imageRes = ship.imageRes,
+                                description = "${ship.name} 已加入本地机库。保险：${ship.insurance}。",
+                                isGiftable = true,
+                                isReclaimable = true,
+                            )
+                        },
                     )
                 }
                 item {
@@ -154,6 +169,7 @@ fun HangarScreen(
                                     palette = palette,
                                     item = item,
                                     isLast = index == inventory.lastIndex,
+                                    onClick = { selectedDetail = item.toHangarDetail() },
                                 )
                             }
                         }
@@ -180,7 +196,7 @@ fun HangarScreen(
                 }
             } else if (selectedSection == 1) {
                 items(rebuyItems, key = { it.title }) { item ->
-                    HangarRebuyRow(palette, item) { showDetail = true }
+                    HangarRebuyRow(palette, item) { selectedDetail = item.toHangarDetail() }
                 }
             } else {
                 item {
@@ -204,15 +220,16 @@ fun HangarScreen(
             onPrimary = { showSort = false },
         )
     }
-    if (showDetail) {
-        RefugeModalDialog(
+    selectedDetail?.let { detail ->
+        HangarDetailSheet(
             backdrop = backdrop,
             palette = palette,
-            title = "M80",
-            body = "详情、赠送、回收与升级动作将在业务 adapter 接入后启用。",
-            primaryLabel = "关闭",
-            onDismiss = { showDetail = false },
-            onPrimary = { showDetail = false },
+            detail = detail,
+            onDismiss = { selectedDetail = null },
+            onUpgrade = {
+                selectedDetail = null
+                onOpenCcu()
+            },
         )
     }
     if (showLogs) {
@@ -225,6 +242,28 @@ fun HangarScreen(
         )
     }
 }
+
+private data class HangarDetail(
+    val title: String,
+    val subtitle: String,
+    val price: String,
+    val date: String,
+    val imageRes: Int,
+    val description: String,
+    val isGiftable: Boolean,
+    val isReclaimable: Boolean,
+)
+
+private fun HangarItem.toHangarDetail() = HangarDetail(
+    title = title,
+    subtitle = "本地机库项目",
+    price = price,
+    date = date,
+    imageRes = imageRes,
+    description = "${title} · 已同步到本地机库。",
+    isGiftable = isGiftable,
+    isReclaimable = isReclaimable,
+)
 
 private val rebuyItems = listOf(
     HangarItem("M50 - 公民新手包", "$60", "2026年07月18日", R.drawable.m80_hero, isGiftable = false, isReclaimable = false),
@@ -277,6 +316,8 @@ private fun HangarHeader(
     palette: RefugePalette,
     onToggleTheme: () -> Unit,
     onOpenDesignLab: () -> Unit,
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth(),
@@ -290,12 +331,18 @@ private fun HangarHeader(
                 .size(46.dp)
                 .clip(CircleShape)
                 .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
+                .semantics { contentDescription = "切换在线状态"; role = Role.Button }
+                .clickable(onClick = onToggleOnline)
                 .border(1.dp, palette.outline, CircleShape),
         )
         Spacer(Modifier.width(RefugeSpacing.md))
         Column(Modifier.weight(1f)) {
             Text("我的机库", style = RefugeTypography.largeTitle(palette))
-            Text("舰队资料 · 本地同步", style = RefugeTypography.secondary(palette))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(7.dp).background(if (isOnline) palette.positive else palette.textMuted, CircleShape))
+                Spacer(Modifier.width(RefugeSpacing.xxs))
+                Text(if (isOnline) "在线 · 本地同步" else "离线 · 本地同步", style = RefugeTypography.secondary(palette))
+            }
         }
         ReferenceLiquidButton(
             backdrop = backdrop,
@@ -407,11 +454,17 @@ private fun HangarInventoryRow(
     palette: RefugePalette,
     item: HangarItem,
     isLast: Boolean,
+    onClick: () -> Unit,
 ) {
     Box(
         Modifier
             .fillMaxWidth()
             .height(116.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
             .semantics { contentDescription = item.title },
     ) {
         Row(
@@ -455,6 +508,52 @@ private fun HangarInventoryRow(
                     .height(1.dp)
                     .background(palette.divider),
             )
+        }
+    }
+}
+
+@Composable
+private fun HangarDetailSheet(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    detail: HangarDetail,
+    onDismiss: () -> Unit,
+    onUpgrade: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
+            RefugeModalSurface(
+                palette = palette,
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                radius = RefugeRadius.floating,
+                fill = palette.contentSurfaceStrong,
+                padding = PaddingValues(20.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
+                    Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
+                    Row(verticalAlignment = Alignment.Top) {
+                        HangarImage(detail.imageRes, "${detail.title} 图片", Modifier.size(96.dp))
+                        Spacer(Modifier.width(RefugeSpacing.md))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
+                            Text(detail.title, style = RefugeTypography.title(palette))
+                            Text(detail.subtitle, style = RefugeTypography.secondary(palette))
+                            Text(detail.price, style = RefugeTypography.value(palette).copy(color = palette.accent))
+                            Text(detail.date, style = RefugeTypography.caption(palette))
+                        }
+                    }
+                    Text(detail.description, style = RefugeTypography.body(palette))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
+                        if (detail.isGiftable) {
+                            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.gift, "赠送", onDismiss, Modifier.weight(1f))
+                        }
+                        if (detail.isReclaimable) {
+                            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.reclaim, "回收", onDismiss, Modifier.weight(1f))
+                        }
+                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.upgrade, "升级", onUpgrade, Modifier.weight(1f))
+                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.weight(1f))
+                    }
+                }
+            }
         }
     }
 }
@@ -511,7 +610,7 @@ private fun FilterSheet(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
             RefugeModalSurface(
                 palette = palette,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 22.dp),
@@ -574,20 +673,23 @@ private fun RefugeModalDialog(
     onPrimary: () -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        RefugeModalSurface(
-            palette = palette,
-            modifier = Modifier.fillMaxWidth(.88f),
-            fill = palette.backgroundLight,
-            padding = PaddingValues(RefugeSpacing.xl),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
-                Text(title, style = RefugeTypography.title(palette))
-                Text(body, style = RefugeTypography.body(palette))
-                RefugeGlassControl(
-                    backdrop = backdrop,
-                    palette = palette,
-                    onClick = onPrimary,
-                ) { Text(primaryLabel, style = RefugeTypography.body(palette)) }
+        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.Center) {
+            RefugeModalSurface(
+                palette = palette,
+                modifier = Modifier.fillMaxWidth(.88f),
+                fill = palette.backgroundLight,
+                padding = PaddingValues(RefugeSpacing.xl),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
+                    Text(title, style = RefugeTypography.title(palette))
+                    Text(body, style = RefugeTypography.body(palette))
+                    RefugeGlassControl(
+                        backdrop = backdrop,
+                        palette = palette,
+                        onClick = onPrimary,
+                        contentDescription = primaryLabel,
+                    ) { Text(primaryLabel, style = RefugeTypography.body(palette)) }
+                }
             }
         }
     }

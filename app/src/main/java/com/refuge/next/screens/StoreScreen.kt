@@ -61,6 +61,7 @@ import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
+import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.reference.ReferenceLiquidButton
 import com.refuge.next.reference.ReferenceSearchField
@@ -74,6 +75,9 @@ fun StoreScreen(
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
+    onOpenCcu: () -> Unit,
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
     var products by remember { mutableStateOf(emptyList<StoreProduct>()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -83,7 +87,6 @@ fun StoreScreen(
     var showFilter by remember { mutableStateOf(false) }
     var showSort by remember { mutableStateOf(false) }
     var showCart by remember { mutableStateOf(false) }
-    var showUpgrade by remember { mutableStateOf(false) }
     var selectedProduct by remember { mutableStateOf<StoreProduct?>(null) }
     var priceBand by remember { mutableStateOf("全部") }
     var warbondOnly by remember { mutableStateOf(false) }
@@ -130,9 +133,11 @@ fun StoreScreen(
                     backdrop = backdrop,
                     palette = palette,
                     showSearch = showSearch,
-                    onUpgrade = { showUpgrade = true },
+                    onUpgrade = onOpenCcu,
                     onCart = { showCart = true },
                     onSearch = { showSearch = !showSearch },
+                    isOnline = isOnline,
+                    onToggleOnline = onToggleOnline,
                 )
             }
             if (showSearch) {
@@ -218,15 +223,6 @@ fun StoreScreen(
             onDismiss = { showCart = false },
         )
     }
-    if (showUpgrade) {
-        StoreNoticeSheet(
-            backdrop = backdrop,
-            palette = palette,
-            title = "升级",
-            body = "升级入口保留为 Store action，具体流程将在 CCU Slice 接入。",
-            onDismiss = { showUpgrade = false },
-        )
-    }
     selectedProduct?.let { product ->
         StoreProductSheet(
             backdrop = backdrop,
@@ -245,6 +241,8 @@ private fun StoreHeader(
     onUpgrade: () -> Unit,
     onCart: () -> Unit,
     onSearch: () -> Unit,
+    isOnline: Boolean,
+    onToggleOnline: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -256,17 +254,18 @@ private fun StoreHeader(
                     .size(46.dp)
                     .clip(CircleShape)
                     .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
+                    .semantics { contentDescription = "切换在线状态"; role = Role.Button }
+                    .clickable(onClick = onToggleOnline)
                     .border(1.dp, palette.outline, CircleShape),
             )
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.weight(1f)) {
                 Text("商店", style = RefugeTypography.largeTitle(palette), maxLines = 1)
-                Text(
-                    "RSI 目录 · 本地同步",
-                    style = RefugeTypography.secondary(palette),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(7.dp).background(if (isOnline) palette.positive else palette.textMuted, CircleShape))
+                    Spacer(Modifier.width(RefugeSpacing.xxs))
+                    Text(if (isOnline) "在线 · 本地同步" else "离线 · 本地同步", style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
             StoreHeaderAction(backdrop, palette, RefugeIcons.upgrade, "升级", onUpgrade)
             Spacer(Modifier.width(RefugeSpacing.xs))
@@ -486,11 +485,11 @@ private fun StoreSheetFrame(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeStandardGlassSurface(
-                backdrop = backdrop,
+            RefugeModalSurface(
                 palette = palette,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 20.dp),
                 radius = RefugeRadius.floating,
+                fill = palette.contentSurfaceStrong,
                 padding = PaddingValues(RefugeSpacing.xl),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
