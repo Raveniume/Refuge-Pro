@@ -59,10 +59,10 @@ import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeContentSurface
+import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeGlassControl
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeModalSurface
-import com.refuge.next.material.RefugeQuietControl
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
 import com.refuge.next.reference.ReferenceLiquidButton
 import com.refuge.next.reference.ReferenceSelectionItem
@@ -168,8 +168,8 @@ fun HangarScreen(
             }
             listOf(
                 RefugeIcons.home to "机库",
+                RefugeIcons.store to "商店",
                 RefugeIcons.design to "设计",
-                RefugeIcons.tools to "工具",
             ).forEachIndexed { index, (icon, label) ->
                 ReferenceSelectionItem(
                     icon = icon,
@@ -310,33 +310,21 @@ private fun HangarListHeader(
         Spacer(Modifier.width(RefugeSpacing.xs))
         Text("$count 项", style = RefugeTypography.caption(palette))
         Spacer(Modifier.weight(1f))
-        RefugeQuietControl(
+        RefugeCompactUtilityPill(
             backdrop = backdrop,
             palette = palette,
+            icon = RefugeIcons.filter,
+            label = "筛选",
             onClick = onFilter,
-            contentDescription = "筛选",
-            modifier = Modifier.height(35.dp),
-            padding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(RefugeIcons.filter, null, tint = palette.textSecondary, modifier = Modifier.size(16.dp))
-                Text("筛选", style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
-            }
-        }
+        )
         Spacer(Modifier.width(RefugeSpacing.xs))
-        RefugeQuietControl(
+        RefugeCompactUtilityPill(
             backdrop = backdrop,
             palette = palette,
+            icon = RefugeIcons.sort,
+            label = "排序：默认",
             onClick = onSort,
-            contentDescription = "排序：默认",
-            modifier = Modifier.height(35.dp),
-            padding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(RefugeIcons.sort, null, tint = palette.textSecondary, modifier = Modifier.size(16.dp))
-                Text("排序：默认", style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
-            }
-        }
+        )
     }
 }
 

@@ -147,6 +147,8 @@ fun ReferenceLiquidSelectionBar(
     tabsCount: Int,
     modifier: Modifier = Modifier,
     height: Dp = 64.dp,
+    initialIndex: Int = 0,
+    onSelected: (Int) -> Unit = {},
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -162,11 +164,11 @@ fun ReferenceLiquidSelectionBar(
                 with(density) { 4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction)) }
             }
         }
-        var currentIndex by remember { mutableIntStateOf(0) }
+        var currentIndex by remember(tabsCount) { mutableIntStateOf(initialIndex.coerceIn(0, tabsCount - 1)) }
         val drag = remember(scope, tabsCount) {
             DampedDragAnimation(
                 animationScope = scope,
-                initialValue = 0f,
+                initialValue = initialIndex.coerceIn(0, tabsCount - 1).toFloat(),
                 valueRange = 0f..(tabsCount - 1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
@@ -176,6 +178,7 @@ fun ReferenceLiquidSelectionBar(
                     val target = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
                     currentIndex = target
                     animateToValue(target.toFloat())
+                    onSelected(target)
                     scope.launch { offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f)) }
                 },
                 onDrag = { _, amount ->
@@ -198,6 +201,7 @@ fun ReferenceLiquidSelectionBar(
         val renderTabs: @Composable RowScope.((Int) -> Unit) -> Unit = { select ->
             content(currentIndex) { index ->
                 currentIndex = index
+                onSelected(index)
                 select(index)
             }
         }
@@ -284,8 +288,18 @@ fun ReferenceSegmentedControl(
     isDark: Boolean,
     labels: List<String>,
     modifier: Modifier = Modifier,
+    initialIndex: Int = 0,
+    onSelected: (Int) -> Unit = {},
 ) {
-    ReferenceLiquidSelectionBar(backdrop, isDark, labels.size, modifier, height = 52.dp) { selected, select ->
+    ReferenceLiquidSelectionBar(
+        backdrop = backdrop,
+        isDark = isDark,
+        tabsCount = labels.size,
+        modifier = modifier,
+        height = 52.dp,
+        initialIndex = initialIndex,
+        onSelected = onSelected,
+    ) { selected, select ->
         labels.forEachIndexed { index, label ->
             Box(
                 Modifier

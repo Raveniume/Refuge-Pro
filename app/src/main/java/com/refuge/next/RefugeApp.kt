@@ -15,11 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.refuge.next.data.PreviewHangarRepository
+import com.refuge.next.data.CachedCatalogStoreRepository
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.material.RefugeScene
 import com.refuge.next.screens.DesignLabScreen
 import com.refuge.next.screens.HangarScreen
-import com.refuge.next.screens.ReferenceLabScreen
+import com.refuge.next.screens.StoreScreen
 
 @Composable
 fun RefugeApp() {
@@ -40,25 +41,20 @@ fun RefugeApp() {
             m80Image = R.drawable.m80_hero,
         )
     }
+    val storeRepository = remember { CachedCatalogStoreRepository() }
 
-    if (selectedTab == 1) {
-        ReferenceLabScreen(
+    RefugeScene(palette) { backdrop ->
+        RefugeContent(
+            selectedTab = selectedTab,
+            onNavigate = { selectedTab = it },
+            onOpenDesignLab = { selectedTab = 2 },
+            backdrop = backdrop,
+            palette = palette,
+            repository = repository,
+            storeRepository = storeRepository,
             isDark = isDark,
             onToggleTheme = { isDark = !isDark },
         )
-    } else {
-        RefugeScene(palette) { backdrop ->
-            RefugeContent(
-                selectedTab = selectedTab,
-                onNavigate = { selectedTab = it },
-                onOpenDesignLab = { selectedTab = 1 },
-                backdrop = backdrop,
-                palette = palette,
-                repository = repository,
-                isDark = isDark,
-                onToggleTheme = { isDark = !isDark },
-            )
-        }
     }
 }
 
@@ -70,6 +66,7 @@ private fun BoxScope.RefugeContent(
     backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     palette: com.refuge.next.design.RefugePalette,
     repository: PreviewHangarRepository,
+    storeRepository: CachedCatalogStoreRepository,
     isDark: Boolean,
     onToggleTheme: () -> Unit,
 ) {
@@ -85,7 +82,16 @@ private fun BoxScope.RefugeContent(
             onOpenDesignLab = onOpenDesignLab,
         )
 
-        1 -> DesignLabScreen(
+        1 -> StoreScreen(
+            backdrop = backdrop,
+            palette = palette,
+            repository = storeRepository,
+            isDark = isDark,
+            selectedBottomTab = selectedTab,
+            onNavigate = onNavigate,
+        )
+
+        2 -> DesignLabScreen(
             backdrop = backdrop,
             palette = palette,
             isDark = isDark,

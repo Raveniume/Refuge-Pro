@@ -15,8 +15,11 @@ import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Recycling
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Upgrade
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -27,6 +30,9 @@ object RefugeIcons {
     val filter: ImageVector = Icons.Outlined.FilterList
     val sort: ImageVector = Icons.Outlined.SwapVert
     val search: ImageVector = Icons.Outlined.Search
+    val store: ImageVector = Icons.Outlined.Storefront
+    val cart: ImageVector = Icons.Outlined.ShoppingBag
+    val upgrade: ImageVector = Icons.Outlined.Upgrade
     val gift: ImageVector = Icons.Outlined.LocalOffer
     val reclaim: ImageVector = Icons.Outlined.Recycling
     val more: ImageVector = Icons.Outlined.MoreHoriz

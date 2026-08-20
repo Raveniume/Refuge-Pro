@@ -44,5 +44,7 @@ dependencies {
     implementation(compose.materialIconsExtended)
     implementation("io.github.kyant0:backdrop:2.0.0")
     implementation("io.github.kyant0:shapes:1.2.0")
+    implementation("io.coil-kt.coil3:coil-compose:3.3.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
     debugImplementation("androidx.compose.ui:ui-tooling:1.11.1")
 }
