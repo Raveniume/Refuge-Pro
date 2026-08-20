@@ -62,6 +62,8 @@ import com.refuge.next.material.RefugeContentSurface
 import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeGlassControl
 import com.refuge.next.material.RefugeIcons
+import com.refuge.next.material.RefugeLightweightGlassSurface
+import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
 import com.refuge.next.reference.ReferenceLiquidButton
@@ -78,12 +80,15 @@ fun HangarScreen(
     onNavigate: (Int) -> Unit,
     onToggleTheme: () -> Unit,
     onOpenDesignLab: () -> Unit,
+    onOpenCcu: () -> Unit,
 ) {
     var ownedShips by remember { mutableStateOf(emptyList<OwnedShip>()) }
     var inventory by remember { mutableStateOf(emptyList<HangarItem>()) }
     var showFilter by remember { mutableStateOf(false) }
     var showSort by remember { mutableStateOf(false) }
     var showDetail by remember { mutableStateOf(false) }
+    var showLogs by remember { mutableStateOf(false) }
+    var selectedSection by remember { mutableStateOf(0) }
 
     LaunchedEffect(repository) {
         ownedShips = repository.ownedShips()
@@ -114,75 +119,77 @@ fun HangarScreen(
                     backdrop = backdrop,
                     isDark = isDark,
                     labels = listOf("机库", "回购", "升级"),
+                    initialIndex = selectedSection,
+                    onSelected = { selectedSection = it },
                 )
             }
-            items(ownedShips, key = { it.name }) { ship ->
-                OwnedShipHero(
-                    palette = palette,
-                    ship = ship,
-                    onClick = { showDetail = true },
-                )
-            }
-            item {
-                HangarListHeader(
-                    backdrop = backdrop,
-                    palette = palette,
-                    count = inventory.size,
-                    onFilter = { showFilter = true },
-                    onSort = { showSort = true },
-                )
-            }
-            item {
-                RefugeContentSurface(
-                    palette = palette,
-                    modifier = Modifier.fillMaxWidth(),
-                    radius = RefugeRadius.panel,
-                    fill = palette.contentSurface,
-                    padding = PaddingValues(horizontal = RefugeSpacing.md),
-                ) {
-                    Column(Modifier.fillMaxWidth()) {
-                        inventory.forEachIndexed { index, item ->
-                            HangarInventoryRow(
-                                palette = palette,
-                                item = item,
-                                isLast = index == inventory.lastIndex,
-                            )
+            if (selectedSection == 0) {
+                items(ownedShips, key = { it.name }) { ship ->
+                    OwnedShipHero(
+                        palette = palette,
+                        ship = ship,
+                        onClick = { showDetail = true },
+                    )
+                }
+                item {
+                    HangarListHeader(
+                        backdrop = backdrop,
+                        palette = palette,
+                        count = inventory.size,
+                        onFilter = { showFilter = true },
+                        onSort = { showSort = true },
+                    )
+                }
+                item {
+                    RefugeContentSurface(
+                        palette = palette,
+                        modifier = Modifier.fillMaxWidth(),
+                        radius = RefugeRadius.panel,
+                        fill = palette.contentSurface,
+                        padding = PaddingValues(horizontal = RefugeSpacing.md),
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            inventory.forEachIndexed { index, item ->
+                                HangarInventoryRow(
+                                    palette = palette,
+                                    item = item,
+                                    isLast = index == inventory.lastIndex,
+                                )
+                            }
                         }
                     }
+                }
+                item {
+                    RefugeLightweightGlassSurface(
+                        palette = palette,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { showLogs = true },
+                        contentDescription = "机库日志",
+                        padding = PaddingValues(14.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(RefugeIcons.log, null, tint = palette.accent)
+                            Spacer(Modifier.width(RefugeSpacing.sm))
+                            Column(Modifier.weight(1f)) {
+                                Text("机库日志", style = RefugeTypography.body(palette).copy(color = palette.text))
+                                Text("查看赠送、回收、购买与升级记录", style = RefugeTypography.caption(palette))
+                            }
+                            Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
+                        }
+                    }
+                }
+            } else if (selectedSection == 1) {
+                items(rebuyItems, key = { it.title }) { item ->
+                    HangarRebuyRow(palette, item) { showDetail = true }
+                }
+            } else {
+                item {
+                    HangarUpgradePanel(backdrop, palette) { onOpenCcu() }
                 }
             }
         }
 
-        ReferenceLiquidSelectionBar(
-            backdrop = backdrop,
-            isDark = isDark,
-            tabsCount = 3,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(.92f)
-                .navigationBarsPadding()
-                .padding(bottom = 10.dp),
-        ) { selected, select ->
-            LaunchedEffect(selected, selectedBottomTab) {
-                if (selected != selectedBottomTab) onNavigate(selected)
-            }
-            listOf(
-                RefugeIcons.home to "机库",
-                RefugeIcons.store to "商店",
-                RefugeIcons.design to "设计",
-            ).forEachIndexed { index, (icon, label) ->
-                ReferenceSelectionItem(
-                    icon = icon,
-                    label = label,
-                    selected = index == selectedBottomTab && index == selected,
-                    isDark = isDark,
-                    onClick = {
-                        select(index)
-                        onNavigate(index)
-                    },
-                )
-            }
-        }
+        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
     }
 
     if (showFilter) FilterSheet(backdrop, palette, onDismiss = { showFilter = false })
@@ -207,6 +214,60 @@ fun HangarScreen(
             onDismiss = { showDetail = false },
             onPrimary = { showDetail = false },
         )
+    }
+    if (showLogs) {
+        ProductionListSheet(
+            backdrop = backdrop,
+            palette = palette,
+            title = "机库日志",
+            entries = listOf("CREATED · M80 · 2026-08-02", "GIFT · SteelTek 装备包 · 2026-08-16", "APPLIED_UPGRADE · M80 · 2026-08-18"),
+            onDismiss = { showLogs = false },
+        )
+    }
+}
+
+private val rebuyItems = listOf(
+    HangarItem("M50 - 公民新手包", "$60", "2026年07月18日", R.drawable.m80_hero, isGiftable = false, isReclaimable = false),
+    HangarItem("装备包 - RSI", "$3.50", "2026年06月29日", R.drawable.ship_placeholder, isGiftable = false, isReclaimable = false),
+    HangarItem("极光 Mk I ES", "$20", "2026年05月12日", R.drawable.ship_placeholder, isGiftable = false, isReclaimable = false),
+)
+
+@Composable
+private fun HangarRebuyRow(palette: RefugePalette, item: HangarItem, onClick: () -> Unit) {
+    RefugeLightweightGlassSurface(
+        palette = palette,
+        modifier = Modifier.fillMaxWidth().height(108.dp),
+        radius = RefugeRadius.panel,
+        onClick = onClick,
+        contentDescription = item.title,
+        padding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.Top) {
+            HangarImage(item.imageRes, "${item.title} 图片", Modifier.size(88.dp))
+            Spacer(Modifier.width(RefugeSpacing.md))
+            Column(Modifier.fillMaxSize()) {
+                Text(item.title, style = RefugeTypography.headline(palette), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.weight(1f))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    Text(item.date, style = RefugeTypography.secondary(palette))
+                    Spacer(Modifier.weight(1f))
+                    Text(item.price, style = RefugeTypography.value(palette).copy(color = palette.accent))
+                    Spacer(Modifier.width(RefugeSpacing.xs))
+                    Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HangarUpgradePanel(backdrop: LayerBackdrop, palette: RefugePalette, onOpen: () -> Unit) {
+    RefugeStandardGlassSurface(backdrop = backdrop, palette = palette, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(18.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
+            Text("升级 / CCU", style = RefugeTypography.title(palette))
+            Text("选择起始舰船和目标舰船，按已拥有 CCU 计算实际还需支付金额。", style = RefugeTypography.body(palette))
+            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.upgrade, "打开升级规划", onOpen)
+        }
     }
 }
 

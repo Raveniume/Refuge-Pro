@@ -63,8 +63,6 @@ import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
 import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.reference.ReferenceLiquidButton
-import com.refuge.next.reference.ReferenceLiquidSelectionBar
-import com.refuge.next.reference.ReferenceSelectionItem
 import com.refuge.next.reference.ReferenceSearchField
 import com.refuge.next.reference.ReferenceSegmentedControl
 
@@ -185,32 +183,7 @@ fun StoreScreen(
             }
         }
 
-        ReferenceLiquidSelectionBar(
-            backdrop = backdrop,
-            isDark = isDark,
-            tabsCount = 3,
-            initialIndex = selectedBottomTab,
-            onSelected = onNavigate,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(.92f)
-                .navigationBarsPadding()
-                .padding(bottom = 10.dp),
-        ) { selected, select ->
-            listOf(
-                RefugeIcons.home to "机库",
-                RefugeIcons.store to "商店",
-                RefugeIcons.design to "设计",
-            ).forEachIndexed { index, (icon, label) ->
-                ReferenceSelectionItem(
-                    icon = icon,
-                    label = label,
-                    selected = index == selected,
-                    isDark = isDark,
-                    onClick = { select(index) },
-                )
-            }
-        }
+        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
     }
 
     if (showFilter) {

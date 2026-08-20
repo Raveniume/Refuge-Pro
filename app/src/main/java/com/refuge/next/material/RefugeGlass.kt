@@ -164,12 +164,12 @@ fun RefugeCompactUtilityPill(
         palette = palette,
         onClick = onClick,
         contentDescription = label,
-        modifier = modifier.height(35.dp),
-        padding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+        modifier = modifier.height(30.dp),
+        padding = PaddingValues(horizontal = 7.dp, vertical = 4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = palette.textSecondary, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
+            Icon(icon, null, tint = palette.textSecondary, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
             Text(label, style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
         }
     }

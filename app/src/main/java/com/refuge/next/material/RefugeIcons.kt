@@ -10,6 +10,7 @@ import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.LocalOffer
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Person
@@ -44,4 +45,5 @@ object RefugeIcons {
     val check: ImageVector = Icons.Outlined.Check
     val alert: ImageVector = Icons.Outlined.WarningAmber
     val notification: ImageVector = Icons.Outlined.NotificationsNone
+    val log: ImageVector = Icons.Outlined.Description
 }

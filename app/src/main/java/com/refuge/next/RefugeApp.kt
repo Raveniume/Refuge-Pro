@@ -16,11 +16,17 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.refuge.next.data.PreviewHangarRepository
 import com.refuge.next.data.CachedCatalogStoreRepository
+import com.refuge.next.data.CachedTerminalRepository
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.material.RefugeScene
 import com.refuge.next.screens.DesignLabScreen
 import com.refuge.next.screens.HangarScreen
 import com.refuge.next.screens.StoreScreen
+import com.refuge.next.screens.TerminalScreen
+import com.refuge.next.screens.ProfileScreen
+import com.refuge.next.screens.ToolsScreen
+import com.refuge.next.screens.SettingsScreen
+import com.refuge.next.screens.CcuScreen
 
 @Composable
 fun RefugeApp() {
@@ -42,16 +48,18 @@ fun RefugeApp() {
         )
     }
     val storeRepository = remember { CachedCatalogStoreRepository() }
+    val terminalRepository = remember { CachedTerminalRepository() }
 
     RefugeScene(palette) { backdrop ->
         RefugeContent(
             selectedTab = selectedTab,
             onNavigate = { selectedTab = it },
-            onOpenDesignLab = { selectedTab = 2 },
+            onOpenDesignLab = { selectedTab = 7 },
             backdrop = backdrop,
             palette = palette,
             repository = repository,
             storeRepository = storeRepository,
+            terminalRepository = terminalRepository,
             isDark = isDark,
             onToggleTheme = { isDark = !isDark },
         )
@@ -67,6 +75,7 @@ private fun BoxScope.RefugeContent(
     palette: com.refuge.next.design.RefugePalette,
     repository: PreviewHangarRepository,
     storeRepository: CachedCatalogStoreRepository,
+    terminalRepository: CachedTerminalRepository,
     isDark: Boolean,
     onToggleTheme: () -> Unit,
 ) {
@@ -80,6 +89,7 @@ private fun BoxScope.RefugeContent(
             onNavigate = onNavigate,
             onToggleTheme = onToggleTheme,
             onOpenDesignLab = onOpenDesignLab,
+            onOpenCcu = { onNavigate(6) },
         )
 
         1 -> StoreScreen(
@@ -91,7 +101,50 @@ private fun BoxScope.RefugeContent(
             onNavigate = onNavigate,
         )
 
-        2 -> DesignLabScreen(
+        2 -> TerminalScreen(
+            backdrop = backdrop,
+            palette = palette,
+            isDark = isDark,
+            selectedBottomTab = selectedTab,
+            onNavigate = onNavigate,
+            repository = terminalRepository,
+        )
+
+        3 -> ToolsScreen(
+            backdrop = backdrop,
+            palette = palette,
+            isDark = isDark,
+            selectedBottomTab = selectedTab,
+            onNavigate = onNavigate,
+        )
+
+        4 -> ProfileScreen(
+            backdrop = backdrop,
+            palette = palette,
+            isDark = isDark,
+            selectedBottomTab = selectedTab,
+            onNavigate = onNavigate,
+            onToggleTheme = onToggleTheme,
+        )
+
+        5 -> SettingsScreen(
+            backdrop = backdrop,
+            palette = palette,
+            isDark = isDark,
+            selectedBottomTab = 4,
+            onNavigate = onNavigate,
+            onToggleTheme = onToggleTheme,
+        )
+
+        6 -> CcuScreen(
+            backdrop = backdrop,
+            palette = palette,
+            isDark = isDark,
+            selectedBottomTab = 0,
+            onNavigate = onNavigate,
+        )
+
+        7 -> DesignLabScreen(
             backdrop = backdrop,
             palette = palette,
             isDark = isDark,
