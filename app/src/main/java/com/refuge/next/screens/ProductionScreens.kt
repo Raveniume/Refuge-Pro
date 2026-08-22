@@ -53,9 +53,12 @@ import com.kyant.backdrop.Backdrop
 import com.refuge.next.R
 import com.refuge.next.data.CachedTerminalRepository
 import com.refuge.next.data.CcuPlan
+import com.refuge.next.data.CcuRepository
 import com.refuge.next.data.CcuShip
 import com.refuge.next.data.OwnedCcu
 import com.refuge.next.data.ProfileData
+import com.refuge.next.data.ProfileRepository
+import com.refuge.next.data.UtilityRepository
 import com.refuge.next.data.calculateRemainingPayment
 import com.refuge.next.data.calculateShipValue
 import com.refuge.next.data.eligibleTargetShips
@@ -64,7 +67,6 @@ import com.refuge.next.data.TerminalItem
 import com.refuge.next.data.TerminalRepository
 import com.refuge.next.data.ToolItem
 import com.refuge.next.data.formatUsd
-import com.refuge.next.data.toolGroups
 import com.refuge.next.design.RefugeIconSize
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
@@ -337,11 +339,21 @@ fun ProfileScreen(
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
+    profileRepository: ProfileRepository,
+    utilityRepository: UtilityRepository,
     onToggleTheme: () -> Unit,
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
 ) {
-    val profile = remember(isOnline) { ProfileData(isOnline = isOnline) }
+    var profileData by remember { mutableStateOf(ProfileData()) }
+    var profileToolGroups by remember { mutableStateOf(emptyList<Pair<String, List<ToolItem>>>()) }
+    LaunchedEffect(profileRepository) {
+        profileData = profileRepository.profile()
+    }
+    LaunchedEffect(utilityRepository) {
+        profileToolGroups = utilityRepository.groups()
+    }
+    val profile = profileData.copy(isOnline = isOnline)
     var selectedTool by remember { mutableStateOf<ToolItem?>(null) }
     PageGlassScope(
         backdrop = backdrop,
@@ -366,7 +378,7 @@ fun ProfileScreen(
             item { ProfileStats(backdrop, palette, profile) }
             item { ProfileAccountGroup(backdrop, palette, profile) }
             item { ProfileOrganization(backdrop, palette) }
-            item { ProfileUtilities(backdrop, palette) { selectedTool = it } }
+            item { ProfileUtilities(backdrop, palette, profileToolGroups) { selectedTool = it } }
             item { ProfileSettingsButton(backdrop, palette) { onNavigate(5) } }
         }
         },
@@ -377,10 +389,8 @@ fun ProfileScreen(
     selectedTool?.let { tool ->
         if (tool.id == "social") {
             SocialToolSheet(backdrop, palette) { selectedTool = null }
-        } else if (tool.id == "gift-redeem" || tool.id == "referral-reverse") {
-            ToolDataSheet(backdrop, palette, tool) { selectedTool = null }
         } else {
-            ProductionNoticeSheet(backdrop, palette, tool.title, "${tool.subtitle}\n\n此入口已接入新的业务 adapter，执行结果将在数据源可用时更新。") { selectedTool = null }
+            ToolDataSheet(backdrop, palette, tool) { selectedTool = null }
         }
     }
 }
@@ -470,11 +480,12 @@ private fun ProfileAccountGroup(backdrop: LayerBackdrop, palette: RefugePalette,
 private fun ProfileUtilities(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
+    groups: List<Pair<String, List<ToolItem>>>,
     onToolClick: (ToolItem) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
         Text("实用工具", style = RefugeTypography.headline(palette))
-        toolGroups.forEach { (group, tools) ->
+        groups.forEach { (group, tools) ->
             Text(group, style = RefugeTypography.caption(palette))
             tools.forEach { tool ->
                 RefugeGlassControl(
@@ -556,12 +567,17 @@ fun ToolsScreen(
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
+    utilityRepository: UtilityRepository,
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
 ) {
     var selectedTool by remember { mutableStateOf<ToolItem?>(null) }
     var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    var groups by remember { mutableStateOf(emptyList<Pair<String, List<ToolItem>>>()) }
+    LaunchedEffect(utilityRepository) {
+        groups = utilityRepository.groups()
+    }
     PageGlassScope(
         backdrop = backdrop,
         content = {
@@ -591,7 +607,7 @@ fun ToolsScreen(
                     )
                 }
             }
-            toolGroups.forEach { (group, tools) ->
+            groups.forEach { (group, tools) ->
                 val visibleTools = tools.filter {
                     query.isBlank() || it.title.contains(query, ignoreCase = true) || it.subtitle.contains(query, ignoreCase = true)
                 }
@@ -620,10 +636,8 @@ fun ToolsScreen(
     selectedTool?.let { tool ->
         if (tool.id == "social") {
             SocialToolSheet(backdrop, palette) { selectedTool = null }
-        } else if (tool.id == "gift-redeem" || tool.id == "referral-reverse") {
-            ToolDataSheet(backdrop, palette, tool) { selectedTool = null }
         } else {
-            ProductionNoticeSheet(backdrop, palette, tool.title, "${tool.subtitle}\n\n此入口已接入新的业务 adapter，执行结果将在数据源可用时更新。") { selectedTool = null }
+            ToolDataSheet(backdrop, palette, tool) { selectedTool = null }
         }
     }
 }
@@ -674,10 +688,17 @@ private fun SocialToolSheet(backdrop: LayerBackdrop, palette: RefugePalette, onD
 
 @Composable
 private fun ToolDataSheet(backdrop: LayerBackdrop, palette: RefugePalette, tool: ToolItem, onDismiss: () -> Unit) {
-    val rows = if (tool.id == "gift-redeem") {
-        listOf("待兑换礼包" to "2 条", "最近礼物码" to "RAVEN-7K2Q", "状态" to "本地待处理")
-    } else {
-        listOf("邀请人" to "Raveniume", "关系记录" to "3 条", "最近同步" to "2026-08-20")
+    val rows = when (tool.id) {
+        "crowdfunding" -> listOf("当前支持项目" to "3 个", "累计支持" to "$140", "最近同步" to "2026-08-20")
+        "player-search" -> listOf("查询范围" to "公开 Handle", "最近查询" to "NocturnePilot", "状态" to "本地只读")
+        "gift-redeem" -> listOf("待兑换礼包" to "2 条", "最近礼物码" to "RAVEN-7K2Q", "状态" to "本地待处理")
+        "ships" -> listOf("资料分类" to "舰船", "条目" to "本地目录", "入口" to "终端")
+        "equipment" -> listOf("资料分类" to "装备、护盾、武器", "条目" to "本地目录", "入口" to "终端")
+        "referrals" -> listOf("邀请人数" to "3", "已完成" to "2", "最近同步" to "2026-08-20")
+        "referral-reverse" -> listOf("邀请人" to "Raveniume", "关系记录" to "3 条", "最近同步" to "2026-08-20")
+        "test-center" -> listOf("Glass pipeline" to "PASS", "本地缓存" to "PASS", "破坏性请求" to "拦截")
+        "rsi" -> listOf("入口" to "RSI 资料", "外部跳转" to "未启用", "账户变更" to "不会执行")
+        else -> listOf("状态" to "本地只读", "数据源" to "缓存 adapter")
     }
     RefugeLiquidSheet(backdrop, palette, tool.title, onDismiss) { modalBackdrop ->
         Text(tool.subtitle, style = RefugeTypography.secondary(palette))
@@ -785,32 +806,34 @@ fun CcuScreen(
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
     rootTab: Int,
+    ccuRepository: CcuRepository,
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
 ) {
-    val ships = remember {
-        listOf(
-            CcuShip("m80", "M80", 30000, R.drawable.m80_hero),
-            CcuShip("aurora", "极光 Mk I ES", 2000, R.drawable.ship_placeholder),
-            CcuShip("atls", "ATLS", 4000, R.drawable.ship_placeholder),
-        )
-    }
-    var seed by remember { mutableStateOf(ships[1]) }
-    var target by remember { mutableStateOf<CcuShip?>(ships[0]) }
+    var ships by remember { mutableStateOf(emptyList<CcuShip>()) }
+    var seed by remember { mutableStateOf<CcuShip?>(null) }
+    var target by remember { mutableStateOf<CcuShip?>(null) }
     var showSeed by remember { mutableStateOf(false) }
     var showTarget by remember { mutableStateOf(false) }
     var showOwned by remember { mutableStateOf(false) }
-    val owned = remember { listOf(OwnedCcu("ccu-1", "Aurora → M80 CCU", 500, "M80")) }
-    val availableTargets = remember(seed, ships) { eligibleTargetShips(seed, ships) }
+    var owned by remember { mutableStateOf(emptyList<OwnedCcu>()) }
+    LaunchedEffect(ccuRepository) {
+        val loadedShips = ccuRepository.ships()
+        ships = loadedShips
+        owned = ccuRepository.owned()
+        seed = loadedShips.getOrNull(1) ?: loadedShips.firstOrNull()
+        target = loadedShips.firstOrNull()
+    }
+    val availableTargets = remember(seed, ships) { seed?.let { eligibleTargetShips(it, ships) } ?: emptyList() }
     val availableTargetIds = remember(availableTargets) { availableTargets.map { it.id } }
     LaunchedEffect(seed, availableTargets) {
         if (target?.id !in availableTargetIds) {
             target = availableTargets.firstOrNull()
         }
     }
-    val additional = target?.let { calculateRemainingPayment(seed, it, owned) } ?: 0
-    val plan = target?.let { CcuPlan(seed, it, owned, additional) }
-    val shipValue = plan?.shipValue ?: calculateShipValue(seed.purchasePrice, owned.map { it.purchasePrice }, additional)
+    val additional = target?.let { currentSeed -> seed?.let { calculateRemainingPayment(it, currentSeed, owned) } } ?: 0
+    val plan = target?.let { currentTarget -> seed?.let { CcuPlan(it, currentTarget, owned, additional) } }
+    val shipValue = plan?.shipValue ?: seed?.let { calculateShipValue(it.purchasePrice, owned.map { it.purchasePrice }, additional) } ?: 0
 
     PageGlassScope(
         backdrop = backdrop,
@@ -821,10 +844,12 @@ fun CcuScreen(
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
         ) {
             item { ProductionHeader(palette, "升级规划", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = { HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(rootTab) }) }) }
-            item {
+            if (seed == null) {
+                item { ProductionNoticeBlock(palette, "升级规划", "正在从本地目录加载舰船与 CCU 数据…") }
+            } else item {
                 Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                     Text("选择舰船", style = RefugeTypography.headline(palette))
-                    ShipSelectorGlassField(backdrop, palette, "起始舰船", seed.name) { showSeed = true }
+                    ShipSelectorGlassField(backdrop, palette, "起始舰船", seed?.name ?: "选择舰船") { showSeed = true }
                     ShipSelectorGlassField(backdrop, palette, "目标舰船", target?.name ?: "无更高原价目标") { showTarget = true }
                 }
             }

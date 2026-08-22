@@ -34,10 +34,10 @@ interface HangarRepository {
 }
 
 /**
- * Preview adapter for Slice 1. The production adapter will map the existing
- * Flutter API/cache contracts into these immutable presentation models.
+ * Read-only cache adapter for the current migration build. The legacy API/cache
+ * mapper can replace this snapshot without changing the production UI contract.
  */
-class PreviewHangarRepository(
+class CachedHangarRepository(
     private val fallbackImage: Int,
     private val m80Image: Int = fallbackImage,
 ) : HangarRepository {
@@ -51,5 +51,43 @@ class PreviewHangarRepository(
         HangarItem("毛线帽套装 - 莫基节新手指导奖励", "$0", "2026年08月07日", fallbackImage, originalName = "MobiGlas Tutorial Reward", typeLabel = "个人物品", isGiftable = false, isReclaimable = false, includedItems = listOf("毛线帽套装")),
         HangarItem("M80 - 公民新手包", "$140", "2026年08月02日", m80Image, originalName = "Origin M80 Starter Package", typeLabel = "游戏包 / 舰船", insurance = "LTI", currentValue = "$300", savings = "$160", includedItems = listOf("M80", "星际公民数字下载", "LTI 保险"), upgradeFrom = "Aurora ES", upgradeTo = "M80", upgradeFromPrice = "$20", upgradeToPrice = "$300"),
         HangarItem("舰船组件 - 轻型量子驱动", "$25", "2026年07月22日", fallbackImage, originalName = "Light Quantum Drive", typeLabel = "Weapon / Component", includedItems = listOf("量子驱动", "S1 组件")),
+    )
+}
+
+data class BuybackItem(
+    val title: String,
+    val price: String,
+    val date: String,
+    val imageRes: Int,
+    val originalName: String = "—",
+    val isUpgrade: Boolean = false,
+)
+
+interface BuybackRepository {
+    suspend fun items(): List<BuybackItem>
+}
+
+/** Read-only local cache boundary for the legacy buyback contract. */
+class CachedBuybackRepository(
+    private val m80Image: Int,
+    private val fallbackImage: Int,
+) : BuybackRepository {
+    override suspend fun items(): List<BuybackItem> = listOf(
+        BuybackItem("M50 - 公民新手包", "$60", "2026年07月18日", m80Image, "Origin M50 Starter Package"),
+        BuybackItem("装备包 - RSI", "$3.50", "2026年06月29日", fallbackImage, "RSI Equipment Pack"),
+        BuybackItem("极光 Mk I ES", "$20", "2026年05月12日", fallbackImage, "Aurora Mk I ES"),
+    )
+}
+
+interface HangarLogRepository {
+    suspend fun entries(): List<String>
+}
+
+/** Parsed-log adapter seam; entries are read-only until the log parser is wired. */
+class CachedHangarLogRepository : HangarLogRepository {
+    override suspend fun entries(): List<String> = listOf(
+        "CREATED · M80 · 2026-08-02",
+        "GIFT · SteelTek 装备包 · 2026-08-16",
+        "APPLIED_UPGRADE · M80 · 2026-08-18",
     )
 }

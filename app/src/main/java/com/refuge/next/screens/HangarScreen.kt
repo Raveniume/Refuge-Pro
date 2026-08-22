@@ -57,6 +57,11 @@ import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.R
 import com.refuge.next.data.HangarItem
 import com.refuge.next.data.HangarRepository
+import com.refuge.next.data.BuybackItem
+import com.refuge.next.data.BuybackRepository
+import com.refuge.next.data.HangarLogRepository
+import com.refuge.next.data.DestructiveAction
+import com.refuge.next.data.SafeNoOpDestructiveActionExecutor
 import com.refuge.next.data.OwnedShip
 import com.refuge.next.design.RefugeIconSize
 import com.refuge.next.design.RefugePalette
@@ -78,6 +83,7 @@ import com.refuge.next.material.RefugeFloatingActionGroup
 import com.refuge.next.material.RefugeLiquidIconButton
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
 import com.refuge.next.reference.ReferenceLiquidButton
+import com.refuge.next.reference.ReferenceSearchField
 import com.refuge.next.reference.ReferenceSelectionItem
 import com.refuge.next.reference.ReferenceSegmentedControl
 
@@ -86,6 +92,8 @@ fun HangarScreen(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     repository: HangarRepository,
+    buybackRepository: BuybackRepository,
+    hangarLogRepository: HangarLogRepository,
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
@@ -102,10 +110,33 @@ fun HangarScreen(
     var selectedDetail by remember { mutableStateOf<HangarDetail?>(null) }
     var showLogs by remember { mutableStateOf(false) }
     var selectedSection by remember { mutableStateOf(0) }
+    var showSearch by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var giftableOnly by remember { mutableStateOf(false) }
+    var reclaimableOnly by remember { mutableStateOf(false) }
+    var shipOnly by remember { mutableStateOf(false) }
+    var newestFirst by remember { mutableStateOf(true) }
+    var buybackItems by remember { mutableStateOf(emptyList<BuybackItem>()) }
+    var logEntries by remember { mutableStateOf(emptyList<String>()) }
+    var pendingAction by remember { mutableStateOf<String?>(null) }
+    val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
 
-    LaunchedEffect(repository) {
+    LaunchedEffect(repository, buybackRepository, hangarLogRepository) {
         ownedShips = repository.ownedShips()
         inventory = repository.inventory()
+        buybackItems = buybackRepository.items()
+        logEntries = hangarLogRepository.entries()
+    }
+
+    val visibleInventory = remember(inventory, query, giftableOnly, reclaimableOnly, shipOnly, newestFirst) {
+        inventory
+            .asSequence()
+            .filter { query.isBlank() || it.title.contains(query, true) || it.originalName.contains(query, true) }
+            .filter { !giftableOnly || it.isGiftable }
+            .filter { !reclaimableOnly || it.isReclaimable }
+            .filter { !shipOnly || it.typeLabel.contains("舰船", true) }
+            .let { sequence -> if (newestFirst) sequence.sortedByDescending { it.date } else sequence.sortedBy { it.date } }
+            .toList()
     }
 
     PageGlassScope(
@@ -129,7 +160,20 @@ fun HangarScreen(
                     onOpenDesignLab = onOpenDesignLab,
                     isOnline = isOnline,
                     onToggleOnline = onToggleOnline,
+                    onSearch = { showSearch = !showSearch },
                 )
+            }
+            if (showSearch) {
+                item {
+                    ReferenceSearchField(
+                        backdrop = backdrop,
+                        isDark = isDark,
+                        value = query,
+                        onValueChange = { query = it },
+                        searchIcon = RefugeIcons.search,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
             item {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -157,9 +201,10 @@ fun HangarScreen(
                     HangarListHeader(
                         backdrop = backdrop,
                         palette = palette,
-                        count = inventory.size,
+                        count = visibleInventory.size,
                         onFilter = { showFilter = true },
                         onSort = { showSort = true },
+                        newestFirst = newestFirst,
                     )
                 }
                 item {
@@ -170,12 +215,14 @@ fun HangarScreen(
                         padding = PaddingValues(horizontal = RefugeSpacing.md),
                     ) {
                         Column(Modifier.fillMaxWidth()) {
-                            inventory.forEachIndexed { index, item ->
+                            visibleInventory.forEachIndexed { index, item ->
                                 HangarInventoryRow(
                                     palette = palette,
                                     item = item,
-                                    isLast = index == inventory.lastIndex,
+                                    isLast = index == visibleInventory.lastIndex,
                                     onClick = { selectedDetail = item.toHangarDetail() },
+                                    onGift = { safeNoOp.execute(DestructiveAction.GIFT); pendingAction = "赠送" },
+                                    onReclaim = { safeNoOp.execute(DestructiveAction.RECLAIM); pendingAction = "回收" },
                                 )
                             }
                         }
@@ -201,7 +248,7 @@ fun HangarScreen(
                     }
                 }
             } else if (selectedSection == 1) {
-                items(rebuyItems, key = { it.title }) { item ->
+                items(buybackItems, key = { it.title }) { item ->
                     HangarRebuyRow(palette, item) { selectedDetail = item.toHangarDetail() }
                 }
             } else {
@@ -216,16 +263,26 @@ fun HangarScreen(
         },
     )
 
-    if (showFilter) FilterSheet(backdrop, palette, onDismiss = { showFilter = false })
-    if (showSort) {
-        RefugeModalDialog(
+    if (showFilter) {
+        FilterSheet(
             backdrop = backdrop,
             palette = palette,
-            title = "排序舰库",
-            body = "默认顺序按同步时间与项目价值保持稳定。",
-            primaryLabel = "完成",
+            giftableOnly = giftableOnly,
+            reclaimableOnly = reclaimableOnly,
+            shipOnly = shipOnly,
+            onGiftableChanged = { giftableOnly = it },
+            onReclaimableChanged = { reclaimableOnly = it },
+            onShipOnlyChanged = { shipOnly = it },
+            onDismiss = { showFilter = false },
+        )
+    }
+    if (showSort) {
+        HangarSortSheet(
+            backdrop = backdrop,
+            palette = palette,
+            newestFirst = newestFirst,
+            onSelected = { newestFirst = it; showSort = false },
             onDismiss = { showSort = false },
-            onPrimary = { showSort = false },
         )
     }
     selectedDetail?.let { detail ->
@@ -238,6 +295,9 @@ fun HangarScreen(
                 selectedDetail = null
                 onOpenCcu()
             },
+            onGift = { safeNoOp.execute(DestructiveAction.GIFT); pendingAction = "赠送" },
+            onReclaim = { safeNoOp.execute(DestructiveAction.RECLAIM); pendingAction = "回收" },
+            onJump = { pendingAction = "跳转到 RSI" },
             onLog = {
                 selectedDetail = null
                 showLogs = true
@@ -249,8 +309,23 @@ fun HangarScreen(
             backdrop = backdrop,
             palette = palette,
             title = "机库日志",
-            entries = listOf("CREATED · M80 · 2026-08-02", "GIFT · SteelTek 装备包 · 2026-08-16", "APPLIED_UPGRADE · M80 · 2026-08-18"),
+            entries = logEntries,
             onDismiss = { showLogs = false },
+        )
+    }
+    pendingAction?.let { action ->
+        RefugeModalDialog(
+            backdrop = backdrop,
+            palette = palette,
+            title = "${action}操作",
+            body = if (action == "跳转到 RSI") {
+                "该入口仅保留导航意图，外部页面适配器尚未启用。不会执行账户变更。"
+            } else {
+                "Debug safeNoOp：已构造 $action 确认边界，但不会提交真实 RSI 请求。"
+            },
+            primaryLabel = "知道了",
+            onDismiss = { pendingAction = null },
+            onPrimary = { pendingAction = null },
         )
     }
 }
@@ -317,14 +392,24 @@ private fun HangarItem.toHangarDetail() = HangarDetail(
     upgradeToPrice = upgradeToPrice,
 )
 
-private val rebuyItems = listOf(
-    HangarItem("M50 - 公民新手包", "$60", "2026年07月18日", R.drawable.m80_hero, isGiftable = false, isReclaimable = false),
-    HangarItem("装备包 - RSI", "$3.50", "2026年06月29日", R.drawable.ship_placeholder, isGiftable = false, isReclaimable = false),
-    HangarItem("极光 Mk I ES", "$20", "2026年05月12日", R.drawable.ship_placeholder, isGiftable = false, isReclaimable = false),
+private fun BuybackItem.toHangarDetail() = HangarDetail(
+    title = title,
+    subtitle = "$originalName · 回购项目",
+    price = price,
+    date = date,
+    imageRes = imageRes,
+    description = "$title · 已从本地回购缓存读取。确认操作不会提交真实购买。",
+    isGiftable = false,
+    isReclaimable = false,
+    meltValue = price,
+    currentValue = price,
+    savings = "$0",
+    insurance = "—",
+    includedItems = listOf(originalName),
 )
 
 @Composable
-private fun HangarRebuyRow(palette: RefugePalette, item: HangarItem, onClick: () -> Unit) {
+private fun HangarRebuyRow(palette: RefugePalette, item: BuybackItem, onClick: () -> Unit) {
     RefugeLightweightGlassSurface(
         palette = palette,
         modifier = Modifier.fillMaxWidth().height(108.dp),
@@ -370,6 +455,7 @@ private fun HangarHeader(
     onOpenDesignLab: () -> Unit,
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
+    onSearch: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth(),
@@ -408,6 +494,8 @@ private fun HangarHeader(
             modifier = Modifier.size(44.dp),
             iconTint = palette.textSecondary,
         )
+        Spacer(Modifier.width(RefugeSpacing.xs))
+        RefugeLiquidIconButton(backdrop, RefugeIcons.search, "搜索机库", onSearch, Modifier.size(44.dp), iconTint = palette.textSecondary)
         Spacer(Modifier.width(RefugeSpacing.xs))
         RefugeLiquidIconButton(backdrop, RefugeIcons.more, "更多操作", onOpenDesignLab, Modifier.size(44.dp), iconTint = palette.textSecondary)
     }
@@ -456,6 +544,7 @@ private fun HangarListHeader(
     count: Int,
     onFilter: () -> Unit,
     onSort: () -> Unit,
+    newestFirst: Boolean,
 ) {
     Row(
         Modifier.fillMaxWidth(),
@@ -477,7 +566,7 @@ private fun HangarListHeader(
             backdrop = backdrop,
             palette = palette,
             icon = RefugeIcons.sort,
-            label = "排序：默认",
+            label = if (newestFirst) "排序：最新" else "排序：最早",
             onClick = onSort,
         )
     }
@@ -502,6 +591,8 @@ private fun HangarInventoryRow(
     item: HangarItem,
     isLast: Boolean,
     onClick: () -> Unit,
+    onGift: () -> Unit,
+    onReclaim: () -> Unit,
 ) {
     Box(
         Modifier
@@ -540,8 +631,8 @@ private fun HangarInventoryRow(
                     Spacer(Modifier.width(RefugeSpacing.md))
                     Text(item.date, style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.weight(1f))
-                    InventoryAction(RefugeIcons.gift, "赠送", palette, item.isGiftable)
-                    InventoryAction(RefugeIcons.reclaim, "回收", palette, item.isReclaimable)
+                    InventoryAction(RefugeIcons.gift, "赠送", palette, item.isGiftable, onGift)
+                    InventoryAction(RefugeIcons.reclaim, "回收", palette, item.isReclaimable, onReclaim)
                     InventoryAction(RefugeIcons.chevron, "查看详情", palette, true)
                 }
             }
@@ -567,6 +658,9 @@ private fun HangarDetailSheet(
     onDismiss: () -> Unit,
     onUpgrade: () -> Unit,
     onLog: () -> Unit,
+    onGift: () -> Unit,
+    onReclaim: () -> Unit,
+    onJump: () -> Unit,
 ) {
     RefugeLiquidSheet(
         backdrop = backdrop,
@@ -600,9 +694,9 @@ private fun HangarDetailSheet(
                         backdrop = modalBackdrop,
                         palette = palette,
                         actions = listOf(
-                            RefugeFloatingAction(RefugeIcons.hangarGift, "礼物", {}),
-                            RefugeFloatingAction(RefugeIcons.hangarOpenExternal, "跳转", {}),
-                            RefugeFloatingAction(RefugeIcons.hangarUpgrade, "升级", {}),
+                            RefugeFloatingAction(RefugeIcons.hangarGift, "礼物", onGift),
+                            RefugeFloatingAction(RefugeIcons.hangarOpenExternal, "跳转", onJump),
+                            RefugeFloatingAction(RefugeIcons.hangarUpgrade, "升级", onUpgrade),
                         ),
                         modifier = Modifier.width(centerWidth),
                     )
@@ -610,7 +704,7 @@ private fun HangarDetailSheet(
                         backdrop = modalBackdrop,
                         icon = RefugeIcons.reclaim,
                         contentDescription = "回收",
-                        onClick = {},
+                        onClick = onReclaim,
                         modifier = Modifier.size(sideWidth),
                         iconTint = palette.text,
                         isInteractive = false,
@@ -720,10 +814,12 @@ private fun InventoryAction(
     label: String,
     palette: RefugePalette,
     enabled: Boolean,
+    onClick: () -> Unit = {},
 ) {
     Box(
         Modifier
             .size(36.dp)
+            .clickable(enabled = enabled, onClick = onClick)
             .semantics {
                 role = Role.Button
                 contentDescription = label
@@ -743,19 +839,31 @@ private fun InventoryAction(
 private fun FilterSheet(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
+    giftableOnly: Boolean,
+    reclaimableOnly: Boolean,
+    shipOnly: Boolean,
+    onGiftableChanged: (Boolean) -> Unit,
+    onReclaimableChanged: (Boolean) -> Unit,
+    onShipOnlyChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selected by remember { mutableStateOf(setOf("舰船", "可回收")) }
     RefugeLiquidSheet(backdrop, palette, "筛选舰库", onDismiss) { modalBackdrop ->
         Text("按项目类型和可用操作缩小清单", style = RefugeTypography.secondary(palette))
-        listOf("舰船", "可回收", "可赠送").forEach { label ->
-            val checked = label in selected
+        listOf(
+            "仅显示舰船" to shipOnly,
+            "可回收" to reclaimableOnly,
+            "可赠送" to giftableOnly,
+        ).forEach { (label, checked) ->
             Row(
                 Modifier.fillMaxWidth().clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                 ) {
-                    selected = if (checked) selected - label else selected + label
+                    when (label) {
+                        "仅显示舰船" -> onShipOnlyChanged(!checked)
+                        "可回收" -> onReclaimableChanged(!checked)
+                        else -> onGiftableChanged(!checked)
+                    }
                 },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -776,6 +884,28 @@ private fun FilterSheet(
         RefugeGlassControl(modalBackdrop, palette, onDismiss, contentDescription = "完成筛选", modifier = Modifier.align(Alignment.End)) {
             Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
         }
+    }
+}
+
+@Composable
+private fun HangarSortSheet(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    newestFirst: Boolean,
+    onSelected: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    RefugeLiquidSheet(backdrop, palette, "排序舰库", onDismiss) { modalBackdrop ->
+        listOf("最新同步" to true, "最早同步" to false).forEach { (label, value) ->
+            Row(
+                Modifier.fillMaxWidth().clickable { onSelected(value) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, style = RefugeTypography.body(palette), modifier = Modifier.weight(1f))
+                if (newestFirst == value) Icon(RefugeIcons.check, null, tint = palette.accent, modifier = Modifier.size(RefugeIconSize.small))
+            }
+        }
+        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
     }
 }
 

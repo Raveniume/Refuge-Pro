@@ -17,7 +17,8 @@ is imported into this project.
 
 ## Slice 1 status
 
-- `PreviewHangarRepository` is intentionally read-only sample data.
+- `CachedHangarRepository` is a read-only cache boundary; its local snapshot is
+  tracked in `PREVIEW_DATA_AUDIT.md` until a parser-backed cache is connected.
 - `HangarScreen` is the Hangar Golden Master: it preserves the existing
   inventory information order while using the V4 Compose components and
   tokens. The page includes the real local avatar and M80 image assets;
@@ -37,10 +38,9 @@ is imported into this project.
 
 The V4 Reference Replication Lab is accepted as the implementation baseline.
 Apple component-level geometry remains unverified and is explicitly not a
-blocker. Store, Terminal, Profile, Tools, and CCU remain out of scope until
-the Hangar Golden Master receives manual confirmation.
+blocker. The Hangar Golden Master is accepted and all remaining production
+routes are tracked in `FULL_MIGRATION_MATRIX.md`.
 
-When this slice is reopened, the next implementation step is a Kotlin
-read-only adapter for the existing hangar/cache contract. It must preserve
-filtering, stacking, translation, pricing, and image identity without changing
-the approved Hangar geometry.
+The next adapter step is to replace the local cache snapshots with parser-backed
+legacy cache/API mappers. They must preserve filtering, stacking, translation,
+pricing, and image identity without changing the approved Hangar geometry.

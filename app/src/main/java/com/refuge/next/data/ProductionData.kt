@@ -19,6 +19,10 @@ enum class TerminalCategory(val label: String) {
     PERSONAL("单兵"),
     ATTACHMENTS("配件"),
     SHIELDS("护盾"),
+    VEHICLE_WEAPONS("舰武"),
+    COOLERS("冷却"),
+    POWER_PLANTS("电站"),
+    QUANTUM_DRIVES("量子"),
 }
 
 interface TerminalRepository {
@@ -41,6 +45,11 @@ private val terminalSnapshot = listOf(
     TerminalItem("p-pistol", "Arclight II 手枪", "BEHR", TerminalCategory.PERSONAL, listOf("手枪", "能量"), "4,200 aUEC", "$3", "紧凑的个人能量武器。"),
     TerminalItem("a-mount", "S1 武器挂架", "Greycat", TerminalCategory.ATTACHMENTS, listOf("挂架", "S1"), "1,600 aUEC", "$2", "用于小型武器接口的标准挂架。"),
     TerminalItem("s-parapet", "Parapet 护盾", "Dale", TerminalCategory.SHIELDS, listOf("护盾", "S3"), "32,700 aUEC", "$18", "为中型舰船提供额外抗性。"),
+    TerminalItem("w-mantis", "Mantis 导弹发射器", "Behring", TerminalCategory.VEHICLE_WEAPONS, listOf("导弹", "S2"), "18,200 aUEC", "$14", "适配中型挂点的标准导弹发射器。"),
+    TerminalItem("w-bulldog", "S2 Bulldog 加特林", "Apocalypse Arms", TerminalCategory.VEHICLE_WEAPONS, listOf("机炮", "S2"), "21,500 aUEC", "$16", "面向近距离持续火力的舰载武器。"),
+    TerminalItem("cool-iceman", "Iceman 冷却器", "CoolCore", TerminalCategory.COOLERS, listOf("冷却", "S1"), "9,800 aUEC", "$7", "为小型舰船提供稳定的热管理能力。"),
+    TerminalItem("power-guardian", "Guardian 电站", "J-Precision", TerminalCategory.POWER_PLANTS, listOf("电站", "S2"), "16,400 aUEC", "$11", "平衡功率输出与组件负载的舰载电站。"),
+    TerminalItem("qd-hem", "Hemera 量子引擎", "Wei-Tek", TerminalCategory.QUANTUM_DRIVES, listOf("量子", "S2"), "44,000 aUEC", "$22", "面向中型舰船的长距离量子引擎。"),
 )
 
 data class ProfileData(
@@ -57,6 +66,15 @@ data class ProfileData(
     val currentValue: String = "$300",
     val referralCode: String = "RAVEN-7K2Q",
 )
+
+interface ProfileRepository {
+    suspend fun profile(): ProfileData
+}
+
+/** Read-only account/cache adapter. Session presence is supplied by the app shell. */
+class CachedProfileRepository : ProfileRepository {
+    override suspend fun profile(): ProfileData = ProfileData()
+}
 
 data class ToolItem(val id: String, val title: String, val subtitle: String)
 
@@ -78,6 +96,32 @@ val toolGroups: List<Pair<String, List<ToolItem>>> = listOf(
         ToolItem("rsi", "RSI 快捷入口", "打开常用 RSI 资料入口"),
     ),
 )
+
+interface UtilityRepository {
+    suspend fun groups(): List<Pair<String, List<ToolItem>>>
+}
+
+class CachedUtilityRepository : UtilityRepository {
+    override suspend fun groups(): List<Pair<String, List<ToolItem>>> = toolGroups
+}
+
+interface CcuRepository {
+    suspend fun ships(): List<CcuShip>
+    suspend fun owned(): List<OwnedCcu>
+}
+
+/** Local CCU catalog boundary; the planner never calls the legacy paid service. */
+class CachedCcuRepository : CcuRepository {
+    override suspend fun ships(): List<CcuShip> = listOf(
+        CcuShip("m80", "M80", 30_000, com.refuge.next.R.drawable.m80_hero),
+        CcuShip("aurora", "极光 Mk I ES", 2_000, com.refuge.next.R.drawable.ship_placeholder),
+        CcuShip("atls", "ATLS", 4_000, com.refuge.next.R.drawable.ship_placeholder),
+    )
+
+    override suspend fun owned(): List<OwnedCcu> = listOf(
+        OwnedCcu("ccu-1", "Aurora → M80 CCU", 500, "M80"),
+    )
+}
 
 data class CcuShip(val id: String, val name: String, val purchasePrice: Int, val imageRes: Int)
 
@@ -107,3 +151,29 @@ fun calculateShipValue(
 ): Int = seedPurchasePrice + ownedCcuPurchasePrices.sum() + remainingPayment
 
 fun formatUsd(cents: Int): String = "$${cents / 100}.${(cents % 100).toString().padStart(2, '0')}"
+
+enum class DestructiveAction {
+    GIFT,
+    RECLAIM,
+    UPGRADE_PURCHASE,
+    RSI_PURCHASE,
+}
+
+data class SafeActionResult(
+    val action: DestructiveAction,
+    val executed: Boolean,
+    val message: String,
+)
+
+interface DestructiveActionExecutor {
+    fun execute(action: DestructiveAction): SafeActionResult
+}
+
+/** Debug/runtime QA boundary: never submits account or purchase mutations. */
+class SafeNoOpDestructiveActionExecutor : DestructiveActionExecutor {
+    override fun execute(action: DestructiveAction) = SafeActionResult(
+        action = action,
+        executed = false,
+        message = "safeNoOp intercepted ${action.name}; no remote mutation was sent",
+    )
+}

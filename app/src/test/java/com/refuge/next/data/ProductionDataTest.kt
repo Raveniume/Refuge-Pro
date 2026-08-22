@@ -45,4 +45,39 @@ class ProductionDataTest {
 
         assertEquals(listOf("higher"), eligibleTargetShips(seed, ships).map { it.id })
     }
+
+    @Test
+    fun localCartAggregatesAndRemovesLinesWithoutCheckout() {
+        val cart = InMemoryCartRepository()
+        val product = StoreProduct(
+            id = "sku",
+            title = "Test ship",
+            category = StoreCategory.SHIPS,
+            metadata = "Test",
+            priceCents = 1_500,
+            imageUrl = "",
+            description = "",
+        )
+
+        cart.add(product)
+        cart.add(product)
+        assertEquals(2, cart.lines().single().quantity)
+        cart.remove(product.id)
+        assertEquals(1, cart.lines().single().quantity)
+        cart.clear()
+        assertEquals(emptyList<CartLine>(), cart.lines())
+    }
+
+    @Test
+    fun terminalSnapshotCoversLegacyDatabaseCategories() = kotlinx.coroutines.runBlocking {
+        val categories = CachedTerminalRepository().items().map { it.category }.toSet()
+        assertEquals(TerminalCategory.entries.toSet(), categories)
+    }
+
+    @Test
+    fun destructiveActionsAreAlwaysIntercepted() {
+        val result = SafeNoOpDestructiveActionExecutor().execute(DestructiveAction.RSI_PURCHASE)
+        assertEquals(false, result.executed)
+        assertEquals(DestructiveAction.RSI_PURCHASE, result.action)
+    }
 }

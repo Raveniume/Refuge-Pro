@@ -53,6 +53,10 @@ import com.refuge.next.R
 import com.refuge.next.data.StoreCategory
 import com.refuge.next.data.StoreProduct
 import com.refuge.next.data.StoreRepository
+import com.refuge.next.data.CartRepository
+import com.refuge.next.data.formatUsd
+import com.refuge.next.data.DestructiveAction
+import com.refuge.next.data.SafeNoOpDestructiveActionExecutor
 import com.refuge.next.design.RefugeIconSize
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
@@ -76,6 +80,7 @@ fun StoreScreen(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     repository: StoreRepository,
+    cartRepository: CartRepository,
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
@@ -95,6 +100,8 @@ fun StoreScreen(
     var priceBand by remember { mutableStateOf("全部") }
     var warbondOnly by remember { mutableStateOf(false) }
     var sortDescending by remember { mutableStateOf(false) }
+    var cartRevision by remember { mutableIntStateOf(0) }
+    val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
 
     LaunchedEffect(repository) {
         isLoading = true
@@ -103,6 +110,7 @@ fun StoreScreen(
     }
 
     val category = StoreCategory.entries[selectedCategory]
+    val cartLines = remember(cartRevision) { cartRepository.lines() }
     val visibleProducts = remember(products, selectedCategory, search, priceBand, warbondOnly, sortDescending) {
         products
             .asSequence()
@@ -224,11 +232,13 @@ fun StoreScreen(
         )
     }
     if (showCart) {
-        StoreNoticeSheet(
+        StoreCartSheet(
             backdrop = backdrop,
             palette = palette,
-            title = "购物车",
-            body = "购物车会在 checkout adapter 接入后同步 RSI 账户。",
+            lines = cartLines,
+            onRemove = { id -> cartRepository.remove(id); cartRevision++ },
+            onClear = { cartRepository.clear(); cartRevision++ },
+            onCheckout = { safeNoOp.execute(DestructiveAction.RSI_PURCHASE); showCart = false },
             onDismiss = { showCart = false },
         )
     }
@@ -237,6 +247,10 @@ fun StoreScreen(
             backdrop = backdrop,
             palette = palette,
             product = product,
+            onAddToCart = {
+                cartRepository.add(product)
+                cartRevision++
+            },
             onDismiss = { selectedProduct = null },
         )
     }
@@ -447,6 +461,7 @@ private fun StoreProductSheet(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     product: StoreProduct,
+    onAddToCart: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     StoreSheetFrame(backdrop, palette, product.title, onDismiss) { modalBackdrop ->
@@ -463,7 +478,47 @@ private fun StoreProductSheet(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(product.priceLabel, style = RefugeTypography.value(palette).copy(color = palette.accent))
             Spacer(Modifier.weight(1f))
-            RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.cart, "加入购物车", onDismiss)
+            RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.cart, "加入购物车", onAddToCart)
+        }
+    }
+}
+
+@Composable
+private fun StoreCartSheet(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    lines: List<com.refuge.next.data.CartLine>,
+    onRemove: (String) -> Unit,
+    onClear: () -> Unit,
+    onCheckout: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    StoreSheetFrame(backdrop, palette, "购物车", onDismiss) { modalBackdrop ->
+        if (lines.isEmpty()) {
+            Text("购物车为空", style = RefugeTypography.body(palette))
+        } else {
+            lines.forEach { line ->
+                RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(line.product.title, style = RefugeTypography.body(palette))
+                            Text("${line.quantity} × ${line.product.priceLabel}", style = RefugeTypography.caption(palette))
+                        }
+                        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.more, "移除", { onRemove(line.product.id) })
+                    }
+                }
+            }
+            val total = lines.sumOf { it.product.priceCents * it.quantity }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("合计", style = RefugeTypography.headline(palette))
+                Spacer(Modifier.weight(1f))
+                Text(formatUsd(total), style = RefugeTypography.value(palette).copy(color = palette.accent))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "清空", onClear)
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.check, "安全结算预览", onCheckout)
+            }
+            Text("结算仅保留本地购买意图，不会提交真实 RSI 订单。", style = RefugeTypography.caption(palette))
         }
     }
 }

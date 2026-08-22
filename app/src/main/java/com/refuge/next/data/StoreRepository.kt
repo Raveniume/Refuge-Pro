@@ -32,6 +32,42 @@ interface StoreRepository {
     suspend fun products(): List<StoreProduct>
 }
 
+data class CartLine(
+    val product: StoreProduct,
+    val quantity: Int,
+)
+
+interface CartRepository {
+    fun lines(): List<CartLine>
+    fun add(product: StoreProduct)
+    fun remove(productId: String)
+    fun clear()
+}
+
+/** Local cart keeps product selection functional without performing checkout. */
+class InMemoryCartRepository : CartRepository {
+    private val quantities = linkedMapOf<String, Int>()
+    private var productsById = emptyMap<String, StoreProduct>()
+
+    override fun lines(): List<CartLine> = quantities.mapNotNull { (id, quantity) ->
+        productsById[id]?.let { CartLine(it, quantity) }
+    }
+
+    override fun add(product: StoreProduct) {
+        productsById = productsById + (product.id to product)
+        quantities[product.id] = (quantities[product.id] ?: 0) + 1
+    }
+
+    override fun remove(productId: String) {
+        val current = quantities[productId] ?: return
+        if (current <= 1) quantities.remove(productId) else quantities[productId] = current - 1
+    }
+
+    override fun clear() {
+        quantities.clear()
+    }
+}
+
 /**
  * Read-only snapshot of the real RSI catalog cached by the legacy app. The
  * production network/cache adapter can replace this boundary without changing

@@ -12,7 +12,7 @@ The Apple iOS/iPadOS 27 Community file was opened in the browser. The public pag
 
 ### Bottom Tab
 
-- Apple Reference Fidelity: **FAIL** — the public Apple preview did not expose Tab Bar component geometry or selected/unselected frames. Current values are documented calibration targets, not measured Apple values.
+- Apple Reference Fidelity: **UNVERIFIED / NON-BLOCKING** — the public Apple preview did not expose Tab Bar component geometry or selected/unselected frames. Current values are documented calibration targets, not measured Apple values.
 - AndroidLiquidGlass Fidelity: **PASS** — the local implementation follows the catalog's layered backdrop, combined selected lens, highlight/shadow, damped drag, and release settling behavior. See `v4-bottom-tab-release.png` and `v4-bottom-tab-drag.mp4`.
 - Refuge Adaptation Readiness: **PASS** — the lab has stable three-item icon/label semantics, dark/light runtime evidence, and no production data coupling. User confirmation is still required before migration.
 
@@ -24,13 +24,13 @@ The Apple iOS/iPadOS 27 Community file was opened in the browser. The public pag
 
 ### Floating Icon Button
 
-- Apple Reference Fidelity: **FAIL** — icon-only floating geometry and proportions could not be measured from the cover-only Apple preview.
+- Apple Reference Fidelity: **UNVERIFIED / NON-BLOCKING** — icon-only floating geometry and proportions could not be measured from the cover-only Apple preview.
 - AndroidLiquidGlass Fidelity: **PASS** — the button uses live backdrop/lens/highlight deformation and `Role.Button` semantics rather than a normal Material rounded rectangle. See `v4-floating-button.mp4`.
 - Refuge Adaptation Readiness: **PASS** — the action is isolated in the lab, has an explicit accessibility label, and works in both themes.
 
 ### Search / Field
 
-- Apple Reference Fidelity: **FAIL** — field radius, typography, and editing-state spacing were not available for component-level comparison.
+- Apple Reference Fidelity: **UNVERIFIED / NON-BLOCKING** — field radius, typography, and editing-state spacing were not available for component-level comparison.
 - Refuge Adaptation Readiness: **PASS** — the field is stable, single-line, theme-aware, uses a restrained functional glass surface, and exposes the `Search` semantic label. See `v4-search-field.png` and `v4-ui.xml`.
 
 ### Sheet / Alert
