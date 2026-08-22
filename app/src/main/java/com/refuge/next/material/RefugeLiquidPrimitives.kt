@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,10 +34,11 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
-import com.refuge.next.reference.ReferenceLiquidBottomTabs
-import com.refuge.next.reference.ReferenceLiquidButton
-import com.refuge.next.reference.ReferenceLiquidSelectionBar
-import com.refuge.next.reference.ReferenceSegmentedControl
+import com.refuge.next.design.RefugeSpacing
+import com.refuge.next.reference.OfficialLiquidBottomTabsPort
+import com.refuge.next.reference.OfficialLiquidButtonPort
+import com.refuge.next.reference.OfficialLiquidSegmentedPort
+import androidx.compose.ui.unit.LayoutDirection
 
 /** Shared button entry point for all production liquid controls. */
 @Composable
@@ -48,16 +51,21 @@ fun RefugeLiquidButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp),
     minHeight: Dp = 42.dp,
     content: @Composable RowScope.() -> Unit,
-) = ReferenceLiquidButton(
-    backdrop = backdrop,
-    onClick = onClick,
-    modifier = modifier,
-    tint = tint,
-    visualInset = visualInset,
-    contentPadding = contentPadding,
-    minHeight = minHeight,
-    content = content,
-)
+) {
+    val horizontalPadding = maxOf(
+        contentPadding.calculateLeftPadding(LayoutDirection.Ltr),
+        contentPadding.calculateRightPadding(LayoutDirection.Ltr),
+    )
+    OfficialLiquidButtonPort(
+        onClick = onClick,
+        backdrop = backdrop,
+        modifier = modifier.padding(visualInset),
+        tint = tint,
+        visualHeight = minHeight.coerceAtLeast(32.dp),
+        contentPadding = horizontalPadding,
+        content = content,
+    )
+}
 
 @Composable
 fun RefugeLiquidIconButton(
@@ -68,23 +76,26 @@ fun RefugeLiquidIconButton(
     modifier: Modifier = Modifier.size(48.dp),
     tint: Color = Color.Unspecified,
     iconTint: Color = Color.Unspecified,
+    isInteractive: Boolean = true,
+    enablePressHighlight: Boolean = isInteractive,
 ) {
-    RefugeLiquidButton(
-        backdrop = backdrop,
+    OfficialLiquidButtonPort(
         onClick = onClick,
+        backdrop = backdrop,
         modifier = modifier,
-        tint = tint,
-        visualInset = 9.dp,
-        contentPadding = PaddingValues(0.dp),
-        minHeight = 0.dp,
-    ) {
-        androidx.compose.material.Icon(
-            icon,
-            contentDescription,
-            tint = if (iconTint.isSpecified) iconTint else androidx.compose.material.LocalContentColor.current,
-            modifier = Modifier.size(18.dp),
-        )
-    }
+        isInteractive = isInteractive,
+        enablePressHighlight = enablePressHighlight,
+        visualHeight = 36.dp,
+        contentPadding = 0.dp,
+        content = {
+            androidx.compose.material.Icon(
+                icon,
+                contentDescription,
+                tint = if (iconTint.isSpecified) iconTint else androidx.compose.material.LocalContentColor.current,
+                modifier = Modifier.size(18.dp),
+            )
+        },
+    )
 }
 
 /** Official moving lens segmented primitive, with page-scoped sampling. */
@@ -98,7 +109,16 @@ fun RefugeMovingLiquidLens(
     initialIndex: Int = 0,
     onSelected: (Int) -> Unit = {},
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
-) = ReferenceLiquidSelectionBar(backdrop, isDark, tabsCount, modifier, height, initialIndex, onSelected, content)
+) = OfficialLiquidSegmentedPort(
+    selectedIndex = initialIndex,
+    onSelected = onSelected,
+    backdrop = backdrop,
+    tabsCount = tabsCount,
+    isDark = isDark,
+    modifier = modifier,
+    outerHeight = height,
+    content = content,
+)
 
 @Composable
 fun RefugeLiquidSegmented(
@@ -108,7 +128,39 @@ fun RefugeLiquidSegmented(
     modifier: Modifier = Modifier,
     initialIndex: Int = 0,
     onSelected: (Int) -> Unit = {},
-) = ReferenceSegmentedControl(backdrop, isDark, labels, modifier, initialIndex, onSelected)
+) {
+    OfficialLiquidSegmentedPort(
+        selectedIndex = initialIndex,
+        onSelected = onSelected,
+        backdrop = backdrop,
+        tabsCount = labels.size,
+        isDark = isDark,
+        modifier = modifier,
+        outerHeight = 48.dp,
+    ) { selected, select ->
+        labels.forEachIndexed { index, label ->
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .semantics { this.contentDescription = label },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    color = if (index == selected) {
+                        if (isDark) Color(0xFF0091FF) else Color(0xFF0088FF)
+                    } else if (isDark) Color.White.copy(alpha = .78f) else Color.Black.copy(alpha = .72f),
+                    modifier = Modifier.clickable(
+                        interactionSource = null,
+                        indication = null,
+                        role = Role.Tab,
+                    ) { select(index) },
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun RefugeBottomTabs(
@@ -119,7 +171,15 @@ fun RefugeBottomTabs(
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
-) = ReferenceLiquidBottomTabs(backdrop, isDark, tabsCount, selectedIndex, onSelected, modifier, content)
+) = OfficialLiquidBottomTabsPort(
+    selectedIndex = selectedIndex,
+    onSelected = onSelected,
+    backdrop = backdrop,
+    tabsCount = tabsCount,
+    isDark = isDark,
+    modifier = modifier,
+    content = content,
+)
 
 /** Shared adaptive sheet entry point; modal content owns its optical root. */
 @Composable
@@ -129,9 +189,23 @@ fun RefugeAdaptiveBottomSheet(
     title: String,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    sheetHeight: Dp? = null,
+    actionBottomPadding: Dp = 14.dp,
+    actionOverContent: Boolean = false,
     action: (@Composable (Backdrop) -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.(LayerBackdrop) -> Unit,
-) = RefugeLiquidSheet(backdrop, palette, title, onDismiss, modifier, action, content)
+) = RefugeLiquidSheet(
+    backdrop,
+    palette,
+    title,
+    onDismiss,
+    modifier,
+    sheetHeight,
+    actionBottomPadding,
+    actionOverContent,
+    action,
+    content,
+)
 
 data class RefugeFloatingAction(
     val icon: ImageVector,
@@ -148,34 +222,26 @@ fun RefugeFloatingActionGroup(
     actions: List<RefugeFloatingAction>,
     modifier: Modifier = Modifier,
 ) {
-    RefugeLiquidGlass(
+    OfficialLiquidButtonPort(
+        onClick = {},
         backdrop = backdrop,
-        palette = palette,
         modifier = modifier,
-        radius = RefugeRadius.floating,
-        padding = PaddingValues(3.dp),
-        refractionHeight = 12.dp,
-        refractionAmount = 18.dp,
-        blurRadius = 2.dp,
-        surfaceAlpha = .025f,
+        isInteractive = false,
+        enablePressHighlight = true,
+        visualHeight = 42.dp,
+        contentPadding = 2.dp,
     ) {
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            actions.forEachIndexed { index, action ->
-                if (index > 0) {
-                    Box(Modifier.width(1.dp).height(18.dp).background(palette.divider.copy(alpha = .42f)))
-                }
+            actions.forEach { action ->
                 Box(
                     Modifier
                         .weight(1f)
-                        .height(44.dp)
-                        .semantics {
-                            role = Role.Button
-                            contentDescription = action.label
-                        }
+                        .height(40.dp)
+                        .semantics { role = Role.Button; contentDescription = action.label }
                         .clickable(
                             enabled = action.enabled,
                             interactionSource = null,
@@ -184,12 +250,57 @@ fun RefugeFloatingActionGroup(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(action.icon, null, tint = if (action.enabled) palette.text else palette.textMuted)
-                        Text(action.label, style = com.refuge.next.design.RefugeTypography.caption(palette).copy(color = if (action.enabled) palette.text else palette.textMuted))
-                    }
+                    Icon(action.icon, null, tint = if (action.enabled) palette.text else palette.textMuted)
                 }
             }
         }
+    }
+}
+
+/** Compact functional pill with the official LiquidButton press and drag. */
+@Composable
+fun RefugeCompactLiquidPill(
+    backdrop: Backdrop,
+    palette: RefugePalette,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OfficialLiquidButtonPort(
+        onClick = onClick,
+        backdrop = backdrop,
+        modifier = modifier.semantics { role = Role.Button; contentDescription = label },
+        tint = Color.Unspecified,
+        visualHeight = 34.dp,
+        contentPadding = 9.dp,
+    ) {
+        Icon(icon, null, tint = palette.textSecondary, modifier = Modifier.size(15.dp))
+        Text(label, style = com.refuge.next.design.RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
+    }
+}
+
+/** One quiet content-layer lens for an inventory list; rows do not create glass. */
+@Composable
+fun InventoryGlassGroup(
+    backdrop: Backdrop,
+    palette: RefugePalette,
+    modifier: Modifier = Modifier,
+    padding: PaddingValues = PaddingValues(horizontal = RefugeSpacing.md),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    RefugeLiquidGlass(
+        backdrop = backdrop,
+        palette = palette,
+        modifier = modifier,
+        radius = RefugeRadius.panel,
+        refractionHeight = 14.dp,
+        refractionAmount = 22.dp,
+        blurRadius = 4.dp,
+        surface = palette.contentSurface,
+        surfaceAlpha = .055f,
+        padding = padding,
+    ) {
+        Column(Modifier.fillMaxWidth(), content = content)
     }
 }

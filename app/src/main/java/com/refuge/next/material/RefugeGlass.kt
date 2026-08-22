@@ -188,20 +188,14 @@ fun RefugeCompactUtilityPill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    RefugeQuietControl(
+    RefugeCompactLiquidPill(
         backdrop = backdrop,
         palette = palette,
+        icon = icon,
+        label = label,
         onClick = onClick,
-        contentDescription = label,
-        modifier = modifier.height(30.dp),
-        padding = PaddingValues(horizontal = 7.dp, vertical = 4.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = palette.textSecondary, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(label, style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
-        }
-    }
+        modifier = modifier,
+    )
 }
 
 @Composable

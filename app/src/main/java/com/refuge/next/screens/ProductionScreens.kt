@@ -72,6 +72,8 @@ import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeContentSurface
+import com.refuge.next.material.RefugeGlassControl
+import com.refuge.next.material.RefugeGlassSurface
 import com.refuge.next.material.PageGlassScope
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeImagePlaceholder
@@ -90,12 +92,17 @@ import com.refuge.next.reference.ReferenceSearchField
 import com.refuge.next.reference.ReferenceSegmentedControl
 import com.refuge.next.reference.ReferenceSelectionItem
 
+private data class RootTab(
+    val route: Int,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val label: String,
+)
+
 private val rootTabs = listOf(
-    RefugeIcons.home to "机库",
-    RefugeIcons.store to "商店",
-    RefugeIcons.design to "终端",
-    RefugeIcons.tools to "工具",
-    RefugeIcons.profile to "我的",
+    RootTab(0, RefugeIcons.home, "机库"),
+    RootTab(1, RefugeIcons.store, "商店"),
+    RootTab(2, RefugeIcons.design, "终端"),
+    RootTab(4, RefugeIcons.profile, "我的"),
 )
 
 @Composable
@@ -105,12 +112,13 @@ fun BoxScope.RootBottomNav(
     selected: Int,
     onNavigate: (Int) -> Unit,
 ) {
+    val selectedIndex = rootTabs.indexOfFirst { it.route == selected }.coerceAtLeast(0)
     RefugeBottomTabs(
         backdrop = backdrop,
         isDark = isDark,
         tabsCount = rootTabs.size,
-        selectedIndex = selected,
-        onSelected = onNavigate,
+        selectedIndex = selectedIndex,
+        onSelected = { index -> onNavigate(rootTabs[index.coerceIn(rootTabs.indices)].route) },
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
@@ -118,10 +126,10 @@ fun BoxScope.RootBottomNav(
             .navigationBarsPadding()
             .padding(bottom = 8.dp),
     ) { selectedIndex, select ->
-        rootTabs.forEachIndexed { index, (icon, label) ->
+        rootTabs.forEachIndexed { index, tab ->
             ReferenceSelectionItem(
-                icon = icon,
-                label = label,
+                icon = tab.icon,
+                label = tab.label,
                 selected = index == selectedIndex,
                 isDark = isDark,
                 onClick = { select(index) },
@@ -334,6 +342,7 @@ fun ProfileScreen(
     onToggleOnline: () -> Unit,
 ) {
     val profile = remember(isOnline) { ProfileData(isOnline = isOnline) }
+    var selectedTool by remember { mutableStateOf<ToolItem?>(null) }
     PageGlassScope(
         backdrop = backdrop,
         content = {
@@ -350,59 +359,80 @@ fun ProfileScreen(
                     onAvatarClick = onToggleOnline,
                     actions = {
                         HeaderAction(backdrop, palette, if (isDark) RefugeIcons.light else RefugeIcons.dark, "切换主题", onToggleTheme)
-                        Spacer(Modifier.width(RefugeSpacing.xs))
-                    HeaderAction(backdrop, palette, RefugeIcons.more, "设置", { onNavigate(5) })
                     },
                 )
             }
             item { ProfileHero(backdrop, palette, profile) }
-            item { ProfileStats(palette, profile) }
+            item { ProfileStats(backdrop, palette, profile) }
             item { ProfileAccountGroup(backdrop, palette, profile) }
             item { ProfileOrganization(backdrop, palette) }
+            item { ProfileUtilities(backdrop, palette) { selectedTool = it } }
+            item { ProfileSettingsButton(backdrop, palette) { onNavigate(5) } }
         }
         },
         overlay = { pageBackdrop ->
             RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
         },
     )
-}
-
-@Composable
-private fun ProfileHero(backdrop: LayerBackdrop, palette: RefugePalette, profile: ProfileData) {
-    Row(Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
-        Image(
-            painter = painterResource(R.drawable.user_profile_pic),
-            contentDescription = "用户头像",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(RefugeRadius.image))
-                .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f },
-        )
-        Spacer(Modifier.width(RefugeSpacing.md))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(profile.handle, style = RefugeTypography.title(palette))
-                Spacer(Modifier.width(RefugeSpacing.xs))
-                Box(Modifier.size(8.dp).background(if (profile.isOnline) palette.positive else palette.textMuted, CircleShape))
-            }
-            Text("${profile.city} · ${profile.rank}", style = RefugeTypography.secondary(palette))
-            Text("Online · 使用本地资料", style = RefugeTypography.caption(palette).copy(color = if (profile.isOnline) palette.positive else palette.textMuted))
+    selectedTool?.let { tool ->
+        if (tool.id == "social") {
+            SocialToolSheet(backdrop, palette) { selectedTool = null }
+        } else if (tool.id == "gift-redeem" || tool.id == "referral-reverse") {
+            ToolDataSheet(backdrop, palette, tool) { selectedTool = null }
+        } else {
+            ProductionNoticeSheet(backdrop, palette, tool.title, "${tool.subtitle}\n\n此入口已接入新的业务 adapter，执行结果将在数据源可用时更新。") { selectedTool = null }
         }
-        Text("4.8", style = RefugeTypography.value(palette).copy(color = palette.accent))
     }
 }
 
 @Composable
-private fun ProfileStats(palette: RefugePalette, profile: ProfileData) {
-    Column(Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
-        Row(Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.md)) {
+private fun ProfileHero(backdrop: LayerBackdrop, palette: RefugePalette, profile: ProfileData) {
+    RefugeGlassSurface(
+        backdrop = backdrop,
+        palette = palette,
+        modifier = Modifier.fillMaxWidth(),
+        radius = RefugeRadius.panel,
+        padding = PaddingValues(14.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = painterResource(R.drawable.user_profile_pic),
+                contentDescription = "用户头像",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(RefugeRadius.image))
+                    .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f },
+            )
+            Spacer(Modifier.width(RefugeSpacing.md))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(profile.handle, style = RefugeTypography.title(palette))
+                    Spacer(Modifier.width(RefugeSpacing.xs))
+                    Box(Modifier.size(8.dp).background(if (profile.isOnline) palette.positive else palette.textMuted, CircleShape))
+                }
+                Text("${profile.city} · ${profile.rank}", style = RefugeTypography.secondary(palette))
+                Text("Online · 使用本地资料", style = RefugeTypography.caption(palette).copy(color = if (profile.isOnline) palette.positive else palette.textMuted))
+            }
+            Text("4.8", style = RefugeTypography.value(palette).copy(color = palette.accent))
+        }
+    }
+}
+
+@Composable
+private fun ProfileStats(backdrop: LayerBackdrop, palette: RefugePalette, profile: ProfileData) {
+    RefugeGlassSurface(
+        backdrop = backdrop,
+        palette = palette,
+        modifier = Modifier.fillMaxWidth(),
+        radius = RefugeRadius.panel,
+        padding = PaddingValues(vertical = 14.dp),
+    ) {
+        Row(Modifier.fillMaxWidth()) {
             ProfileStatCell(palette, profile.totalSpent, "消费额")
             ProfileStatCell(palette, profile.hangarValue, "机库价值")
             ProfileStatCell(palette, profile.credit, "信用点")
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
     }
 }
 
@@ -418,7 +448,13 @@ private fun RowScope.ProfileStatCell(palette: RefugePalette, value: String, labe
 private fun ProfileAccountGroup(backdrop: LayerBackdrop, palette: RefugePalette, profile: ProfileData) {
     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
         Text("账户", style = RefugeTypography.headline(palette))
-            RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+        RefugeGlassSurface(
+            backdrop = backdrop,
+            palette = palette,
+            modifier = Modifier.fillMaxWidth(),
+            radius = RefugeRadius.panel,
+            padding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+        ) {
             Column {
                 AccountRow(palette, RefugeIcons.notification, "注册时间", profile.registerDate)
                 AccountRow(palette, RefugeIcons.success, "UEC", profile.uec)
@@ -426,6 +462,66 @@ private fun ProfileAccountGroup(backdrop: LayerBackdrop, palette: RefugePalette,
                 AccountRow(palette, RefugeIcons.store, "当前机库价值", profile.currentValue)
                 AccountRow(palette, RefugeIcons.gift, "邀请码", profile.referralCode)
             }
+        }
+    }
+}
+
+@Composable
+private fun ProfileUtilities(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    onToolClick: (ToolItem) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
+        Text("实用工具", style = RefugeTypography.headline(palette))
+        toolGroups.forEach { (group, tools) ->
+            Text(group, style = RefugeTypography.caption(palette))
+            tools.forEach { tool ->
+                RefugeGlassControl(
+                    backdrop = backdrop,
+                    palette = palette,
+                    onClick = { onToolClick(tool) },
+                    modifier = Modifier.fillMaxWidth(),
+                    contentDescription = tool.title,
+                    padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(toolIcon(tool), null, tint = palette.accent, modifier = Modifier.size(21.dp))
+                        Spacer(Modifier.width(RefugeSpacing.md))
+                        Column(Modifier.weight(1f)) {
+                            Text(tool.title, style = RefugeTypography.body(palette).copy(color = palette.text))
+                            Text(tool.subtitle, style = RefugeTypography.caption(palette))
+                        }
+                        Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileSettingsButton(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    onClick: () -> Unit,
+) {
+    RefugeGlassControl(
+        backdrop = backdrop,
+        palette = palette,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        contentDescription = "设置",
+        padding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(RefugeIcons.settings, null, tint = palette.accent, modifier = Modifier.size(21.dp))
+            Spacer(Modifier.width(RefugeSpacing.md))
+            Column(Modifier.weight(1f)) {
+                Text("设置", style = RefugeTypography.body(palette).copy(color = palette.text))
+                Text("主题、缓存与关于", style = RefugeTypography.caption(palette))
+            }
+            Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
         }
     }
 }

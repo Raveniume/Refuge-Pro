@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -71,6 +72,7 @@ import com.refuge.next.material.RefugeLightweightGlassSurface
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeLiquidSheet
 import com.refuge.next.material.RefugeLiquidSegmented
+import com.refuge.next.material.InventoryGlassGroup
 import com.refuge.next.material.RefugeFloatingAction
 import com.refuge.next.material.RefugeFloatingActionGroup
 import com.refuge.next.material.RefugeLiquidIconButton
@@ -109,16 +111,16 @@ fun HangarScreen(
     PageGlassScope(
         backdrop = backdrop,
         content = {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(
-                start = RefugeSpacing.page,
-                top = RefugeSpacing.lg,
-                end = RefugeSpacing.page,
-                bottom = 132.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
-        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().statusBarsPadding(),
+                contentPadding = PaddingValues(
+                    start = RefugeSpacing.page,
+                    top = RefugeSpacing.lg,
+                    end = RefugeSpacing.page,
+                    bottom = 132.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
+            ) {
             item {
                 HangarHeader(
                     backdrop = backdrop,
@@ -130,14 +132,16 @@ fun HangarScreen(
                 )
             }
             item {
-                RefugeLiquidSegmented(
-                    backdrop = backdrop,
-                    isDark = isDark,
-                    labels = listOf("机库", "回购", "升级"),
-                    initialIndex = selectedSection,
-                    onSelected = { selectedSection = it },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                )
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    RefugeLiquidSegmented(
+                        backdrop = backdrop,
+                        isDark = isDark,
+                        labels = listOf("机库", "回购", "升级"),
+                        initialIndex = selectedSection,
+                        onSelected = { selectedSection = it },
+                        modifier = Modifier.fillMaxWidth(.90f),
+                    )
+                }
             }
             if (selectedSection == 0) {
                 items(ownedShips, key = { it.name }) { ship ->
@@ -159,11 +163,10 @@ fun HangarScreen(
                     )
                 }
                 item {
-                    RefugeContentSurface(
+                    InventoryGlassGroup(
+                        backdrop = backdrop,
                         palette = palette,
                         modifier = Modifier.fillMaxWidth(),
-                        radius = RefugeRadius.panel,
-                        fill = palette.contentSurface,
                         padding = PaddingValues(horizontal = RefugeSpacing.md),
                     ) {
                         Column(Modifier.fillMaxWidth()) {
@@ -206,8 +209,7 @@ fun HangarScreen(
                     HangarUpgradePanel(backdrop, palette) { onOpenCcu() }
                 }
             }
-        }
-
+            }
         },
         overlay = { pageBackdrop ->
             RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
@@ -384,7 +386,6 @@ private fun HangarHeader(
                 modifier = Modifier
                     .matchParentSize()
                     .clip(CircleShape)
-                    .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
                     .semantics { contentDescription = "切换在线状态"; role = Role.Button }
                     .clickable(onClick = onToggleOnline),
             )
@@ -572,24 +573,50 @@ private fun HangarDetailSheet(
         palette = palette,
         title = "机库详情",
         onDismiss = onDismiss,
+        sheetHeight = if (detail.includedItems.size <= 1) 620.dp else 736.dp,
+        actionBottomPadding = 36.dp,
+        actionOverContent = true,
         action = { modalBackdrop ->
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.log, "日志", onLog)
-                RefugeFloatingActionGroup(
-                    backdrop = modalBackdrop,
-                    palette = palette,
-                    actions = listOf(
-                        RefugeFloatingAction(RefugeIcons.gift, "礼物", {}),
-                        RefugeFloatingAction(RefugeIcons.chevron, "跳转", {}),
-                        RefugeFloatingAction(RefugeIcons.upgrade, "升级", {}),
-                    ),
-                    modifier = Modifier.weight(1f),
-                )
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "回收", {})
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val sideWidth = (maxWidth * .127f).coerceIn(44.dp, 52.dp)
+                val gap = (maxWidth * .10f).coerceAtLeast(24.dp)
+                val centerWidth = (maxWidth * .40f).coerceIn(120.dp, 168.dp)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RefugeLiquidIconButton(
+                        backdrop = modalBackdrop,
+                        icon = RefugeIcons.log,
+                        contentDescription = "日志",
+                        onClick = onLog,
+                        modifier = Modifier.size(sideWidth),
+                        iconTint = palette.text,
+                        isInteractive = false,
+                        enablePressHighlight = true,
+                    )
+                    RefugeFloatingActionGroup(
+                        backdrop = modalBackdrop,
+                        palette = palette,
+                        actions = listOf(
+                            RefugeFloatingAction(RefugeIcons.hangarGift, "礼物", {}),
+                            RefugeFloatingAction(RefugeIcons.hangarOpenExternal, "跳转", {}),
+                            RefugeFloatingAction(RefugeIcons.hangarUpgrade, "升级", {}),
+                        ),
+                        modifier = Modifier.width(centerWidth),
+                    )
+                    RefugeLiquidIconButton(
+                        backdrop = modalBackdrop,
+                        icon = RefugeIcons.reclaim,
+                        contentDescription = "回收",
+                        onClick = {},
+                        modifier = Modifier.size(sideWidth),
+                        iconTint = palette.text,
+                        isInteractive = false,
+                        enablePressHighlight = true,
+                    )
+                }
             }
         },
     ) { modalBackdrop ->

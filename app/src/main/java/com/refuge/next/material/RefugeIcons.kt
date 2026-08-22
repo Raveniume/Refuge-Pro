@@ -3,6 +3,8 @@ package com.refuge.next.material
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.ArrowOutward
+import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -20,12 +22,14 @@ import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.DirectionsBoat
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.KeyboardDoubleArrowUp
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.Recycling
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Upgrade
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -42,8 +46,13 @@ object RefugeIcons {
     val cart: ImageVector = Icons.Outlined.ShoppingBag
     val upgrade: ImageVector = Icons.Outlined.Upgrade
     val gift: ImageVector = Icons.Outlined.LocalOffer
+    /** Original RefugeNext Hangar action glyphs. */
+    val hangarGift: ImageVector = Icons.Outlined.CardGiftcard
+    val hangarOpenExternal: ImageVector = Icons.Outlined.ArrowOutward
+    val hangarUpgrade: ImageVector = Icons.Outlined.KeyboardDoubleArrowUp
     val reclaim: ImageVector = Icons.Outlined.Recycling
     val more: ImageVector = Icons.Outlined.MoreHoriz
+    val settings: ImageVector = Icons.Outlined.Settings
     val chevron: ImageVector = Icons.Outlined.ChevronRight
     val profile: ImageVector = Icons.Outlined.Person
     val light: ImageVector = Icons.Outlined.LightMode
