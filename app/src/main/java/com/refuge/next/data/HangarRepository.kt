@@ -16,6 +16,16 @@ data class HangarItem(
     val imageRes: Int,
     val isGiftable: Boolean = true,
     val isReclaimable: Boolean = true,
+    val originalName: String = "—",
+    val typeLabel: String = "本地机库项目",
+    val insurance: String = "—",
+    val currentValue: String = price,
+    val savings: String = "$0",
+    val includedItems: List<String> = emptyList(),
+    val upgradeFrom: String? = null,
+    val upgradeTo: String? = null,
+    val upgradeFromPrice: String? = null,
+    val upgradeToPrice: String? = null,
 )
 
 interface HangarRepository {
@@ -36,10 +46,10 @@ class PreviewHangarRepository(
     )
 
     override suspend fun inventory() = listOf(
-        HangarItem("装备包 - SteelTek - 掳绑包", "$30", "2026年08月16日", fallbackImage),
-        HangarItem("涂装包 - M80 - Dynasty Paint", "$7.50", "2026年08月12日", fallbackImage),
-        HangarItem("毛线帽套装 - 莫基节新手指导奖励", "$0", "2026年08月07日", fallbackImage),
-        HangarItem("M80 - 公民新手包", "$140", "2026年08月02日", m80Image),
-        HangarItem("舰船组件 - 轻型量子驱动", "$25", "2026年07月22日", fallbackImage),
+        HangarItem("装备包 - SteelTek - 掳绑包", "$30", "2026年08月16日", fallbackImage, originalName = "SteelTek Armor Set", typeLabel = "装备 / 包含物品", includedItems = listOf("SteelTek 装备包", "数字物品")),
+        HangarItem("涂装包 - M80 - Dynasty Paint", "$7.50", "2026年08月12日", fallbackImage, originalName = "M80 Dynasty Paint", typeLabel = "Paint", includedItems = listOf("M80 专用涂装")),
+        HangarItem("毛线帽套装 - 莫基节新手指导奖励", "$0", "2026年08月07日", fallbackImage, originalName = "MobiGlas Tutorial Reward", typeLabel = "个人物品", isGiftable = false, isReclaimable = false, includedItems = listOf("毛线帽套装")),
+        HangarItem("M80 - 公民新手包", "$140", "2026年08月02日", m80Image, originalName = "Origin M80 Starter Package", typeLabel = "游戏包 / 舰船", insurance = "LTI", currentValue = "$300", savings = "$160", includedItems = listOf("M80", "星际公民数字下载", "LTI 保险"), upgradeFrom = "Aurora ES", upgradeTo = "M80", upgradeFromPrice = "$20", upgradeToPrice = "$300"),
+        HangarItem("舰船组件 - 轻型量子驱动", "$25", "2026年07月22日", fallbackImage, originalName = "Light Quantum Drive", typeLabel = "Weapon / Component", includedItems = listOf("量子驱动", "S1 组件")),
     )
 }

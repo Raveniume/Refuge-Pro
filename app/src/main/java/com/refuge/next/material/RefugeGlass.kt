@@ -20,29 +20,55 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
+import com.kyant.shapes.Capsule
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeTypography
+import com.refuge.next.motion.DampedDragAnimation
 import com.refuge.next.reference.ReferenceInteractiveHighlight
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.util.lerp
 
 @Composable
 fun RefugeGlassSurface(
@@ -186,30 +212,110 @@ fun RefugeLiquidToggle(
     contentDescription: String,
     modifier: Modifier = Modifier,
 ) {
-    RefugeGlassControl(
-        backdrop = backdrop,
-        palette = palette,
-        onClick = onClick,
-        contentDescription = contentDescription,
-        modifier = modifier.size(width = 52.dp, height = 44.dp),
-        padding = PaddingValues(3.dp),
+    // Port of AndroidLiquidGlass' LiquidToggle: the thumb is a live lens over
+    // the track, with pointer drag, velocity deformation, highlight and settle.
+    val density = LocalDensity.current
+    val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val scope = rememberCoroutineScope()
+    val dragWidth = with(density) { 20.dp.toPx() }
+    var didDrag by remember { mutableStateOf(false) }
+    var fraction by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
+    val drag = remember(scope) {
+        DampedDragAnimation(
+            animationScope = scope,
+            initialValue = fraction,
+            valueRange = 0f..1f,
+            visibilityThreshold = .001f,
+            initialScale = 1f,
+            pressedScale = 1.5f,
+            onDragStarted = { didDrag = false },
+            onDragStopped = {
+                val nextChecked = if (didDrag) targetValue >= .5f else !checked
+                fraction = if (nextChecked) 1f else 0f
+                if (nextChecked != checked) onClick()
+                didDrag = false
+                animateToValue(fraction)
+            },
+            onDrag = { _, amount ->
+                didDrag = didDrag || amount.x != 0f
+                val delta = amount.x / dragWidth
+                fraction = (fraction + if (isLtr) delta else -delta).coerceIn(0f, 1f)
+                updateValue(fraction)
+            },
+        )
+    }
+    LaunchedEffect(drag) {
+        snapshotFlow { fraction }.collectLatest { drag.updateValue(it) }
+    }
+    LaunchedEffect(checked) {
+        val target = if (checked) 1f else 0f
+        if (target != fraction) {
+            fraction = target
+            drag.animateToValue(target)
+        }
+    }
+
+    val trackBackdrop = rememberLayerBackdrop()
+    val trackColor = if (palette.background.luminance() < .5f) {
+        palette.outline.copy(alpha = .54f)
+    } else {
+        palette.outline.copy(alpha = .36f)
+    }
+    Box(
+        modifier
+            .size(width = 64.dp, height = 36.dp)
+            .semantics {
+                role = Role.Switch
+                this.contentDescription = contentDescription
+            },
+        contentAlignment = Alignment.CenterStart,
     ) {
         Box(
             Modifier
-                .fillMaxWidth()
-                .height(32.dp)
-                .align(Alignment.Center)
-                .clip(RoundedCornerShape(50))
-                .background(if (checked) palette.accent.copy(alpha = .86f) else palette.outline.copy(alpha = .64f))
-                .padding(3.dp),
-        ) {
-            Box(
-                Modifier
-                    .size(20.dp)
-                    .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
-                    .background(if (checked) palette.background else palette.textMuted, androidx.compose.foundation.shape.CircleShape),
-            )
-        }
+                .layerBackdrop(trackBackdrop)
+                .clip(Capsule())
+                .drawBehind { drawRect(lerp(trackColor, palette.positive, drag.value)) }
+                .size(64.dp, 28.dp),
+        )
+        Box(
+            Modifier
+                .graphicsLayer {
+                    val padding = 2.dp.toPx()
+                    translationX = if (isLtr) lerp(padding, padding + dragWidth, drag.value) else lerp(-padding, -(padding + dragWidth), drag.value)
+                }
+                .then(drag.modifier)
+                .drawBackdrop(
+                    backdrop = rememberCombinedBackdrop(
+                        backdrop,
+                        rememberBackdrop(trackBackdrop) { drawBackdrop ->
+                            val progress = drag.pressProgress
+                            scale(
+                                lerp(2f / 3f, .75f, progress),
+                                lerp(0f, .75f, progress),
+                            ) { drawBackdrop() }
+                        },
+                    ),
+                    shape = { Capsule() },
+                    effects = {
+                        val progress = drag.pressProgress
+                        vibrancy()
+                        blur(8.dp.toPx() * (1f - progress))
+                        lens(5.dp.toPx() * progress, 10.dp.toPx() * progress, chromaticAberration = progress > .01f)
+                    },
+                    highlight = { Highlight.Ambient.copy(alpha = drag.pressProgress) },
+                    shadow = { Shadow(radius = 4.dp, color = Color.Black.copy(alpha = .08f)) },
+                    innerShadow = { InnerShadow(radius = 4.dp * drag.pressProgress, alpha = drag.pressProgress) },
+                    layerBlock = {
+                        scaleX = drag.scaleX
+                        scaleY = drag.scaleY
+                        val velocity = drag.velocity / 50f
+                        scaleX /= 1f - (velocity * .75f).coerceIn(-.2f, .2f)
+                        scaleY *= 1f - (velocity * .25f).coerceIn(-.2f, .2f)
+                    },
+                    onDrawSurface = { drawRect(Color.White.copy(alpha = 1f - drag.pressProgress)) },
+                )
+                .size(40.dp, 24.dp),
+        )
     }
 }
 

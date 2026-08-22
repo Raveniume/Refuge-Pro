@@ -67,6 +67,7 @@ import com.refuge.next.material.RefugeGlassControl
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
 import com.refuge.next.material.RefugeModalSurface
+import com.refuge.next.material.RefugeLiquidSheet
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
 import com.refuge.next.reference.ReferenceLiquidButton
 import com.refuge.next.reference.ReferenceSelectionItem
@@ -254,6 +255,12 @@ private data class HangarDetail(
     val savings: String,
     val insurance: String,
     val includedItems: List<String>,
+    val originalName: String = "—",
+    val typeLabel: String = "本地机库项目",
+    val upgradeFrom: String? = null,
+    val upgradeTo: String? = null,
+    val upgradeFromPrice: String? = null,
+    val upgradeToPrice: String? = null,
 )
 
 private fun detailForShip(ship: OwnedShip) = HangarDetail(
@@ -270,11 +277,13 @@ private fun detailForShip(ship: OwnedShip) = HangarDetail(
     savings = "$160",
     insurance = ship.insurance,
     includedItems = listOf("${ship.name} 游戏包", "数字下载", "${ship.insurance} 保险"),
+    originalName = ship.name,
+    typeLabel = "舰船 / 游戏包",
 )
 
 private fun HangarItem.toHangarDetail() = HangarDetail(
     title = title,
-    subtitle = "本地机库项目",
+    subtitle = "$originalName · $typeLabel",
     price = price,
     date = date,
     imageRes = imageRes,
@@ -282,10 +291,16 @@ private fun HangarItem.toHangarDetail() = HangarDetail(
     isGiftable = isGiftable,
     isReclaimable = isReclaimable,
     meltValue = price,
-    currentValue = price,
-    savings = "$0",
-    insurance = "—",
-    includedItems = listOf(title, "本地同步项目"),
+    currentValue = currentValue,
+    savings = savings,
+    insurance = insurance,
+    includedItems = includedItems.ifEmpty { listOf(title, "本地同步项目") },
+    originalName = originalName,
+    typeLabel = typeLabel,
+    upgradeFrom = upgradeFrom,
+    upgradeTo = upgradeTo,
+    upgradeFromPrice = upgradeFromPrice,
+    upgradeToPrice = upgradeToPrice,
 )
 
 private val rebuyItems = listOf(
@@ -543,71 +558,54 @@ private fun HangarDetailSheet(
     onUpgrade: () -> Unit,
     onLog: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(
-                palette = palette,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(.88f)
-                    .padding(horizontal = 10.dp, vertical = 12.dp),
-                radius = RefugeRadius.floating,
-                fill = palette.contentSurfaceStrong,
-                padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+    RefugeLiquidSheet(
+        backdrop = backdrop,
+        palette = palette,
+        title = "机库详情",
+        onDismiss = onDismiss,
+        modifier = Modifier.fillMaxHeight(.88f),
+    ) { modalBackdrop ->
+        Column(Modifier.fillMaxSize()) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
             ) {
-                Column(Modifier.fillMaxSize()) {
-                    Box(
-                        Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .width(34.dp)
-                            .height(4.dp)
-                            .background(palette.outline.copy(alpha = .45f), RoundedCornerShape(2.dp)),
-                    )
-                    Spacer(Modifier.height(RefugeSpacing.md))
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
-                    ) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            HangarImage(detail.imageRes, "${detail.title} 图片", Modifier.size(112.dp))
-                            Spacer(Modifier.width(RefugeSpacing.md))
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
-                                Text(detail.title, style = RefugeTypography.title(palette))
-                                Text(detail.subtitle, style = RefugeTypography.secondary(palette))
-                                Text("${detail.insurance} · ${detail.date}", style = RefugeTypography.caption(palette))
-                            }
-                        }
-                        Text(detail.description, style = RefugeTypography.body(palette))
-                        DetailValueSummary(palette, detail)
-                        Text("内含项目", style = RefugeTypography.headline(palette))
-                        detail.includedItems.forEachIndexed { index, item ->
-                            DetailIncludedRow(
-                                palette = palette,
-                                imageRes = detail.imageRes,
-                                title = item,
-                                isLast = index == detail.includedItems.lastIndex,
-                            )
-                        }
-                        Text("其他信息", style = RefugeTypography.headline(palette))
-                        DetailMetadataRow(palette, "入库日期", detail.date)
-                        DetailMetadataRow(palette, "保险", detail.insurance)
-                        DetailMetadataRow(palette, "状态", "已同步到本地机库")
-                    }
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(top = RefugeSpacing.sm),
-                        horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs),
-                    ) {
-                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.gift, "赠送", onDismiss, Modifier.weight(1f))
-                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.reclaim, "回收", onDismiss, Modifier.weight(1f))
-                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.upgrade, "升级", onUpgrade, Modifier.weight(1f))
-                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.log, "日志", onLog, Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.Top) {
+                    HangarImage(detail.imageRes, "${detail.title} 图片", Modifier.size(112.dp))
+                    Spacer(Modifier.width(RefugeSpacing.md))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
+                        Text(detail.title, style = RefugeTypography.title(palette))
+                        Text(detail.subtitle, style = RefugeTypography.secondary(palette))
+                        Text("${detail.insurance} · ${detail.date}", style = RefugeTypography.caption(palette))
                     }
                 }
+                Text(detail.description, style = RefugeTypography.body(palette))
+                DetailValueSummary(palette, detail)
+                Text("内含项目", style = RefugeTypography.headline(palette))
+                detail.includedItems.forEachIndexed { index, item ->
+                    DetailIncludedRow(palette, detail.imageRes, item, index == detail.includedItems.lastIndex)
+                }
+                Text("其他信息", style = RefugeTypography.headline(palette))
+                DetailMetadataRow(palette, "入库日期", detail.date)
+                DetailMetadataRow(palette, "保险", detail.insurance)
+                DetailMetadataRow(palette, "状态", "已同步到本地机库")
+                if (detail.upgradeFrom != null && detail.upgradeTo != null) {
+                    Text("升级路径", style = RefugeTypography.headline(palette))
+                    DetailMetadataRow(palette, "从 ${detail.upgradeFrom}", detail.upgradeFromPrice ?: "—")
+                    DetailMetadataRow(palette, "到 ${detail.upgradeTo}", detail.upgradeToPrice ?: "—")
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+            Row(
+                Modifier.fillMaxWidth().padding(top = RefugeSpacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs),
+            ) {
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.gift, "赠送", onDismiss, Modifier.weight(1f))
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "回收", onDismiss, Modifier.weight(1f))
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.upgrade, "升级", onUpgrade, Modifier.weight(1f))
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.log, "日志", onLog, Modifier.weight(1f))
             }
         }
     }
@@ -710,58 +708,35 @@ private fun FilterSheet(
     onDismiss: () -> Unit,
 ) {
     var selected by remember { mutableStateOf(setOf("舰船", "可回收")) }
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(
-                palette = palette,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 22.dp),
-                radius = RefugeRadius.floating,
-                fill = palette.backgroundLight,
-                padding = PaddingValues(RefugeSpacing.xl),
+    RefugeLiquidSheet(backdrop, palette, "筛选舰库", onDismiss) { modalBackdrop ->
+        Text("按项目类型和可用操作缩小清单", style = RefugeTypography.secondary(palette))
+        listOf("舰船", "可回收", "可赠送").forEach { label ->
+            val checked = label in selected
+            Row(
+                Modifier.fillMaxWidth().clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    selected = if (checked) selected - label else selected + label
+                },
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
-                    Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
-                    Text("筛选舰库", style = RefugeTypography.title(palette))
-                    Text("按项目类型和可用操作缩小清单", style = RefugeTypography.secondary(palette))
-                    listOf("舰船", "可回收", "可赠送").forEach { label ->
-                        val checked = label in selected
-                        Row(
-                            Modifier.fillMaxWidth().clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                selected = if (checked) selected - label else selected + label
-                            },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(24.dp)
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(if (checked) palette.accent else Color.Transparent)
-                                    .border(.5.dp, if (checked) palette.accent.copy(alpha = .42f) else palette.outline.copy(alpha = .18f), RoundedCornerShape(7.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (checked) Icon(RefugeIcons.check, null, tint = palette.background, modifier = Modifier.size(RefugeIconSize.small))
-                            }
-                            Spacer(Modifier.width(RefugeSpacing.md))
-                            Text(label, style = RefugeTypography.body(palette))
-                        }
-                    }
-                    RefugeGlassControl(
-                        backdrop = backdrop,
-                        palette = palette,
-                        onClick = onDismiss,
-                        contentDescription = "完成筛选",
-                        modifier = Modifier.align(Alignment.End),
-                    ) {
-                        Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
-                    }
+                Box(
+                    Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(if (checked) palette.accent else Color.Transparent)
+                        .border(.5.dp, if (checked) palette.accent.copy(alpha = .42f) else palette.outline.copy(alpha = .18f), RoundedCornerShape(7.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (checked) Icon(RefugeIcons.check, null, tint = palette.background, modifier = Modifier.size(RefugeIconSize.small))
                 }
+                Spacer(Modifier.width(RefugeSpacing.md))
+                Text(label, style = RefugeTypography.body(palette))
             }
+        }
+        RefugeGlassControl(modalBackdrop, palette, onDismiss, contentDescription = "完成筛选", modifier = Modifier.align(Alignment.End)) {
+            Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
         }
     }
 }
@@ -776,25 +751,10 @@ private fun RefugeModalDialog(
     onDismiss: () -> Unit,
     onPrimary: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.Center) {
-            RefugeModalSurface(
-                palette = palette,
-                modifier = Modifier.fillMaxWidth(.88f),
-                fill = palette.backgroundLight,
-                padding = PaddingValues(RefugeSpacing.xl),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
-                    Text(title, style = RefugeTypography.title(palette))
-                    Text(body, style = RefugeTypography.body(palette))
-                    RefugeGlassControl(
-                        backdrop = backdrop,
-                        palette = palette,
-                        onClick = onPrimary,
-                        contentDescription = primaryLabel,
-                    ) { Text(primaryLabel, style = RefugeTypography.body(palette)) }
-                }
-            }
+    RefugeLiquidSheet(backdrop, palette, title, onDismiss) { modalBackdrop ->
+        Text(body, style = RefugeTypography.body(palette))
+        RefugeGlassControl(modalBackdrop, palette, onPrimary, contentDescription = primaryLabel) {
+            Text(primaryLabel, style = RefugeTypography.body(palette))
         }
     }
 }

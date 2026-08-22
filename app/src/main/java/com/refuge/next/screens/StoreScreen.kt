@@ -61,6 +61,7 @@ import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
+import com.refuge.next.material.RefugeLiquidSheet
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.reference.ReferenceLiquidButton
@@ -442,7 +443,7 @@ private fun StoreProductSheet(
     product: StoreProduct,
     onDismiss: () -> Unit,
 ) {
-    StoreSheetFrame(backdrop, palette, product.title, onDismiss) {
+    StoreSheetFrame(backdrop, palette, product.title, onDismiss) { modalBackdrop ->
         AsyncImage(
             model = product.imageUrl,
             contentDescription = "${product.title} 大图",
@@ -456,7 +457,7 @@ private fun StoreProductSheet(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(product.priceLabel, style = RefugeTypography.value(palette).copy(color = palette.accent))
             Spacer(Modifier.weight(1f))
-            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.cart, "加入购物车", onDismiss)
+            RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.cart, "加入购物车", onDismiss)
         }
     }
 }
@@ -480,25 +481,11 @@ private fun StoreSheetFrame(
     palette: RefugePalette,
     title: String,
     onDismiss: () -> Unit,
-    content: @Composable () -> Unit,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.(LayerBackdrop) -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(
-                palette = palette,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 20.dp),
-                radius = RefugeRadius.floating,
-                fill = palette.contentSurfaceStrong,
-                padding = PaddingValues(RefugeSpacing.xl),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
-                    Box(Modifier.width(34.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(palette.outline))
-                    Text(title, style = RefugeTypography.title(palette))
-                    content()
-                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, modifier = Modifier.align(Alignment.End))
-                }
-            }
-        }
+    RefugeLiquidSheet(backdrop, palette, title, onDismiss) { modalBackdrop ->
+        content(modalBackdrop)
+        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, modifier = Modifier.align(Alignment.End))
     }
 }
 

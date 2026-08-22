@@ -66,8 +66,8 @@ object RefugeColors {
         glassStrong = Color.White.copy(alpha = .58f),
         glassSelection = Color.Black.copy(alpha = .075f),
         text = Color(0xFF1C1C1E),
-        textSecondary = Color(0xFF636366),
-        textMuted = Color(0xFF8E8E93),
+        textSecondary = Color(0xFF4B4B50),
+        textMuted = Color(0xFF5F6066),
         accent = Color(0xFF007AFF),
         accentSoft = Color(0xFF007AFF).copy(alpha = .10f),
         positive = Color(0xFF087B51),
@@ -91,11 +91,18 @@ object RefugeSpacing {
 }
 
 object RefugeRadius {
-    val image = 14.dp
+    // Concentric geometry: controls sit inside grouped panels with a stable
+    // inset instead of each layer choosing an unrelated pill radius.
+    val image = 12.dp
     val control = 12.dp
-    val panel = 14.dp
-    val hero = 16.dp
-    val floating = 20.dp
+    val panel = 16.dp
+    val hero = 20.dp
+    val floating = 24.dp
+    val sheet = 28.dp
+    val alert = 22.dp
+
+    fun inner(outer: androidx.compose.ui.unit.Dp, inset: androidx.compose.ui.unit.Dp) =
+        (outer - inset).coerceAtLeast(0.dp)
 }
 
 object RefugeIconSize {

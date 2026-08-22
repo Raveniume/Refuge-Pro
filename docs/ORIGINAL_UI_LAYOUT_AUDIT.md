@@ -1,0 +1,23 @@
+# Original RefugeNext UI Layout Audit
+
+This audit preserves the legacy information architecture while replacing Flutter/Material presentation with Compose and the verified AndroidLiquidGlass pipeline.
+
+| Original page | Useful layout | Useful information hierarchy | Functions | Remove | Keep | Compose target |
+|---|---|---|---|---|---|---|
+| `navigation/main_navigation_bar.dart` | Five persistent destinations and reselect-to-top behavior. | Terminal, Store, Hangar, Tools, Profile are peer destinations. | Tap, drag, velocity settle, fast tap continuity. | Flutter `BottomNavigationBar` appearance. | Five destinations and predictable re-entry. | `RootBottomNav` with the moving-lens selection bar; product order is Hangar, Store, Terminal, Tools, Profile. |
+| `hangar/hangar_page.dart` | Header, Hangar/Buyback/Upgrade switch, owned-ship hero, dense inventory rows. | Ship value/paid/insurance first; title then price/date/actions; filters beside the list heading. | Search, filter, sort, details, reclaim, gift/recall, logs, upgrade planner. | Flutter cards and theme styling. | Dense square-image inventory and action cluster. | `HangarScreen` with quiet grouped content, real images/data, and Liquid segmented selection. |
+| `hangar/hangar_item_detail_widget.dart` | Image/name/type, three-value summary, included package items, upgrade path, persistent actions. | `可融` / `当前舰值` / `节省` stay on one row; package contents and metadata follow. | Reclaim, gift, recall, RSI jump, upgrade, log/share. | Flutter Wolt/Material surfaces. | Field order and business semantics. | Scrollable `HangarDetailSheet` with a persistent Glass action bar and real `HangarItem` fields. |
+| `hangar_buyback/hangar_buyback_page.dart` | Buyback sibling page uses the same compact row geometry. | Image/title/date/value, trailing restore action. | Restore/rebuy and open details. | Separate Flutter shell. | Sibling relationship and density. | Hangar segmented section with the same square-image row. |
+| `shop/shop_page.dart` / `shop_list_page.dart` | Search/filter/category controls above image-led product rows. | Product identity, manufacturer/category/tags, then USD price and detail. | Search, filter, sort, detail, cart/checkout, upgrade entry. | Material list tiles and opaque cards. | RSI products, prices, package/Warbond labels, checkout boundary. | `StoreScreen` quiet rows and `RefugeLiquidSheet` detail/checkout. |
+| `database/database_page.dart` / `ship_info_neo/*` | Dense catalog rows with image and metadata. | Image/name/manufacturer/category/tags, aUEC, USD. | Search, category filter, item detail and equipment browsing. | Generic settings-list icon/subtitle/chevron treatment. | Catalog density and metadata order. | `TerminalScreen` image-led rows with a content sheet. |
+| `utility/utility_page.dart` | Grouped task tools with clear first-level entries. | Query/account, ship/equipment, social/gift/referral, test center. | Player search, ship list, equipment, referral, gift, social, test center. | Repeated wrench icon and empty groups. | Tool taxonomy and semantic icons. | `ToolsScreen` grouped rows with `toolIcon()`. |
+| `user_info/user_page.dart` / `settings/settings_page.dart` | Identity/account data precedes grouped settings. | Avatar/name/status, balances/dates, appearance/data/about. | Presence, theme, cache/data, account details. | Large transparent card wall and Material switches. | Real avatar, status behavior, grouped rows. | `ProfileScreen` and `SettingsScreen` using shared rows and `RefugeLiquidToggle`. |
+| `hangar/ccu_optimizor/*` | Planner header, seed/target selectors, local mode, owned CCUs, cost summary, routes. | Seed/target define route; value/owned CCU/new spend summary; steps follow. | Select, calculate, inspect local route. | Remote/member planner and paid gate. | Existing local algorithm and purchase-price semantics. | `CcuScreen` keeps the algorithm and uses quiet grouped selectors. |
+| `ai_chat/*` | Separate legacy AI page and navigation entry. | Member quota/service status are coupled to AI. | AI chat and server usage. | Entire AI feature from Compose. | Nothing required for the five-tab product. | No route, tab, state, service, repository, resource, or flag. |
+
+## Composition rules
+
+- Heavy Liquid Glass is limited to bottom navigation, selected segmented lens, floating header actions, and transient sheets.
+- Inventory, catalog, profile, tools, and CCU use quiet grouped material with dense separators.
+- Square images remain square; dividers start at the text column and never cross the image.
+- Detail and modal content scroll independently from a persistent action bar.

@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
@@ -280,6 +281,168 @@ fun ReferenceLiquidSelectionBar(
                 )
                     .height(height - 18.dp)
                     .fillMaxWidth(1f / tabsCount),
+        )
+    }
+}
+
+/**
+ * Production root navigation derived directly from AndroidLiquidGlass'
+ * LiquidBottomTabs geometry. Segmented controls intentionally keep their
+ * compact geometry in [ReferenceLiquidSelectionBar].
+ */
+@Composable
+fun ReferenceLiquidBottomTabs(
+    backdrop: Backdrop,
+    isDark: Boolean,
+    tabsCount: Int,
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val tabsBackdrop = rememberLayerBackdrop()
+    BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
+        val density = LocalDensity.current
+        val tabWidth = with(density) { (constraints.maxWidth - 8.dp.toPx()) / tabsCount }
+        val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+        val offsetAnimation = remember { Animatable(0f) }
+        val panelOffset by remember(density) {
+            androidx.compose.runtime.derivedStateOf {
+                val fraction = (offsetAnimation.value / constraints.maxWidth).fastCoerceIn(-1f, 1f)
+                with(density) { 4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction)) }
+            }
+        }
+        var currentIndex by remember(tabsCount) { mutableIntStateOf(selectedIndex.coerceIn(0, tabsCount - 1)) }
+        val drag = remember(scope, tabsCount) {
+            DampedDragAnimation(
+                animationScope = scope,
+                initialValue = selectedIndex.coerceIn(0, tabsCount - 1).toFloat(),
+                valueRange = 0f..(tabsCount - 1).toFloat(),
+                visibilityThreshold = .001f,
+                initialScale = 1f,
+                pressedScale = 78f / 56f,
+                onDragStarted = {},
+                onDragStopped = {
+                    val target = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
+                    currentIndex = target
+                    animateToValue(target.toFloat())
+                    onSelected(target)
+                    scope.launch { offsetAnimation.animateTo(0f, spring(1f, 300f, .5f)) }
+                },
+                onDrag = { _, amount ->
+                    updateValue(
+                        (targetValue + amount.x / tabWidth * if (isLtr) 1f else -1f)
+                            .fastCoerceIn(0f, (tabsCount - 1).toFloat()),
+                    )
+                    scope.launch { offsetAnimation.snapTo(offsetAnimation.value + amount.x) }
+                },
+            )
+        }
+        LaunchedEffect(selectedIndex) {
+            val target = selectedIndex.coerceIn(0, tabsCount - 1)
+            if (target != currentIndex) {
+                currentIndex = target
+                drag.animateToValue(target.toFloat())
+            }
+        }
+        val highlight = remember(scope) {
+            ReferenceInteractiveHighlight(scope) { size, _ ->
+                Offset(
+                    if (isLtr) (drag.value + .5f) * tabWidth + panelOffset
+                    else size.width - (drag.value + .5f) * tabWidth + panelOffset,
+                    size.height / 2f,
+                )
+            }
+        }
+        val container = if (isDark) Color(0xFF121212).copy(alpha = .44f) else Color(0xFFFAFAFA).copy(alpha = .64f)
+        val renderTabs: @Composable RowScope.((Int) -> Unit) -> Unit = { select ->
+            content(currentIndex) { index ->
+                currentIndex = index
+                onSelected(index)
+                select(index)
+            }
+        }
+
+        Row(
+            Modifier
+                .graphicsLayer { translationX = panelOffset }
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { Capsule() },
+                    effects = {
+                        vibrancy()
+                        blur(8.dp.toPx())
+                        lens(24.dp.toPx(), 24.dp.toPx())
+                    },
+                    layerBlock = {
+                        val scale = lerp(1f, 1f + 16.dp.toPx() / size.width, drag.pressProgress)
+                        scaleX = scale
+                        scaleY = scale
+                    },
+                    onDrawSurface = { drawRect(container) },
+                )
+                .then(highlight.modifier)
+                .height(64.dp)
+                .fillMaxWidth()
+                .padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) { renderTabs { } }
+
+        Row(
+            Modifier
+                .clearAndSetSemantics { }
+                .alpha(0f)
+                .layerBackdrop(tabsBackdrop)
+                .graphicsLayer {
+                    translationX = panelOffset
+                    colorFilter = ColorFilter.tint(OfficialAccent)
+                }
+                .height(56.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) { renderTabs { } }
+
+        Box(
+            Modifier
+                .padding(horizontal = 4.dp)
+                .graphicsLayer {
+                    translationX = if (isLtr) drag.value * tabWidth + panelOffset
+                    else size.width - (drag.value + 1f) * tabWidth + panelOffset
+                }
+                .then(highlight.gestureModifier)
+                .then(drag.modifier)
+                .drawBackdrop(
+                    backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
+                    shape = { Capsule() },
+                    effects = {
+                        lens(
+                            10.dp.toPx() * drag.pressProgress,
+                            14.dp.toPx() * drag.pressProgress,
+                            chromaticAberration = true,
+                        )
+                    },
+                    highlight = { Highlight.Default.copy(alpha = drag.pressProgress) },
+                    shadow = { Shadow(alpha = drag.pressProgress) },
+                    innerShadow = { InnerShadow(radius = 8.dp * drag.pressProgress, alpha = drag.pressProgress) },
+                    layerBlock = {
+                        scaleX = drag.scaleX
+                        scaleY = drag.scaleY
+                        val velocity = drag.velocity / 10f
+                        scaleX /= 1f - (velocity * .75f).fastCoerceIn(-.2f, .2f)
+                        scaleY *= 1f - (velocity * .25f).fastCoerceIn(-.2f, .2f)
+                    },
+                    onDrawSurface = {
+                        drawRect(
+                            if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .10f),
+                            alpha = 1f - drag.pressProgress,
+                        )
+                        drawRect(Color.Black.copy(alpha = .03f * drag.pressProgress))
+                    },
+                )
+                .height(56.dp)
+                .fillMaxWidth(1f / tabsCount),
         )
     }
 }

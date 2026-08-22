@@ -75,9 +75,11 @@ import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeImagePlaceholder
 import com.refuge.next.material.RefugeLightweightGlassSurface
 import com.refuge.next.material.RefugeLiquidToggle
+import com.refuge.next.material.RefugeLiquidSheet
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.reference.ReferenceLiquidButton
+import com.refuge.next.reference.ReferenceLiquidBottomTabs
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
 import com.refuge.next.reference.ReferenceSearchField
 import com.refuge.next.reference.ReferenceSegmentedControl
@@ -98,15 +100,15 @@ fun BoxScope.RootBottomNav(
     selected: Int,
     onNavigate: (Int) -> Unit,
 ) {
-    ReferenceLiquidSelectionBar(
+    ReferenceLiquidBottomTabs(
         backdrop = backdrop,
         isDark = isDark,
         tabsCount = rootTabs.size,
-        initialIndex = selected,
+        selectedIndex = selected,
         onSelected = onNavigate,
         modifier = Modifier
             .align(Alignment.BottomCenter)
-            .fillMaxWidth(.84f)
+            .fillMaxWidth(.90f)
             .navigationBarsPadding()
             .padding(bottom = 8.dp),
     ) { selectedIndex, select ->
@@ -357,40 +359,40 @@ fun ProfileScreen(
 
 @Composable
 private fun ProfileHero(backdrop: LayerBackdrop, palette: RefugePalette, profile: ProfileData) {
-    RefugeStandardGlassSurface(palette = palette, backdrop = backdrop, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.hero, padding = PaddingValues(16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painter = painterResource(R.drawable.user_profile_pic),
-                contentDescription = "用户头像",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f },
-            )
-            Spacer(Modifier.width(RefugeSpacing.md))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(profile.handle, style = RefugeTypography.title(palette))
-                    Spacer(Modifier.width(RefugeSpacing.xs))
-                    Box(Modifier.size(8.dp).background(if (profile.isOnline) palette.positive else palette.textMuted, CircleShape))
-                }
-                Text("${profile.city} · ${profile.rank}", style = RefugeTypography.secondary(palette))
-                Text("Online · 使用本地资料", style = RefugeTypography.caption(palette).copy(color = if (profile.isOnline) palette.positive else palette.textMuted))
+    Row(Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
+        Image(
+            painter = painterResource(R.drawable.user_profile_pic),
+            contentDescription = "用户头像",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(64.dp)
+                .clip(RoundedCornerShape(RefugeRadius.image))
+                .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f },
+        )
+        Spacer(Modifier.width(RefugeSpacing.md))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(profile.handle, style = RefugeTypography.title(palette))
+                Spacer(Modifier.width(RefugeSpacing.xs))
+                Box(Modifier.size(8.dp).background(if (profile.isOnline) palette.positive else palette.textMuted, CircleShape))
             }
-            Text("4.8", style = RefugeTypography.value(palette).copy(color = palette.accent))
+            Text("${profile.city} · ${profile.rank}", style = RefugeTypography.secondary(palette))
+            Text("Online · 使用本地资料", style = RefugeTypography.caption(palette).copy(color = if (profile.isOnline) palette.positive else palette.textMuted))
         }
+        Text("4.8", style = RefugeTypography.value(palette).copy(color = palette.accent))
     }
 }
 
 @Composable
 private fun ProfileStats(palette: RefugePalette, profile: ProfileData) {
-    RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(vertical = 16.dp)) {
-        Row(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+        Row(Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.md)) {
             ProfileStatCell(palette, profile.totalSpent, "消费额")
             ProfileStatCell(palette, profile.hangarValue, "机库价值")
             ProfileStatCell(palette, profile.credit, "信用点")
         }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
     }
 }
 
@@ -431,14 +433,12 @@ private fun AccountRow(palette: RefugePalette, icon: androidx.compose.ui.graphic
 
 @Composable
 private fun ProfileOrganization(backdrop: LayerBackdrop, palette: RefugePalette) {
-    RefugeLightweightGlassSurface(palette = palette, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(RefugeIcons.home, null, tint = palette.textSecondary, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(RefugeSpacing.md))
-            Column {
-                Text("星环城", style = RefugeTypography.title(palette))
-                Text("社区等级 4 · Experienced", style = RefugeTypography.secondary(palette))
-            }
+    Row(Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
+        Icon(RefugeIcons.home, null, tint = palette.textSecondary, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(RefugeSpacing.md))
+        Column {
+            Text("星环城", style = RefugeTypography.title(palette))
+            Text("社区等级 4 · Experienced", style = RefugeTypography.secondary(palette))
         }
     }
 }
@@ -545,32 +545,17 @@ private fun toolIcon(tool: ToolItem) = when (tool.id) {
 
 @Composable
 private fun SocialToolSheet(backdrop: LayerBackdrop, palette: RefugePalette, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(
-                palette = palette,
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                radius = RefugeRadius.floating,
-                fill = palette.contentSurfaceStrong,
-                padding = PaddingValues(20.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
-                    Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
-                    Text("社交", style = RefugeTypography.title(palette))
-                    Text("组织与邀请", style = RefugeTypography.secondary(palette))
-                    listOf(
-                        "组织" to "星环城 · 社区等级 4",
-                        "待处理邀请" to "2 条",
-                        "最近联系" to "NocturnePilot · 在线",
-                    ).forEach { (label, value) ->
-                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
-                                Text(value, style = RefugeTypography.secondary(palette))
-                            }
-                        }
-                    }
-                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+    RefugeLiquidSheet(backdrop, palette, "社交", onDismiss) { modalBackdrop ->
+        Text("组织与邀请", style = RefugeTypography.secondary(palette))
+        listOf(
+            "组织" to "星环城 · 社区等级 4",
+            "待处理邀请" to "2 条",
+            "最近联系" to "NocturnePilot · 在线",
+        ).forEach { (label, value) ->
+            RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
+                    Text(value, style = RefugeTypography.secondary(palette))
                 }
             }
         }
@@ -584,28 +569,13 @@ private fun ToolDataSheet(backdrop: LayerBackdrop, palette: RefugePalette, tool:
     } else {
         listOf("邀请人" to "Raveniume", "关系记录" to "3 条", "最近同步" to "2026-08-20")
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(
-                palette = palette,
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                radius = RefugeRadius.floating,
-                fill = palette.contentSurfaceStrong,
-                padding = PaddingValues(20.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
-                    Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
-                    Text(tool.title, style = RefugeTypography.title(palette))
-                    Text(tool.subtitle, style = RefugeTypography.secondary(palette))
-                    rows.forEach { (label, value) ->
-                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
-                                Text(value, style = RefugeTypography.secondary(palette))
-                            }
-                        }
-                    }
-                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+    RefugeLiquidSheet(backdrop, palette, tool.title, onDismiss) { modalBackdrop ->
+        Text(tool.subtitle, style = RefugeTypography.secondary(palette))
+        rows.forEach { (label, value) ->
+            RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
+                    Text(value, style = RefugeTypography.secondary(palette))
                 }
             }
         }
@@ -799,22 +769,15 @@ private fun ShipSelectorSheet(
     onDismiss: () -> Unit,
     onSelected: (CcuShip) -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(palette = palette, modifier = Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, fill = palette.contentSurfaceStrong, padding = PaddingValues(20.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
-                    Text(title, style = RefugeTypography.title(palette))
-                    if (ships.isEmpty()) {
-                        Text("没有原价更高的目标舰船", style = RefugeTypography.body(palette))
-                    } else {
-                        ships.forEach { ship ->
-                            RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth().clickable { onSelected(ship) }, padding = PaddingValues(12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(ship.name, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
-                                    Text(formatUsd(ship.purchasePrice), style = RefugeTypography.secondary(palette))
-                                }
-                            }
-                        }
+    RefugeLiquidSheet(backdrop, palette, title, onDismiss) {
+        if (ships.isEmpty()) {
+            Text("没有原价更高的目标舰船", style = RefugeTypography.body(palette))
+        } else {
+            ships.forEach { ship ->
+                RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth().clickable { onSelected(ship) }, padding = PaddingValues(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(ship.name, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
+                        Text(formatUsd(ship.purchasePrice), style = RefugeTypography.secondary(palette))
                     }
                 }
             }
@@ -846,34 +809,17 @@ private fun ProductionEmptyState(palette: RefugePalette, text: String) {
 
 @Composable
 private fun ProductionNoticeSheet(backdrop: LayerBackdrop, palette: RefugePalette, title: String, body: String, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(palette = palette, modifier = Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, fill = palette.contentSurfaceStrong, padding = PaddingValues(20.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
-                    Box(Modifier.width(34.dp).height(4.dp).background(palette.outline, RoundedCornerShape(2.dp)))
-                    Text(title, style = RefugeTypography.title(palette))
-                    Text(body, style = RefugeTypography.body(palette))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss)
-                    }
-                }
-            }
-        }
+    RefugeLiquidSheet(backdrop, palette, title, onDismiss) { modalBackdrop ->
+        Text(body, style = RefugeTypography.body(palette))
+        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
     }
 }
 
 @Composable
 fun ProductionListSheet(backdrop: LayerBackdrop, palette: RefugePalette, title: String, entries: List<String>, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(palette = palette, modifier = Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, fill = palette.contentSurfaceStrong, padding = PaddingValues(20.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
-                    Text(title, style = RefugeTypography.title(palette))
-                    entries.forEach { entry -> RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) { Text(entry, style = RefugeTypography.body(palette)) } }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss) }
-                }
-            }
-        }
+    RefugeLiquidSheet(backdrop, palette, title, onDismiss) { modalBackdrop ->
+        entries.forEach { entry -> RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) { Text(entry, style = RefugeTypography.body(palette)) } }
+        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
     }
 }
 
@@ -887,17 +833,10 @@ private fun TerminalFilterSheet(
     onTaggedChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            RefugeModalSurface(palette = palette, modifier = Modifier.fillMaxWidth().padding(14.dp), radius = RefugeRadius.floating, fill = palette.contentSurfaceStrong, padding = PaddingValues(20.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
-                    Text("终端筛选", style = RefugeTypography.title(palette))
-                    SettingsToggleRow(backdrop, palette, "仅显示有 USD 价格", if (pricedOnly) "开启" else "关闭", pricedOnly) { onPricedChanged(!pricedOnly) }
-                    SettingsToggleRow(backdrop, palette, "仅显示有标签", if (taggedOnly) "开启" else "关闭", taggedOnly) { onTaggedChanged(!taggedOnly) }
-                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
-                }
-            }
-        }
+    RefugeLiquidSheet(backdrop, palette, "终端筛选", onDismiss) { modalBackdrop ->
+        SettingsToggleRow(modalBackdrop, palette, "仅显示有 USD 价格", if (pricedOnly) "开启" else "关闭", pricedOnly) { onPricedChanged(!pricedOnly) }
+        SettingsToggleRow(modalBackdrop, palette, "仅显示有标签", if (taggedOnly) "开启" else "关闭", taggedOnly) { onTaggedChanged(!taggedOnly) }
+        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
     }
 }
 
