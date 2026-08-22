@@ -13,17 +13,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.refuge.next.data.CachedHangarRepository
-import com.refuge.next.data.CachedCatalogStoreRepository
-import com.refuge.next.data.CachedTerminalRepository
-import com.refuge.next.data.CachedBuybackRepository
-import com.refuge.next.data.CachedHangarLogRepository
+import com.refuge.next.data.ProductionHangarRepository
+import com.refuge.next.data.ProductionCatalogStoreRepository
+import com.refuge.next.data.ProductionTerminalRepository
+import com.refuge.next.data.ProductionBuybackRepository
+import com.refuge.next.data.ProductionHangarLogRepository
 import com.refuge.next.data.InMemoryCartRepository
-import com.refuge.next.data.CachedProfileRepository
-import com.refuge.next.data.CachedUtilityRepository
-import com.refuge.next.data.CachedCcuRepository
+import com.refuge.next.data.ProductionProfileRepository
+import com.refuge.next.data.ProductionUtilityRepository
+import com.refuge.next.data.ProductionCcuRepository
+import com.refuge.next.data.AppSettings
+import com.refuge.next.data.PreferencesSettingsRepository
+import com.refuge.next.data.SettingsRepository
+import com.refuge.next.data.UserStatusSource
+import com.refuge.next.data.ProductionCacheDataSource
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.material.RefugeScene
 import com.refuge.next.motion.RefugeRouteTransition
@@ -36,10 +42,16 @@ import com.refuge.next.screens.ToolsScreen
 import com.refuge.next.screens.SettingsScreen
 import com.refuge.next.screens.CcuScreen
 
+private val productionRootRoutes = setOf(0, 1, 2, 4)
+
 @Composable
 fun RefugeApp() {
-    var isDark by remember { mutableStateOf(true) }
-    var isOnline by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    val settingsRepository = remember(context) { PreferencesSettingsRepository(context) }
+    var settings by remember(settingsRepository) { mutableStateOf(settingsRepository.load()) }
+    val userStatus = remember { UserStatusSource(true) }
+    val isDark = settings.darkTheme
+    val isOnline = userStatus.isOnline
     var selectedTab by remember { mutableIntStateOf(0) }
     var rootTab by remember { mutableIntStateOf(0) }
     val palette = if (isDark) RefugeColors.dark else RefugeColors.light
@@ -51,24 +63,27 @@ fun RefugeApp() {
             isAppearanceLightNavigationBars = !isDark
         }
     }
-    val repository = remember {
-        CachedHangarRepository(
+    val cacheSource = remember(context) { ProductionCacheDataSource(context) }
+    val cacheManifest = remember(cacheSource) { cacheSource.manifest() }
+    val repository = remember(cacheSource) {
+        ProductionHangarRepository(
             fallbackImage = R.drawable.ship_placeholder,
             m80Image = R.drawable.m80_hero,
+            source = cacheSource,
         )
     }
-    val storeRepository = remember { CachedCatalogStoreRepository() }
-    val terminalRepository = remember { CachedTerminalRepository() }
-    val buybackRepository = remember { CachedBuybackRepository(R.drawable.m80_hero, R.drawable.ship_placeholder) }
-    val hangarLogRepository = remember { CachedHangarLogRepository() }
+    val storeRepository = remember(cacheSource) { ProductionCatalogStoreRepository(cacheSource) }
+    val terminalRepository = remember(cacheSource) { ProductionTerminalRepository(cacheSource) }
+    val buybackRepository = remember(cacheSource) { ProductionBuybackRepository(R.drawable.m80_hero, R.drawable.ship_placeholder, cacheSource) }
+    val hangarLogRepository = remember(cacheSource) { ProductionHangarLogRepository(cacheSource) }
     val cartRepository = remember { InMemoryCartRepository() }
-    val profileRepository = remember { CachedProfileRepository() }
-    val utilityRepository = remember { CachedUtilityRepository() }
-    val ccuRepository = remember { CachedCcuRepository() }
+    val profileRepository = remember(cacheSource) { ProductionProfileRepository(cacheSource) }
+    val utilityRepository = remember(cacheSource) { ProductionUtilityRepository(cacheSource) }
+    val ccuRepository = remember(cacheSource) { ProductionCcuRepository(cacheSource, R.drawable.m80_hero, R.drawable.ship_placeholder) }
 
     // Secondary production routes share the root tab bar, but system Back must return
     // to the originating root screen instead of finishing the activity.
-    BackHandler(enabled = selectedTab >= 5) {
+    BackHandler(enabled = selectedTab !in productionRootRoutes) {
         selectedTab = rootTab
     }
 
@@ -77,7 +92,7 @@ fun RefugeApp() {
             RefugeContent(
                 selectedTab = route,
                 onNavigate = {
-                    if (it in 0..4) {
+                    if (it in productionRootRoutes) {
                         rootTab = it
                     }
                     selectedTab = it
@@ -95,10 +110,24 @@ fun RefugeApp() {
                 ccuRepository = ccuRepository,
                 terminalRepository = terminalRepository,
                 isDark = isDark,
-                onToggleTheme = { isDark = !isDark },
+                onToggleTheme = {
+                    settings = settings.copy(darkTheme = !settings.darkTheme)
+                    settingsRepository.save(settings)
+                },
                 isOnline = isOnline,
-                onToggleOnline = { isOnline = !isOnline },
+                onToggleOnline = { userStatus.toggle() },
                 rootTab = rootTab,
+                settings = settings,
+                settingsRepository = settingsRepository,
+                cacheManifest = cacheManifest,
+                onToggleSyncLogs = {
+                    settings = settings.copy(syncLogs = !settings.syncLogs)
+                    settingsRepository.save(settings)
+                },
+                onToggleLocalOnly = {
+                    settings = settings.copy(localOnly = !settings.localOnly)
+                    settingsRepository.save(settings)
+                },
             )
         }
     }
@@ -114,17 +143,22 @@ private fun RefugeContent(
     repository: com.refuge.next.data.HangarRepository,
     buybackRepository: com.refuge.next.data.BuybackRepository,
     hangarLogRepository: com.refuge.next.data.HangarLogRepository,
-    storeRepository: CachedCatalogStoreRepository,
+    storeRepository: com.refuge.next.data.StoreRepository,
     cartRepository: com.refuge.next.data.CartRepository,
     profileRepository: com.refuge.next.data.ProfileRepository,
     utilityRepository: com.refuge.next.data.UtilityRepository,
     ccuRepository: com.refuge.next.data.CcuRepository,
-    terminalRepository: CachedTerminalRepository,
+    terminalRepository: com.refuge.next.data.TerminalRepository,
     isDark: Boolean,
     onToggleTheme: () -> Unit,
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
     rootTab: Int,
+    settings: AppSettings,
+    settingsRepository: SettingsRepository,
+    cacheManifest: com.refuge.next.data.ProductionCacheManifest,
+    onToggleSyncLogs: () -> Unit,
+    onToggleLocalOnly: () -> Unit,
 ) {
     when (selectedTab) {
         0 -> HangarScreen(
@@ -171,7 +205,7 @@ private fun RefugeContent(
             backdrop = backdrop,
             palette = palette,
             isDark = isDark,
-            selectedBottomTab = selectedTab,
+            selectedBottomTab = rootTab,
             onNavigate = onNavigate,
             utilityRepository = utilityRepository,
             isOnline = isOnline,
@@ -198,6 +232,12 @@ private fun RefugeContent(
             selectedBottomTab = rootTab,
             onNavigate = onNavigate,
             onToggleTheme = onToggleTheme,
+            syncLogs = settings.syncLogs,
+            localOnly = settings.localOnly,
+            onToggleSyncLogs = onToggleSyncLogs,
+            onToggleLocalOnly = onToggleLocalOnly,
+            onClearCache = { settingsRepository.clearLocalCache() },
+            cacheInfo = cacheManifest,
             isOnline = isOnline,
             onToggleOnline = onToggleOnline,
         )

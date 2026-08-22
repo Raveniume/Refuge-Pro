@@ -1,0 +1,97 @@
+{
+  "version": "legacy-cache-v1",
+  "source": "RefugeNext legacy API/cache contract",
+  "refreshedAt": "2026-08-20",
+  "hangar": {
+    "ownedShips": [
+      {"name":"M80","packageName":"游戏包 - 公民新手包","currentValue":"$300","paidValue":"$140","insurance":"LTI","image":"m80"}
+    ],
+    "inventory": [
+      {"title":"装备包 - SteelTek - 掳绑包","price":"$30","date":"2026年08月16日","originalName":"SteelTek Armor Set","typeLabel":"装备 / 包含物品","includedItems":["SteelTek 装备包","数字物品"]},
+      {"title":"涂装包 - M80 - Dynasty Paint","price":"$7.50","date":"2026年08月12日","originalName":"M80 Dynasty Paint","typeLabel":"Paint","includedItems":["M80 专用涂装"]},
+      {"title":"毛线帽套装 - 莫基节新手指导奖励","price":"$0","date":"2026年08月07日","originalName":"MobiGlas Tutorial Reward","typeLabel":"个人物品","giftable":false,"reclaimable":false,"includedItems":["毛线帽套装"]},
+      {"title":"M80 - 公民新手包","price":"$140","date":"2026年08月02日","originalName":"Origin M80 Starter Package","typeLabel":"游戏包 / 舰船","insurance":"LTI","currentValue":"$300","savings":"$160","image":"m80","includedItems":["M80","星际公民数字下载","LTI 保险"],"upgradeFrom":"Aurora ES","upgradeTo":"M80","upgradeFromPrice":"$20","upgradeToPrice":"$300"},
+      {"title":"舰船组件 - 轻型量子驱动","price":"$25","date":"2026年07月22日","originalName":"Light Quantum Drive","typeLabel":"Weapon / Component","includedItems":["量子驱动","S1 组件"]}
+    ]
+  },
+  "buyback": [
+    {"title":"M50 - 公民新手包","price":"$60","date":"2026年07月18日","originalName":"Origin M50 Starter Package","image":"m80"},
+    {"title":"装备包 - RSI","price":"$3.50","date":"2026年06月29日","originalName":"RSI Equipment Pack"},
+    {"title":"极光 Mk I ES","price":"$20","date":"2026年05月12日","originalName":"Aurora Mk I ES"}
+  ],
+  "logs": [
+    "CREATED · M80 · 2026-08-02",
+    "GIFT · SteelTek 装备包 · 2026-08-16",
+    "APPLIED_UPGRADE · M80 · 2026-08-18"
+  ],
+  "store": [
+    {"id":"10898","title":"PTV小车","category":"SHIPS","metadata":"Greycat · 独立载具","priceCents":1500,"imageUrl":"https://robertsspaceindustries.com/media/5rg8z7erquf0wr/store_small/Buggy.jpg","description":"适合在大型机库和地面设施中快速通行。"},
+    {"id":"628","title":"极光 Mk I ES","category":"SHIPS","metadata":"RSI · 独立舰船","priceCents":2000,"imageUrl":"https://media.robertsspaceindustries.com/4t9yddbsf0muk/store_small.jpeg","description":"轻量、可靠的入门级多用途舰船。"},
+    {"id":"14170","title":"极光 Mk I MR","category":"SHIPS","metadata":"RSI · 独立舰船","priceCents":3000,"imageUrl":"https://media.robertsspaceindustries.com/cm90yxr38vd5h/store_small.jpeg","description":"为基础巡逻与任务执行准备的 Aurora 型号。"},
+    {"id":"17064","title":"脉冲 LX","category":"SHIPS","metadata":"Mirai · 独立载具","priceCents":3000,"imageUrl":"https://media.robertsspaceindustries.com/1d5jzghu8jgtr/store_small.jpg","description":"高机动个人载具，提供紧凑的探索能力。"},
+    {"id":"616","title":"野马阿尔法","category":"SHIPS","metadata":"CO · 独立舰船","priceCents":3000,"imageUrl":"https://robertsspaceindustries.com/media/cpq6ly29wmi1br/store_small/56745675467.jpg","description":"兼顾运输与基础战斗的经济型舰船。"},
+    {"id":"17381","title":"ATLS","category":"SHIPS","metadata":"Argo · 工业载具","priceCents":4000,"imageUrl":"https://media.robertsspaceindustries.com/1iqxjatfusi4e/store_small.jpg","description":"用于货运装卸和工业任务的动力装甲平台。"},
+    {"id":"18699","title":"魔像 - 强心涂装","category":"PAINTS","metadata":"Drake · 涂装","priceCents":300,"imageUrl":"https://media.robertsspaceindustries.com/6jeplyamn64ls/store_small.jpg","description":"明亮红色主色搭配黑色细节。"},
+    {"id":"15914","title":"复仇者 - 铁纹涂装","category":"PAINTS","metadata":"Aegis · 涂装","priceCents":300,"imageUrl":"https://media.robertsspaceindustries.com/pkrb5ki4bt540/store_small.jpg","description":"为 Avenger 系列提供工业质感外观。"},
+    {"id":"13537","title":"复仇者 - 橄榄绿涂装","category":"PAINTS","metadata":"Aegis · 涂装","priceCents":300,"imageUrl":"https://media.robertsspaceindustries.com/5lvt2b008irtk/store_small.jpg","description":"低调橄榄绿色战术涂装。"},
+    {"id":"18994","title":"极光 Mk II - 隐匿涂装","category":"PAINTS","metadata":"RSI · 涂装","priceCents":300,"imageUrl":"https://media.robertsspaceindustries.com/eyt5fi92fvnlo/store_small.jpg","description":"为 Aurora Mk II 设计的低可视度外观。"},
+    {"id":"18993","title":"极光 Mk II - 里海涂装","category":"PAINTS","metadata":"RSI · 涂装","priceCents":300,"imageUrl":"https://media.robertsspaceindustries.com/qn1uk60v6vmbt/store_small.jpg","description":"Aurora Mk II 专用里海配色。"},
+    {"id":"13246","title":"RSI 装备包","category":"GEAR","metadata":"RSI · 装备","priceCents":350,"imageUrl":"https://media.robertsspaceindustries.com/gayeu1u8zmf62/store_small.jpg","description":"RSI 品牌帽衫与配套装备组合。"},
+    {"id":"17070","title":"盾博尔装备包","category":"GEAR","metadata":"Tumbril · 装备","priceCents":350,"imageUrl":"https://media.robertsspaceindustries.com/e9on9selll94t/store_small.jpg","description":"Tumbril 品牌服装与随身装备。"},
+    {"id":"13253","title":"起源装备包","category":"GEAR","metadata":"Origin · 装备","priceCents":350,"imageUrl":"https://media.robertsspaceindustries.com/zd94me24sdev7/store_small.jpg","description":"Origin 风格的品牌服装组合。"},
+    {"id":"18158","title":"MISC 装备包","category":"GEAR","metadata":"MISC · 装备","priceCents":350,"imageUrl":"https://media.robertsspaceindustries.com/w6txzhg9iw957/store_small.jpg","description":"MISC 品牌装备组合。"},
+    {"id":"17046","title":"德雷克装备包","category":"GEAR","metadata":"Drake · 装备","priceCents":350,"imageUrl":"https://media.robertsspaceindustries.com/n7jddmu2hdiyg/store_small.jpg","description":"Drake 风格品牌装备组合。"},
+    {"id":"18975","title":"公民新手包","category":"PACKAGES","metadata":"RSI Aurora Mk II · 游戏包","priceCents":6000,"imageUrl":"https://media.robertsspaceindustries.com/w9qkf63nkfcyo/store_small.jpg","description":"包含游戏访问资格、入门舰船和基础保险。","isPackage":true},
+    {"id":"18307","title":"通用新手包","category":"PACKAGES","metadata":"游戏包","priceCents":6000,"imageUrl":"https://media.robertsspaceindustries.com/ysurm8lg4cw2c/store_small.jpg","description":"面向新玩家的通用游戏包。","isPackage":true},
+    {"id":"18754","title":"打捞者新手包","category":"PACKAGES","metadata":"工业 · 游戏包","priceCents":7500,"imageUrl":"https://media.robertsspaceindustries.com/7u3ybzv7nbyg9/store_small.jpg","description":"包含面向打捞职业的入门舰船与游戏资格。","isPackage":true},
+    {"id":"18046","title":"矿工新手包","category":"PACKAGES","metadata":"工业 · 游戏包","priceCents":7500,"imageUrl":"https://media.robertsspaceindustries.com/1veqrzmppmfdu/store_small.jpg","description":"面向采矿职业路径的起始组合。","isPackage":true},
+    {"id":"19453","title":"ATLS 双人包","category":"PACKAGES","metadata":"Argo · 组合包","priceCents":7500,"imageUrl":"https://media.robertsspaceindustries.com/vkokp4dy83852/store_small.jpg","description":"包含 Argo ATLS 与 ATLS GEO。","isWarbond":true,"isPackage":true},
+    {"id":"19454","title":"魔像双船包","category":"PACKAGES","metadata":"Drake · 组合包","priceCents":13000,"imageUrl":"https://media.robertsspaceindustries.com/t8q4acfs4cypb/store_small.jpg","description":"Drake 魔像系列双船组合。","isWarbond":true,"isPackage":true}
+  ],
+  "terminal": [
+    {"id":"v-m80","name":"M80","manufacturer":"Origin","category":"VEHICLES","tags":["战斗","高速"],"value":"—","usd":"$300","description":"Origin M80 是一艘以速度和机动性为核心的轻型战斗舰。"},
+    {"id":"v-aurora","name":"极光 Mk I ES","manufacturer":"RSI","category":"VEHICLES","tags":["入门","多用途"],"value":"—","usd":"$20","description":"Aurora 系列提供稳定的基础运输与探索能力。"},
+    {"id":"v-atls","name":"ATLS","manufacturer":"Argo","category":"VEHICLES","tags":["工业","装卸"],"value":"—","usd":"$40","description":"面向工业任务的动力装甲平台。"},
+    {"id":"c-quantum","name":"VK-00 量子引擎","manufacturer":"Wei-Tek","category":"SHIP_COMPONENTS","tags":["量子","S1"],"value":"38,400 aUEC","usd":"$12","description":"适配小型舰船的高推力量子引擎。"},
+    {"id":"c-shield","name":"FR-66 护盾","manufacturer":"Aegis","category":"SHIP_COMPONENTS","tags":["护盾","S2"],"value":"12,850 aUEC","usd":"$8","description":"兼顾再生速度和容量的舰载护盾。"},
+    {"id":"p-pistol","name":"Arclight II 手枪","manufacturer":"BEHR","category":"PERSONAL","tags":["手枪","能量"],"value":"4,200 aUEC","usd":"$3","description":"紧凑的个人能量武器。"},
+    {"id":"a-mount","name":"S1 武器挂架","manufacturer":"Greycat","category":"ATTACHMENTS","tags":["挂架","S1"],"value":"1,600 aUEC","usd":"$2","description":"用于小型武器接口的标准挂架。"},
+    {"id":"s-parapet","name":"Parapet 护盾","manufacturer":"Dale","category":"SHIELDS","tags":["护盾","S3"],"value":"32,700 aUEC","usd":"$18","description":"为中型舰船提供额外抗性。"},
+    {"id":"w-mantis","name":"Mantis 导弹发射器","manufacturer":"Behring","category":"VEHICLE_WEAPONS","tags":["导弹","S2"],"value":"18,200 aUEC","usd":"$14","description":"适配中型挂点的标准导弹发射器。"},
+    {"id":"w-bulldog","name":"S2 Bulldog 加特林","manufacturer":"Apocalypse Arms","category":"VEHICLE_WEAPONS","tags":["机炮","S2"],"value":"21,500 aUEC","usd":"$16","description":"面向近距离持续火力的舰载武器。"},
+    {"id":"cool-iceman","name":"Iceman 冷却器","manufacturer":"CoolCore","category":"COOLERS","tags":["冷却","S1"],"value":"9,800 aUEC","usd":"$7","description":"为小型舰船提供稳定的热管理能力。"},
+    {"id":"power-guardian","name":"Guardian 电站","manufacturer":"J-Precision","category":"POWER_PLANTS","tags":["电站","S2"],"value":"16,400 aUEC","usd":"$11","description":"平衡功率输出与组件负载的舰载电站。"},
+    {"id":"qd-hem","name":"Hemera 量子引擎","manufacturer":"Wei-Tek","category":"QUANTUM_DRIVES","tags":["量子","S2"],"value":"44,000 aUEC","usd":"$22","description":"面向中型舰船的长距离量子引擎。"}
+  ],
+  "profile": {"handle":"Raveniume","city":"星环城","rank":"Experienced","totalSpent":"$140","hangarValue":"$300","credit":"$60","registerDate":"2023-06-18","uec":"128,400","rec":"2,960","currentValue":"$300","referralCode":"RAVEN-7K2Q"},
+  "toolGroups": [
+    {"title":"账户与查询","items":[{"id":"crowdfunding","title":"众筹查询","subtitle":"查看项目进度和支持统计"},{"id":"player-search","title":"玩家搜索","subtitle":"通过 Handle 查询公开资料"},{"id":"social","title":"社交","subtitle":"组织、邀请与玩家关系"},{"id":"gift-redeem","title":"礼物兑换","subtitle":"兑换待领取的礼物码与礼包"}]},
+    {"title":"资料中心","items":[{"id":"ships","title":"舰船一览","subtitle":"浏览舰船与制造商信息"},{"id":"equipment","title":"装备资料","subtitle":"查找护盾、武器和配件"},{"id":"referrals","title":"邀请查询","subtitle":"查看邀请状态和奖励"},{"id":"referral-reverse","title":"邀请反查","subtitle":"通过邀请人或被邀请人反查关系"}]},
+    {"title":"测试中心","items":[{"id":"test-center","title":"测试中心","subtitle":"验证本地缓存、Glass 和运行状态"},{"id":"rsi","title":"RSI 快捷入口","subtitle":"打开常用 RSI 资料入口"}]},
+    {"title":"RSI 快捷入口","items":[{"id":"web-hangar","title":"网页机库","subtitle":"打开 RSI 网页机库"},{"id":"web-buyback","title":"网页回购","subtitle":"打开 RSI 网页回购"},{"id":"my-fleet","title":"我的舰队","subtitle":"打开组织舰队页面"},{"id":"referral-program","title":"邀请计划","subtitle":"打开 RSI 邀请计划"},{"id":"spectrum","title":"光谱论坛","subtitle":"打开 Spectrum 社区"},{"id":"service-center","title":"服务中心","subtitle":"打开 RSI 服务中心"},{"id":"roadmap","title":"路线图","subtitle":"打开 RSI 路线图"},{"id":"service-status","title":"服务状态","subtitle":"打开 RSI 服务状态"}]}
+  ],
+  "toolDetails": {
+    "crowdfunding":{"rows":[{"label":"当前支持项目","value":"3 个"},{"label":"累计支持","value":"$140"},{"label":"最近同步","value":"2026-08-20"}]},
+    "player-search":{"rows":[{"label":"查询范围","value":"公开 Handle"},{"label":"最近查询","value":"NocturnePilot"},{"label":"状态","value":"本地只读"}]},
+    "social":{"rows":[{"label":"组织","value":"星环城 · 社区等级 4"},{"label":"待处理邀请","value":"2 条"},{"label":"最近联系","value":"NocturnePilot · 在线"}]},
+    "gift-redeem":{"rows":[{"label":"待兑换礼包","value":"2 条"},{"label":"最近礼物码","value":"RAVEN-7K2Q"},{"label":"状态","value":"本地待处理"}]},
+    "ships":{"rows":[{"label":"资料分类","value":"舰船"},{"label":"条目","value":"本地目录"},{"label":"入口","value":"终端"}]},
+    "equipment":{"rows":[{"label":"资料分类","value":"装备、护盾、武器"},{"label":"条目","value":"本地目录"},{"label":"入口","value":"终端"}]},
+    "referrals":{"rows":[{"label":"邀请人数","value":"3"},{"label":"已完成","value":"2"},{"label":"最近同步","value":"2026-08-20"}]},
+    "referral-reverse":{"rows":[{"label":"邀请人","value":"Raveniume"},{"label":"关系记录","value":"3 条"},{"label":"最近同步","value":"2026-08-20"}]},
+    "test-center":{"rows":[{"label":"Glass pipeline","value":"PASS"},{"label":"本地缓存","value":"PASS"},{"label":"破坏性请求","value":"拦截"}]},
+    "rsi":{"rows":[{"label":"入口","value":"RSI 资料"},{"label":"外部跳转","value":"未启用"},{"label":"账户变更","value":"不会执行"}]},
+    "web-hangar":{"rows":[{"label":"入口","value":"RSI 网页机库"},{"label":"账户变更","value":"不会执行"}],"externalUrl":"https://robertsspaceindustries.com/account/pledges"},
+    "web-buyback":{"rows":[{"label":"入口","value":"RSI 网页回购"},{"label":"账户变更","value":"不会执行"}],"externalUrl":"https://robertsspaceindustries.com/account/buy-back-pledges"},
+    "my-fleet":{"rows":[{"label":"入口","value":"RSI 组织舰队"},{"label":"账户变更","value":"不会执行"}],"externalUrl":"https://robertsspaceindustries.com/account/organization"},
+    "referral-program":{"rows":[{"label":"入口","value":"RSI 邀请计划"},{"label":"账户变更","value":"不会执行"}],"externalUrl":"https://robertsspaceindustries.com/referral-program"},
+    "spectrum":{"rows":[{"label":"入口","value":"Spectrum 社区"},{"label":"账户变更","value":"不会执行"}],"externalUrl":"https://robertsspaceindustries.com/spectrum/community/SC"},
+    "service-center":{"rows":[{"label":"入口","value":"RSI 服务中心"},{"label":"账户变更","value":"不会执行"}],"externalUrl":"https://support.robertsspaceindustries.com/"},
+    "roadmap":{"rows":[{"label":"入口","value":"RSI 路线图"},{"label":"账户变更","value":"不会执行"}],"externalUrl":"https://robertsspaceindustries.com/roadmap/progress-tracker/teams/info"},
+    "service-status":{"rows":[{"label":"入口","value":"RSI 服务状态"},{"label":"账户变更","value":"不会执行"}],"externalUrl":"https://status.robertsspaceindustries.com/"}
+  },
+  "ccu": {
+    "ships":[{"id":"m80","name":"M80","purchasePrice":30000,"image":"m80"},{"id":"aurora","name":"极光 Mk I ES","purchasePrice":2000},{"id":"atls","name":"ATLS","purchasePrice":4000}],
+    "owned":[{"id":"ccu-1","title":"Aurora → M80 CCU","purchasePrice":500,"appliedTo":"M80"}]
+  }
+}

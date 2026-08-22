@@ -101,11 +101,17 @@ fun StoreScreen(
     var warbondOnly by remember { mutableStateOf(false) }
     var sortDescending by remember { mutableStateOf(false) }
     var cartRevision by remember { mutableIntStateOf(0) }
+    var loadAttempt by remember { mutableIntStateOf(0) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var pendingNotice by remember { mutableStateOf<String?>(null) }
     val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
 
-    LaunchedEffect(repository) {
+    LaunchedEffect(repository, loadAttempt) {
         isLoading = true
-        products = repository.products()
+        loadError = null
+        runCatching { repository.products() }
+            .onSuccess { products = it }
+            .onFailure { loadError = it.message ?: "商店目录读取失败" }
         isLoading = false
     }
 
@@ -188,7 +194,9 @@ fun StoreScreen(
                 )
             }
             if (isLoading) {
-                items(5, key = { "loading-$it" }) { StoreLoadingRow(palette) }
+                item { ProductionLoadingState(backdrop, palette, "正在读取商店目录") }
+            } else if (loadError != null) {
+                item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
             } else if (visibleProducts.isEmpty()) {
                 item { StoreEmptyState(palette, search, category.label) }
             } else {
@@ -238,7 +246,10 @@ fun StoreScreen(
             lines = cartLines,
             onRemove = { id -> cartRepository.remove(id); cartRevision++ },
             onClear = { cartRepository.clear(); cartRevision++ },
-            onCheckout = { safeNoOp.execute(DestructiveAction.RSI_PURCHASE); showCart = false },
+            onCheckout = {
+                pendingNotice = safeNoOp.execute(DestructiveAction.RSI_PURCHASE).message
+                showCart = false
+            },
             onDismiss = { showCart = false },
         )
     }
@@ -251,8 +262,12 @@ fun StoreScreen(
                 cartRepository.add(product)
                 cartRevision++
             },
+            onOpenUpgrade = if (product.category == StoreCategory.SHIPS) onOpenCcu else null,
             onDismiss = { selectedProduct = null },
         )
+    }
+    pendingNotice?.let { notice ->
+        StoreNoticeSheet(backdrop, palette, "安全结算预览", notice) { pendingNotice = null }
     }
 }
 
@@ -462,6 +477,7 @@ private fun StoreProductSheet(
     palette: RefugePalette,
     product: StoreProduct,
     onAddToCart: () -> Unit,
+    onOpenUpgrade: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     StoreSheetFrame(backdrop, palette, product.title, onDismiss) { modalBackdrop ->
@@ -479,6 +495,9 @@ private fun StoreProductSheet(
             Text(product.priceLabel, style = RefugeTypography.value(palette).copy(color = palette.accent))
             Spacer(Modifier.weight(1f))
             RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.cart, "加入购物车", onAddToCart)
+            if (onOpenUpgrade != null) {
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.upgrade, "升级", onOpenUpgrade)
+            }
         }
     }
 }

@@ -68,15 +68,13 @@ class InMemoryCartRepository : CartRepository {
     }
 }
 
-/**
- * Read-only snapshot of the real RSI catalog cached by the legacy app. The
- * production network/cache adapter can replace this boundary without changing
- * Store UI geometry or loading behavior.
- */
-class CachedCatalogStoreRepository : StoreRepository {
+/** Read-only adapter for the versioned RSI catalog import. */
+class ProductionCatalogStoreRepository(
+    private val source: ProductionCacheDataSource? = null,
+) : StoreRepository {
     override suspend fun products(): List<StoreProduct> {
         delay(420)
-        return catalogSnapshot
+        return source?.storeProducts() ?: productionCatalogCache
     }
 }
 
@@ -106,7 +104,7 @@ private fun product(
     isPackage = isPackage,
 )
 
-private val catalogSnapshot = listOf(
+private val productionCatalogCache = listOf(
     product("10898", "PTV小车", StoreCategory.SHIPS, "Greycat · 独立载具", 1500, "/media/5rg8z7erquf0wr/store_small/Buggy.jpg", "适合在大型机库和地面设施中快速通行。"),
     product("628", "极光 Mk I ES", StoreCategory.SHIPS, "RSI · 独立舰船", 2000, "https://media.robertsspaceindustries.com/4t9yddbsf0muk/store_small.jpeg", "轻量、可靠的入门级多用途舰船。"),
     product("14170", "极光 Mk I MR", StoreCategory.SHIPS, "RSI · 独立舰船", 3000, "https://media.robertsspaceindustries.com/cm90yxr38vd5h/store_small.jpeg", "为基础巡逻与任务执行准备的 Aurora 型号。"),

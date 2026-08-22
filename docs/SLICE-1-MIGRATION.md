@@ -17,8 +17,10 @@ is imported into this project.
 
 ## Slice 1 status
 
-- `CachedHangarRepository` is a read-only cache boundary; its local snapshot is
-  tracked in `PREVIEW_DATA_AUDIT.md` until a parser-backed cache is connected.
+- `ProductionHangarRepository` is the read-only production cache boundary. It
+  consumes `ProductionCacheDataSource`, whose version is reported by
+  `ProductionCacheManifest`; a future network refresh can replace the source
+  without changing the UI contract.
 - `HangarScreen` is the Hangar Golden Master: it preserves the existing
   inventory information order while using the V4 Compose components and
   tokens. The page includes the real local avatar and M80 image assets;
@@ -34,13 +36,17 @@ is imported into this project.
   low-frequency light and texture; the Reference Lab optical test is not used
   as the Hangar background.
 
-## Deferred adapter work
+## Production adapter status
 
 The V4 Reference Replication Lab is accepted as the implementation baseline.
 Apple component-level geometry remains unverified and is explicitly not a
 blocker. The Hangar Golden Master is accepted and all remaining production
 routes are tracked in `FULL_MIGRATION_MATRIX.md`.
 
-The next adapter step is to replace the local cache snapshots with parser-backed
-legacy cache/API mappers. They must preserve filtering, stacking, translation,
-pricing, and image identity without changing the approved Hangar geometry.
+All production roots now consume explicit `Production*Repository` adapters,
+including Hangar, Buyback, logs, Store, Terminal, Profile, Tools, and CCU. The
+default app source is a structured JSON cache import parsed by
+`ProductionCacheDataSource`.
+They preserve filtering, stacking, translation, pricing, and image identity
+without changing the approved Hangar geometry. Loading, empty, and retryable
+error states are part of every production repository consumer.

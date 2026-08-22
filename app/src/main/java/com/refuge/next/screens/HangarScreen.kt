@@ -35,6 +35,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -119,13 +120,27 @@ fun HangarScreen(
     var buybackItems by remember { mutableStateOf(emptyList<BuybackItem>()) }
     var logEntries by remember { mutableStateOf(emptyList<String>()) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var loadAttempt by remember { mutableIntStateOf(0) }
     val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
 
-    LaunchedEffect(repository, buybackRepository, hangarLogRepository) {
-        ownedShips = repository.ownedShips()
-        inventory = repository.inventory()
-        buybackItems = buybackRepository.items()
-        logEntries = hangarLogRepository.entries()
+    LaunchedEffect(repository, buybackRepository, hangarLogRepository, loadAttempt) {
+        loading = true
+        loadError = null
+        runCatching {
+            val ships = repository.ownedShips()
+            val items = repository.inventory()
+            val buyback = buybackRepository.items()
+            val logs = hangarLogRepository.entries()
+            HangarLoadedData(ships, items, buyback, logs)
+        }.onSuccess { loaded ->
+            ownedShips = loaded.ships
+            inventory = loaded.items
+            buybackItems = loaded.buyback
+            logEntries = loaded.logs
+        }.onFailure { loadError = it.message ?: "机库缓存读取失败" }
+        loading = false
     }
 
     val visibleInventory = remember(inventory, query, giftableOnly, reclaimableOnly, shipOnly, newestFirst) {
@@ -187,7 +202,11 @@ fun HangarScreen(
                     )
                 }
             }
-            if (selectedSection == 0) {
+            if (loading) {
+                item { ProductionLoadingState(backdrop, palette, "正在读取机库资料") }
+            } else if (loadError != null) {
+                item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
+            } else if (selectedSection == 0) {
                 items(ownedShips, key = { it.name }) { ship ->
                     OwnedShipHero(
                         palette = palette,
@@ -208,22 +227,29 @@ fun HangarScreen(
                     )
                 }
                 item {
-                    InventoryGlassGroup(
-                        backdrop = backdrop,
-                        palette = palette,
-                        modifier = Modifier.fillMaxWidth(),
-                        padding = PaddingValues(horizontal = RefugeSpacing.md),
-                    ) {
-                        Column(Modifier.fillMaxWidth()) {
-                            visibleInventory.forEachIndexed { index, item ->
-                                HangarInventoryRow(
-                                    palette = palette,
-                                    item = item,
-                                    isLast = index == visibleInventory.lastIndex,
-                                    onClick = { selectedDetail = item.toHangarDetail() },
-                                    onGift = { safeNoOp.execute(DestructiveAction.GIFT); pendingAction = "赠送" },
-                                    onReclaim = { safeNoOp.execute(DestructiveAction.RECLAIM); pendingAction = "回收" },
-                                )
+                    if (visibleInventory.isEmpty()) {
+                        ProductionEmptyState(
+                            palette = palette,
+                            label = if (inventory.isEmpty()) "暂无机库清单" else "没有匹配的机库项目",
+                        )
+                    } else {
+                        InventoryGlassGroup(
+                            backdrop = backdrop,
+                            palette = palette,
+                            modifier = Modifier.fillMaxWidth(),
+                            padding = PaddingValues(horizontal = RefugeSpacing.md),
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                visibleInventory.forEachIndexed { index, item ->
+                                    HangarInventoryRow(
+                                        palette = palette,
+                                        item = item,
+                                        isLast = index == visibleInventory.lastIndex,
+                                        onClick = { selectedDetail = item.toHangarDetail() },
+                                        onGift = { safeNoOp.execute(DestructiveAction.GIFT); pendingAction = "赠送" },
+                                        onReclaim = { safeNoOp.execute(DestructiveAction.RECLAIM); pendingAction = "回收" },
+                                    )
+                                }
                             }
                         }
                     }
@@ -248,8 +274,12 @@ fun HangarScreen(
                     }
                 }
             } else if (selectedSection == 1) {
-                items(buybackItems, key = { it.title }) { item ->
-                    HangarRebuyRow(palette, item) { selectedDetail = item.toHangarDetail() }
+                if (buybackItems.isEmpty()) {
+                    item { ProductionEmptyState(palette, "暂无回购项目") }
+                } else {
+                    items(buybackItems, key = { it.title }) { item ->
+                        HangarRebuyRow(palette, item) { selectedDetail = item.toHangarDetail() }
+                    }
                 }
             } else {
                 item {
@@ -350,6 +380,13 @@ private data class HangarDetail(
     val upgradeTo: String? = null,
     val upgradeFromPrice: String? = null,
     val upgradeToPrice: String? = null,
+)
+
+private data class HangarLoadedData(
+    val ships: List<OwnedShip>,
+    val items: List<HangarItem>,
+    val buyback: List<BuybackItem>,
+    val logs: List<String>,
 )
 
 private fun detailForShip(ship: OwnedShip) = HangarDetail(

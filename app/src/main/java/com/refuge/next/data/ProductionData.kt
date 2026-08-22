@@ -29,14 +29,16 @@ interface TerminalRepository {
     suspend fun items(): List<TerminalItem>
 }
 
-class CachedTerminalRepository : TerminalRepository {
+class ProductionTerminalRepository(
+    private val source: ProductionCacheDataSource? = null,
+) : TerminalRepository {
     override suspend fun items(): List<TerminalItem> {
         delay(360)
-        return terminalSnapshot
+        return source?.terminalItems() ?: productionTerminalCache
     }
 }
 
-private val terminalSnapshot = listOf(
+private val productionTerminalCache = listOf(
     TerminalItem("v-m80", "M80", "Origin", TerminalCategory.VEHICLES, listOf("战斗", "高速"), "—", "$300", "Origin M80 是一艘以速度和机动性为核心的轻型战斗舰。"),
     TerminalItem("v-aurora", "极光 Mk I ES", "RSI", TerminalCategory.VEHICLES, listOf("入门", "多用途"), "—", "$20", "Aurora 系列提供稳定的基础运输与探索能力。"),
     TerminalItem("v-atls", "ATLS", "Argo", TerminalCategory.VEHICLES, listOf("工业", "装卸"), "—", "$40", "面向工业任务的动力装甲平台。"),
@@ -71,14 +73,73 @@ interface ProfileRepository {
     suspend fun profile(): ProfileData
 }
 
-/** Read-only account/cache adapter. Session presence is supplied by the app shell. */
-class CachedProfileRepository : ProfileRepository {
-    override suspend fun profile(): ProfileData = ProfileData()
+/** Read-only adapter for the imported account/cache contract. */
+class ProductionProfileRepository(
+    private val source: ProductionCacheDataSource? = null,
+) : ProfileRepository {
+    override suspend fun profile(): ProfileData = source?.profile() ?: ProfileData()
 }
 
 data class ToolItem(val id: String, val title: String, val subtitle: String)
 
-val toolGroups: List<Pair<String, List<ToolItem>>> = listOf(
+interface UtilityRepository {
+    suspend fun groups(): List<Pair<String, List<ToolItem>>>
+    suspend fun detail(toolId: String): ToolDetail = productionToolDetails[toolId] ?: ToolDetail(
+        toolId = toolId,
+        rows = listOf("状态" to "本地只读", "数据源" to "生产缓存 adapter"),
+    )
+}
+
+data class ToolDetail(
+    val toolId: String,
+    val rows: List<Pair<String, String>>,
+    val externalUrl: String? = null,
+)
+
+class ProductionUtilityRepository(
+    private val source: ProductionCacheDataSource? = null,
+) : UtilityRepository {
+    override suspend fun groups(): List<Pair<String, List<ToolItem>>> = source?.toolGroups() ?: productionToolGroups
+    override suspend fun detail(toolId: String): ToolDetail = source?.toolDetail(toolId) ?: productionToolDetails[toolId]
+        ?: super.detail(toolId)
+}
+
+interface CcuRepository {
+    suspend fun ships(): List<CcuShip>
+    suspend fun owned(): List<OwnedCcu>
+    suspend fun chain(owned: OwnedCcu): List<CcuChainStep> = listOf(
+        CcuChainStep(owned.title.substringBefore(" → "), owned.appliedTo, owned.purchasePrice),
+    )
+}
+
+/** Local CCU catalog boundary; the planner never calls the legacy paid service. */
+class ProductionCcuRepository(
+    private val source: ProductionCacheDataSource? = null,
+    private val m80Image: Int = com.refuge.next.R.drawable.m80_hero,
+    private val fallbackImage: Int = com.refuge.next.R.drawable.ship_placeholder,
+) : CcuRepository {
+    override suspend fun ships(): List<CcuShip> = source?.ccuShips(m80Image, fallbackImage) ?: listOf(
+        CcuShip("m80", "M80", 30_000, com.refuge.next.R.drawable.m80_hero),
+        CcuShip("aurora", "极光 Mk I ES", 2_000, com.refuge.next.R.drawable.ship_placeholder),
+        CcuShip("atls", "ATLS", 4_000, com.refuge.next.R.drawable.ship_placeholder),
+    )
+
+    override suspend fun owned(): List<OwnedCcu> = source?.ownedCcu() ?: listOf(
+        OwnedCcu("ccu-1", "Aurora → M80 CCU", 500, "M80"),
+    )
+}
+
+data class CcuShip(val id: String, val name: String, val purchasePrice: Int, val imageRes: Int)
+
+data class OwnedCcu(val id: String, val title: String, val purchasePrice: Int, val appliedTo: String)
+
+data class CcuChainStep(
+    val from: String,
+    val to: String,
+    val purchasePrice: Int,
+)
+
+private val productionToolGroups: List<Pair<String, List<ToolItem>>> = listOf(
     "账户与查询" to listOf(
         ToolItem("crowdfunding", "众筹查询", "查看项目进度和支持统计"),
         ToolItem("player-search", "玩家搜索", "通过 Handle 查询公开资料"),
@@ -95,37 +156,38 @@ val toolGroups: List<Pair<String, List<ToolItem>>> = listOf(
         ToolItem("test-center", "测试中心", "验证本地缓存、Glass 和运行状态"),
         ToolItem("rsi", "RSI 快捷入口", "打开常用 RSI 资料入口"),
     ),
+    "RSI 快捷入口" to listOf(
+        ToolItem("web-hangar", "网页机库", "打开 RSI 网页机库"),
+        ToolItem("web-buyback", "网页回购", "打开 RSI 网页回购"),
+        ToolItem("my-fleet", "我的舰队", "打开组织舰队页面"),
+        ToolItem("referral-program", "邀请计划", "打开 RSI 邀请计划"),
+        ToolItem("spectrum", "光谱论坛", "打开 Spectrum 社区"),
+        ToolItem("service-center", "服务中心", "打开 RSI 服务中心"),
+        ToolItem("roadmap", "路线图", "打开 RSI 路线图"),
+        ToolItem("service-status", "服务状态", "打开 RSI 服务状态"),
+    ),
 )
 
-interface UtilityRepository {
-    suspend fun groups(): List<Pair<String, List<ToolItem>>>
-}
-
-class CachedUtilityRepository : UtilityRepository {
-    override suspend fun groups(): List<Pair<String, List<ToolItem>>> = toolGroups
-}
-
-interface CcuRepository {
-    suspend fun ships(): List<CcuShip>
-    suspend fun owned(): List<OwnedCcu>
-}
-
-/** Local CCU catalog boundary; the planner never calls the legacy paid service. */
-class CachedCcuRepository : CcuRepository {
-    override suspend fun ships(): List<CcuShip> = listOf(
-        CcuShip("m80", "M80", 30_000, com.refuge.next.R.drawable.m80_hero),
-        CcuShip("aurora", "极光 Mk I ES", 2_000, com.refuge.next.R.drawable.ship_placeholder),
-        CcuShip("atls", "ATLS", 4_000, com.refuge.next.R.drawable.ship_placeholder),
-    )
-
-    override suspend fun owned(): List<OwnedCcu> = listOf(
-        OwnedCcu("ccu-1", "Aurora → M80 CCU", 500, "M80"),
-    )
-}
-
-data class CcuShip(val id: String, val name: String, val purchasePrice: Int, val imageRes: Int)
-
-data class OwnedCcu(val id: String, val title: String, val purchasePrice: Int, val appliedTo: String)
+private val productionToolDetails: Map<String, ToolDetail> = mapOf(
+    "crowdfunding" to ToolDetail("crowdfunding", listOf("当前支持项目" to "3 个", "累计支持" to "$140", "最近同步" to "2026-08-20")),
+    "player-search" to ToolDetail("player-search", listOf("查询范围" to "公开 Handle", "最近查询" to "NocturnePilot", "状态" to "本地只读")),
+    "social" to ToolDetail("social", listOf("组织" to "星环城 · 社区等级 4", "待处理邀请" to "2 条", "最近联系" to "NocturnePilot · 在线")),
+    "gift-redeem" to ToolDetail("gift-redeem", listOf("待兑换礼包" to "2 条", "最近礼物码" to "RAVEN-7K2Q", "状态" to "本地待处理")),
+    "ships" to ToolDetail("ships", listOf("资料分类" to "舰船", "条目" to "本地目录", "入口" to "终端")),
+    "equipment" to ToolDetail("equipment", listOf("资料分类" to "装备、护盾、武器", "条目" to "本地目录", "入口" to "终端")),
+    "referrals" to ToolDetail("referrals", listOf("邀请人数" to "3", "已完成" to "2", "最近同步" to "2026-08-20")),
+    "referral-reverse" to ToolDetail("referral-reverse", listOf("邀请人" to "Raveniume", "关系记录" to "3 条", "最近同步" to "2026-08-20")),
+    "test-center" to ToolDetail("test-center", listOf("Glass pipeline" to "PASS", "本地缓存" to "PASS", "破坏性请求" to "拦截")),
+    "rsi" to ToolDetail("rsi", listOf("入口" to "RSI 资料", "外部跳转" to "未启用", "账户变更" to "不会执行")),
+    "web-hangar" to ToolDetail("web-hangar", listOf("入口" to "RSI 网页机库", "账户变更" to "不会执行"), "https://robertsspaceindustries.com/account/pledges"),
+    "web-buyback" to ToolDetail("web-buyback", listOf("入口" to "RSI 网页回购", "账户变更" to "不会执行"), "https://robertsspaceindustries.com/account/buy-back-pledges"),
+    "my-fleet" to ToolDetail("my-fleet", listOf("入口" to "RSI 组织舰队", "账户变更" to "不会执行"), "https://robertsspaceindustries.com/account/organization"),
+    "referral-program" to ToolDetail("referral-program", listOf("入口" to "RSI 邀请计划", "账户变更" to "不会执行"), "https://robertsspaceindustries.com/referral-program"),
+    "spectrum" to ToolDetail("spectrum", listOf("入口" to "Spectrum 社区", "账户变更" to "不会执行"), "https://robertsspaceindustries.com/spectrum/community/SC"),
+    "service-center" to ToolDetail("service-center", listOf("入口" to "RSI 服务中心", "账户变更" to "不会执行"), "https://support.robertsspaceindustries.com/"),
+    "roadmap" to ToolDetail("roadmap", listOf("入口" to "RSI 路线图", "账户变更" to "不会执行"), "https://robertsspaceindustries.com/roadmap/progress-tracker/teams/info"),
+    "service-status" to ToolDetail("service-status", listOf("入口" to "RSI 服务状态", "账户变更" to "不会执行"), "https://status.robertsspaceindustries.com/"),
+)
 
 fun eligibleTargetShips(seed: CcuShip, ships: Iterable<CcuShip>): List<CcuShip> =
     ships.filter { it.purchasePrice > seed.purchasePrice }

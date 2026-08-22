@@ -1,5 +1,8 @@
 package com.refuge.next.screens
 
+import android.content.Intent
+import android.net.Uri
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -51,7 +55,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.Backdrop
 import com.refuge.next.R
-import com.refuge.next.data.CachedTerminalRepository
+import com.refuge.next.data.ProductionTerminalRepository
 import com.refuge.next.data.CcuPlan
 import com.refuge.next.data.CcuRepository
 import com.refuge.next.data.CcuShip
@@ -66,6 +70,10 @@ import com.refuge.next.data.TerminalCategory
 import com.refuge.next.data.TerminalItem
 import com.refuge.next.data.TerminalRepository
 import com.refuge.next.data.ToolItem
+import com.refuge.next.data.ToolDetail
+import com.refuge.next.data.DestructiveAction
+import com.refuge.next.data.SafeNoOpDestructiveActionExecutor
+import com.refuge.next.data.ProductionCacheManifest
 import com.refuge.next.data.formatUsd
 import com.refuge.next.design.RefugeIconSize
 import com.refuge.next.design.RefugePalette
@@ -181,7 +189,7 @@ fun TerminalScreen(
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
-    repository: TerminalRepository = remember { CachedTerminalRepository() },
+    repository: TerminalRepository = remember { ProductionTerminalRepository() },
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
 ) {
@@ -195,10 +203,15 @@ fun TerminalScreen(
     var pricedOnly by remember { mutableStateOf(false) }
     var taggedOnly by remember { mutableStateOf(false) }
     var selectedItem by remember { mutableStateOf<TerminalItem?>(null) }
+    var loadAttempt by remember { mutableIntStateOf(0) }
+    var loadError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(repository) {
+    LaunchedEffect(repository, loadAttempt) {
         loading = true
-        items = repository.items()
+        loadError = null
+        runCatching { repository.items() }
+            .onSuccess { items = it }
+            .onFailure { loadError = it.message ?: "终端缓存读取失败" }
         loading = false
     }
     val category = TerminalCategory.entries[categoryIndex]
@@ -258,7 +271,9 @@ fun TerminalScreen(
                 }
             }
             if (loading) {
-                items(4, key = { "terminal-loading-$it" }) { TerminalSkeleton(palette) }
+                item { ProductionLoadingState(backdrop, palette, "正在读取终端资料") }
+            } else if (loadError != null) {
+                item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
             } else if (visible.isEmpty()) {
                 item { ProductionEmptyState(palette, "暂无${category.label}资料") }
             } else {
@@ -347,14 +362,26 @@ fun ProfileScreen(
 ) {
     var profileData by remember { mutableStateOf(ProfileData()) }
     var profileToolGroups by remember { mutableStateOf(emptyList<Pair<String, List<ToolItem>>>()) }
-    LaunchedEffect(profileRepository) {
-        profileData = profileRepository.profile()
-    }
-    LaunchedEffect(utilityRepository) {
-        profileToolGroups = utilityRepository.groups()
+    var profileLoading by remember { mutableStateOf(true) }
+    var profileError by remember { mutableStateOf<String?>(null) }
+    var loadAttempt by remember { mutableIntStateOf(0) }
+    LaunchedEffect(profileRepository, utilityRepository, loadAttempt) {
+        profileLoading = true
+        profileError = null
+        runCatching {
+            profileRepository.profile() to utilityRepository.groups()
+        }.onSuccess { (profile, groups) ->
+            profileData = profile
+            profileToolGroups = groups
+        }.onFailure { profileError = it.message ?: "账户缓存读取失败" }
+        profileLoading = false
     }
     val profile = profileData.copy(isOnline = isOnline)
     var selectedTool by remember { mutableStateOf<ToolItem?>(null) }
+    var selectedToolDetail by remember { mutableStateOf<ToolDetail?>(null) }
+    LaunchedEffect(selectedTool, utilityRepository) {
+        selectedToolDetail = selectedTool?.let { utilityRepository.detail(it.id) }
+    }
     PageGlassScope(
         backdrop = backdrop,
         content = {
@@ -374,12 +401,18 @@ fun ProfileScreen(
                     },
                 )
             }
-            item { ProfileHero(backdrop, palette, profile) }
-            item { ProfileStats(backdrop, palette, profile) }
-            item { ProfileAccountGroup(backdrop, palette, profile) }
-            item { ProfileOrganization(backdrop, palette) }
-            item { ProfileUtilities(backdrop, palette, profileToolGroups) { selectedTool = it } }
-            item { ProfileSettingsButton(backdrop, palette) { onNavigate(5) } }
+            if (profileLoading) {
+                item { ProductionLoadingState(backdrop, palette, "正在读取账户资料") }
+            } else if (profileError != null) {
+                item { ProductionErrorState(backdrop, palette, profileError!!, onRetry = { loadAttempt++ }) }
+            } else {
+                item { ProfileHero(backdrop, palette, profile) }
+                item { ProfileStats(backdrop, palette, profile) }
+                item { ProfileAccountGroup(backdrop, palette, profile) }
+                item { ProfileOrganization(backdrop, palette) }
+                item { ProfileUtilities(backdrop, palette, profileToolGroups) { selectedTool = it } }
+                item { ProfileSettingsButton(backdrop, palette) { onNavigate(5) } }
+            }
         }
         },
         overlay = { pageBackdrop ->
@@ -387,10 +420,8 @@ fun ProfileScreen(
         },
     )
     selectedTool?.let { tool ->
-        if (tool.id == "social") {
-            SocialToolSheet(backdrop, palette) { selectedTool = null }
-        } else {
-            ToolDataSheet(backdrop, palette, tool) { selectedTool = null }
+        selectedToolDetail?.let { detail ->
+            ToolDataSheet(backdrop, palette, tool, detail) { selectedTool = null }
         }
     }
 }
@@ -485,7 +516,9 @@ private fun ProfileUtilities(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
         Text("实用工具", style = RefugeTypography.headline(palette))
-        groups.forEach { (group, tools) ->
+        if (groups.isEmpty()) {
+            ProductionEmptyState(palette, "暂无可用工具")
+        } else groups.forEach { (group, tools) ->
             Text(group, style = RefugeTypography.caption(palette))
             tools.forEach { tool ->
                 RefugeGlassControl(
@@ -572,11 +605,31 @@ fun ToolsScreen(
     onToggleOnline: () -> Unit,
 ) {
     var selectedTool by remember { mutableStateOf<ToolItem?>(null) }
+    var selectedToolDetail by remember { mutableStateOf<ToolDetail?>(null) }
     var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var groups by remember { mutableStateOf(emptyList<Pair<String, List<ToolItem>>>()) }
-    LaunchedEffect(utilityRepository) {
-        groups = utilityRepository.groups()
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var loadAttempt by remember { mutableIntStateOf(0) }
+    LaunchedEffect(utilityRepository, loadAttempt) {
+        loading = true
+        loadError = null
+        runCatching { utilityRepository.groups() }
+            .onSuccess { groups = it }
+            .onFailure { loadError = it.message ?: "工具目录读取失败" }
+        loading = false
+    }
+    LaunchedEffect(selectedTool, utilityRepository) {
+        selectedToolDetail = selectedTool?.let { utilityRepository.detail(it.id) }
+    }
+    val visibleGroups = remember(groups, query) {
+        groups.mapNotNull { (group, tools) ->
+            val visibleTools = tools.filter {
+                query.isBlank() || it.title.contains(query, ignoreCase = true) || it.subtitle.contains(query, ignoreCase = true)
+            }
+            visibleTools.takeIf { it.isNotEmpty() }?.let { group to it }
+        }
     }
     PageGlassScope(
         backdrop = backdrop,
@@ -607,11 +660,15 @@ fun ToolsScreen(
                     )
                 }
             }
-            groups.forEach { (group, tools) ->
-                val visibleTools = tools.filter {
-                    query.isBlank() || it.title.contains(query, ignoreCase = true) || it.subtitle.contains(query, ignoreCase = true)
-                }
-                if (visibleTools.isNotEmpty()) {
+            if (loading) {
+                item { ProductionLoadingState(backdrop, palette, "正在读取工具目录") }
+            } else if (loadError != null) {
+                item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
+            }
+            if (!loading && loadError == null && visibleGroups.isEmpty()) {
+                item { ProductionEmptyState(palette, if (query.isBlank()) "暂无可用工具" else "没有匹配的工具") }
+            }
+            visibleGroups.forEach { (group, visibleTools) ->
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
                         Text(group, style = RefugeTypography.headline(palette))
@@ -625,7 +682,6 @@ fun ToolsScreen(
                         }
                     }
                 }
-                }
             }
         }
         },
@@ -634,10 +690,8 @@ fun ToolsScreen(
         },
     )
     selectedTool?.let { tool ->
-        if (tool.id == "social") {
-            SocialToolSheet(backdrop, palette) { selectedTool = null }
-        } else {
-            ToolDataSheet(backdrop, palette, tool) { selectedTool = null }
+        selectedToolDetail?.let { detail ->
+            ToolDataSheet(backdrop, palette, tool, detail) { selectedTool = null }
         }
     }
 }
@@ -664,18 +718,16 @@ private fun toolIcon(tool: ToolItem) = when (tool.id) {
     "equipment" -> RefugeIcons.inventory
     "referrals", "referral-reverse" -> RefugeIcons.personAdd
     "test-center" -> RefugeIcons.science
+    "web-hangar", "web-buyback", "my-fleet", "referral-program", "spectrum", "service-center", "roadmap", "service-status" -> RefugeIcons.hangarOpenExternal
     else -> RefugeIcons.description
 }
 
 @Composable
-private fun SocialToolSheet(backdrop: LayerBackdrop, palette: RefugePalette, onDismiss: () -> Unit) {
-    RefugeLiquidSheet(backdrop, palette, "社交", onDismiss) { modalBackdrop ->
-        Text("组织与邀请", style = RefugeTypography.secondary(palette))
-        listOf(
-            "组织" to "星环城 · 社区等级 4",
-            "待处理邀请" to "2 条",
-            "最近联系" to "NocturnePilot · 在线",
-        ).forEach { (label, value) ->
+private fun ToolDataSheet(backdrop: LayerBackdrop, palette: RefugePalette, tool: ToolItem, detail: ToolDetail, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    RefugeLiquidSheet(backdrop, palette, tool.title, onDismiss) { modalBackdrop ->
+        Text(tool.subtitle, style = RefugeTypography.secondary(palette))
+        detail.rows.forEach { (label, value) ->
             RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
@@ -683,32 +735,10 @@ private fun SocialToolSheet(backdrop: LayerBackdrop, palette: RefugePalette, onD
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ToolDataSheet(backdrop: LayerBackdrop, palette: RefugePalette, tool: ToolItem, onDismiss: () -> Unit) {
-    val rows = when (tool.id) {
-        "crowdfunding" -> listOf("当前支持项目" to "3 个", "累计支持" to "$140", "最近同步" to "2026-08-20")
-        "player-search" -> listOf("查询范围" to "公开 Handle", "最近查询" to "NocturnePilot", "状态" to "本地只读")
-        "gift-redeem" -> listOf("待兑换礼包" to "2 条", "最近礼物码" to "RAVEN-7K2Q", "状态" to "本地待处理")
-        "ships" -> listOf("资料分类" to "舰船", "条目" to "本地目录", "入口" to "终端")
-        "equipment" -> listOf("资料分类" to "装备、护盾、武器", "条目" to "本地目录", "入口" to "终端")
-        "referrals" -> listOf("邀请人数" to "3", "已完成" to "2", "最近同步" to "2026-08-20")
-        "referral-reverse" -> listOf("邀请人" to "Raveniume", "关系记录" to "3 条", "最近同步" to "2026-08-20")
-        "test-center" -> listOf("Glass pipeline" to "PASS", "本地缓存" to "PASS", "破坏性请求" to "拦截")
-        "rsi" -> listOf("入口" to "RSI 资料", "外部跳转" to "未启用", "账户变更" to "不会执行")
-        else -> listOf("状态" to "本地只读", "数据源" to "缓存 adapter")
-    }
-    RefugeLiquidSheet(backdrop, palette, tool.title, onDismiss) { modalBackdrop ->
-        Text(tool.subtitle, style = RefugeTypography.secondary(palette))
-        rows.forEach { (label, value) ->
-            RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
-                    Text(value, style = RefugeTypography.secondary(palette))
-                }
-            }
+        detail.externalUrl?.let { url ->
+            RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.hangarOpenExternal, "打开外部入口", {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            }, Modifier.align(Alignment.End))
         }
     }
 }
@@ -721,12 +751,17 @@ fun SettingsScreen(
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
     onToggleTheme: () -> Unit,
+    syncLogs: Boolean,
+    localOnly: Boolean,
+    onToggleSyncLogs: () -> Unit,
+    onToggleLocalOnly: () -> Unit,
+    onClearCache: () -> Unit,
+    cacheInfo: ProductionCacheManifest,
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
 ) {
-    var syncLogs by remember { mutableStateOf(true) }
-    var localOnly by remember { mutableStateOf(true) }
     var showAbout by remember { mutableStateOf(false) }
+    var cacheCleared by remember { mutableStateOf(false) }
     PageGlassScope(
         backdrop = backdrop,
         content = {
@@ -749,11 +784,16 @@ fun SettingsScreen(
             }
             item {
                 SettingsGroup(palette, "数据") {
-                    SettingsToggleRow(backdrop, palette, "实时同步日志", if (syncLogs) "开启" else "关闭", syncLogs) { syncLogs = !syncLogs }
+                    SettingsToggleRow(backdrop, palette, "实时同步日志", if (syncLogs) "开启" else "关闭", syncLogs, onToggleSyncLogs)
                     DividerLine(palette)
-                    SettingsToggleRow(backdrop, palette, "仅使用本地资料", if (localOnly) "开启" else "关闭", localOnly) { localOnly = !localOnly }
+                    SettingsToggleRow(backdrop, palette, "仅使用本地资料", if (localOnly) "开启" else "关闭", localOnly, onToggleLocalOnly)
                     DividerLine(palette)
-                    SettingsActionRow(palette, "清理缓存", "不会删除机库或账户数据") {}
+                    SettingsActionRow(palette, "清理缓存", if (cacheCleared) "已清理本地临时标记" else "不会删除机库或账户数据") {
+                        onClearCache()
+                        cacheCleared = true
+                    }
+                    DividerLine(palette)
+                    SettingsActionRow(palette, "数据版本", cacheInfo.label) {}
                 }
             }
             item {
@@ -771,7 +811,7 @@ fun SettingsScreen(
             RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
         },
     )
-    if (showAbout) ProductionNoticeSheet(backdrop, palette, "RefugeNext", "Liquid Glass production migration is active.\n\nReference wallpaper is temporary and will be replaced by the final Refuge production background.") { showAbout = false }
+    if (showAbout) ProductionNoticeSheet(backdrop, palette, "RefugeNext", "Liquid Glass production migration is active.\n\n${cacheInfo.source}\n${cacheInfo.label}") { showAbout = false }
 }
 
 @Composable
@@ -817,12 +857,26 @@ fun CcuScreen(
     var showTarget by remember { mutableStateOf(false) }
     var showOwned by remember { mutableStateOf(false) }
     var owned by remember { mutableStateOf(emptyList<OwnedCcu>()) }
-    LaunchedEffect(ccuRepository) {
-        val loadedShips = ccuRepository.ships()
-        ships = loadedShips
-        owned = ccuRepository.owned()
-        seed = loadedShips.getOrNull(1) ?: loadedShips.firstOrNull()
-        target = loadedShips.firstOrNull()
+    var selectedOwned by remember { mutableStateOf<OwnedCcu?>(null) }
+    var chain by remember { mutableStateOf(emptyList<com.refuge.next.data.CcuChainStep>()) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var loadAttempt by remember { mutableIntStateOf(0) }
+    var pendingNotice by remember { mutableStateOf<String?>(null) }
+    var chainError by remember { mutableStateOf<String?>(null) }
+    val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
+    LaunchedEffect(ccuRepository, loadAttempt) {
+        loading = true
+        loadError = null
+        runCatching {
+            ccuRepository.ships() to ccuRepository.owned()
+        }.onSuccess { (loadedShips, loadedOwned) ->
+            ships = loadedShips
+            owned = loadedOwned
+            seed = loadedShips.getOrNull(1) ?: loadedShips.firstOrNull()
+            target = loadedShips.firstOrNull()
+        }.onFailure { loadError = it.message ?: "CCU 目录读取失败" }
+        loading = false
     }
     val availableTargets = remember(seed, ships) { seed?.let { eligibleTargetShips(it, ships) } ?: emptyList() }
     val availableTargetIds = remember(availableTargets) { availableTargets.map { it.id } }
@@ -844,8 +898,12 @@ fun CcuScreen(
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
         ) {
             item { ProductionHeader(palette, "升级规划", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = { HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(rootTab) }) }) }
-            if (seed == null) {
-                item { ProductionNoticeBlock(palette, "升级规划", "正在从本地目录加载舰船与 CCU 数据…") }
+            if (loading) {
+                item { ProductionLoadingState(backdrop, palette, "正在读取舰船与 CCU 目录") }
+            } else if (loadError != null) {
+                item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
+            } else if (seed == null) {
+                item { ProductionEmptyState(palette, "暂无可用的 CCU 目录") }
             } else item {
                 Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                     Text("选择舰船", style = RefugeTypography.headline(palette))
@@ -873,6 +931,18 @@ fun CcuScreen(
                     }
                 }
             }
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
+                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.upgrade, "安全购买意图", {
+                        pendingNotice = safeNoOp.execute(DestructiveAction.UPGRADE_PURCHASE).message
+                    }, Modifier.weight(1f))
+                    if (plan != null) {
+                        RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.description, "查看升级链", {
+                            selectedOwned = owned.firstOrNull()
+                        }, Modifier.weight(1f))
+                    }
+                }
+            }
             item { ProductionNoticeBlock(palette, "规则", "飞船价值 = 种子舰船实际购买价 + 已拥有 CCU purchase price + 还需支付金额") }
         }
         },
@@ -883,7 +953,20 @@ fun CcuScreen(
     if (showSeed) ShipSelectorSheet(backdrop, palette, "选择起始舰船", ships, onDismiss = { showSeed = false }) { seed = it; showSeed = false }
     if (showTarget) ShipSelectorSheet(backdrop, palette, "选择目标舰船", availableTargets, onDismiss = { showTarget = false }) { target = it; showTarget = false }
     if (showOwned) {
-        ProductionListSheet(backdrop, palette, "当前拥有 CCU", owned.map { "${it.title} · ${formatUsd(it.purchasePrice)} · ${it.appliedTo}" }) { showOwned = false }
+        OwnedCcuSheet(backdrop, palette, owned, onRemove = { removed -> owned = owned.filterNot { it.id == removed.id } }, onChain = { chain = emptyList(); chainError = null; selectedOwned = it; showOwned = false }, onDismiss = { showOwned = false })
+    }
+    selectedOwned?.let { ownedCcu ->
+        if (chain.isEmpty() && chainError == null) {
+            LaunchedEffect(ownedCcu, ccuRepository) {
+                runCatching { ccuRepository.chain(ownedCcu) }
+                    .onSuccess { chain = it }
+                    .onFailure { chainError = it.message ?: "升级链读取失败" }
+            }
+        }
+        CcuChainSheet(backdrop, palette, ownedCcu, chain, chainError) { selectedOwned = null; chain = emptyList(); chainError = null }
+    }
+    pendingNotice?.let { notice ->
+        ProductionNoticeSheet(backdrop, palette, "安全动作", notice) { pendingNotice = null }
     }
 }
 
@@ -931,6 +1014,67 @@ private fun ShipSelectorSheet(
 }
 
 @Composable
+private fun OwnedCcuSheet(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    owned: List<OwnedCcu>,
+    onRemove: (OwnedCcu) -> Unit,
+    onChain: (OwnedCcu) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    RefugeLiquidSheet(backdrop, palette, "当前拥有 CCU", onDismiss) { modalBackdrop ->
+        if (owned.isEmpty()) {
+            Text("当前没有已拥有 CCU", style = RefugeTypography.body(palette))
+        } else {
+            owned.forEach { entry ->
+                RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(entry.title, style = RefugeTypography.body(palette).copy(color = palette.text))
+                            Text("${formatUsd(entry.purchasePrice)} · ${entry.appliedTo}", style = RefugeTypography.caption(palette))
+                        }
+                        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.description, "链路", { onChain(entry) })
+                        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "移除", { onRemove(entry) })
+                    }
+                }
+            }
+        }
+        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+    }
+}
+
+@Composable
+private fun CcuChainSheet(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    owned: OwnedCcu,
+    chain: List<com.refuge.next.data.CcuChainStep>,
+    error: String?,
+    onDismiss: () -> Unit,
+) {
+    RefugeLiquidSheet(backdrop, palette, "升级链详情", onDismiss) { modalBackdrop ->
+        Text(owned.title, style = RefugeTypography.headline(palette))
+        if (error != null) {
+            ProductionErrorState(modalBackdrop, palette, error, onRetry = onDismiss)
+        } else if (chain.isEmpty()) {
+            Text("正在读取升级链…", style = RefugeTypography.secondary(palette))
+        } else {
+            chain.forEach { step ->
+                RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(step.from, style = RefugeTypography.body(palette).copy(color = palette.text))
+                        Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
+                        Text(step.to, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
+                        Text(formatUsd(step.purchasePrice), style = RefugeTypography.value(palette).copy(color = palette.accent))
+                    }
+                }
+            }
+        }
+        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+    }
+}
+
+@Composable
 private fun TerminalDetailSheet(backdrop: LayerBackdrop, palette: RefugePalette, item: TerminalItem, onDismiss: () -> Unit) {
     ProductionNoticeSheet(backdrop, palette, item.name, "${item.manufacturer} · ${item.category.label}\n\n${item.description}\n\n${item.value}    ${item.usd}", onDismiss)
 }
@@ -939,16 +1083,6 @@ private fun TerminalDetailSheet(backdrop: LayerBackdrop, palette: RefugePalette,
 private fun ProductionNoticeBlock(palette: RefugePalette, title: String, body: String) {
     RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) { Text(title, style = RefugeTypography.headline(palette)); Text(body, style = RefugeTypography.secondary(palette)) }
-    }
-}
-
-@Composable
-private fun ProductionEmptyState(palette: RefugePalette, text: String) {
-    RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth().height(120.dp), padding = PaddingValues(20.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
-            Icon(RefugeIcons.search, null, tint = palette.textMuted)
-            Text(text, style = RefugeTypography.body(palette))
-        }
     }
 }
 
@@ -963,7 +1097,11 @@ private fun ProductionNoticeSheet(backdrop: LayerBackdrop, palette: RefugePalett
 @Composable
 fun ProductionListSheet(backdrop: LayerBackdrop, palette: RefugePalette, title: String, entries: List<String>, onDismiss: () -> Unit) {
     RefugeLiquidSheet(backdrop, palette, title, onDismiss) { modalBackdrop ->
-        entries.forEach { entry -> RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) { Text(entry, style = RefugeTypography.body(palette)) } }
+        if (entries.isEmpty()) {
+            Text("暂无记录", style = RefugeTypography.body(palette))
+        } else {
+            entries.forEach { entry -> RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) { Text(entry, style = RefugeTypography.body(palette)) } }
+        }
         RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
     }
 }

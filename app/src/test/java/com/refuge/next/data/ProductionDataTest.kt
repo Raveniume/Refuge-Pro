@@ -69,9 +69,40 @@ class ProductionDataTest {
     }
 
     @Test
-    fun terminalSnapshotCoversLegacyDatabaseCategories() = kotlinx.coroutines.runBlocking {
-        val categories = CachedTerminalRepository().items().map { it.category }.toSet()
+    fun terminalCacheCoversLegacyDatabaseCategories() = kotlinx.coroutines.runBlocking {
+        val categories = ProductionTerminalRepository().items().map { it.category }.toSet()
         assertEquals(TerminalCategory.entries.toSet(), categories)
+    }
+
+    @Test
+    fun utilityDetailsComeFromTheProductionRepositoryBoundary() = kotlinx.coroutines.runBlocking {
+        val detail = ProductionUtilityRepository().detail("crowdfunding")
+        assertEquals("3 个", detail.rows.first { it.first == "当前支持项目" }.second)
+        assertEquals(null, detail.externalUrl)
+    }
+
+    @Test
+    fun externalUtilityEntriesRetainTheirSafeNavigationContract() = kotlinx.coroutines.runBlocking {
+        val detail = ProductionUtilityRepository().detail("web-hangar")
+        assertEquals("https://robertsspaceindustries.com/account/pledges", detail.externalUrl)
+        assertEquals("不会执行", detail.rows.first { it.first == "账户变更" }.second)
+    }
+
+    @Test
+    fun ownedCcuChainIsAvailableWithoutRemotePlanning() = kotlinx.coroutines.runBlocking {
+        val owned = ProductionCcuRepository().owned().single()
+        val chain = ProductionCcuRepository().chain(owned)
+        assertEquals("Aurora", chain.single().from)
+        assertEquals("M80", chain.single().to)
+    }
+
+    @Test
+    fun userStatusIsOneSharedToggleSource() {
+        val source = UserStatusSource(initialOnline = true)
+        source.toggle()
+        assertEquals(false, source.isOnline)
+        source.toggle()
+        assertEquals(true, source.isOnline)
     }
 
     @Test

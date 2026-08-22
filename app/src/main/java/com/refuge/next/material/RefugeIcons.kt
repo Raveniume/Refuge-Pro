@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.KeyboardDoubleArrowUp
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.Recycling
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.Storefront
@@ -51,6 +52,7 @@ object RefugeIcons {
     val hangarOpenExternal: ImageVector = Icons.Outlined.ArrowOutward
     val hangarUpgrade: ImageVector = Icons.Outlined.KeyboardDoubleArrowUp
     val reclaim: ImageVector = Icons.Outlined.Recycling
+    val refresh: ImageVector = Icons.Outlined.Refresh
     val more: ImageVector = Icons.Outlined.MoreHoriz
     val settings: ImageVector = Icons.Outlined.Settings
     val chevron: ImageVector = Icons.Outlined.ChevronRight
