@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -34,36 +35,39 @@ fun RefugeDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.Center) {
-            RefugeModalSurface(
-                palette = palette,
-                modifier = Modifier
+            ModalGlassScope(
+                Modifier
                     .fillMaxWidth(.88f)
                     .padding(20.dp),
-                radius = 24.dp,
-                fill = palette.contentSurfaceStrong,
-                padding = androidx.compose.foundation.layout.PaddingValues(24.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(title, style = RefugeTypography.title(palette))
-                    Text(body, style = RefugeTypography.body(palette))
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        RefugeGlassControl(
-                            backdrop = backdrop,
-                            palette = palette,
-                            onClick = onPrimary,
-                            contentDescription = primaryLabel,
-                            padding = androidx.compose.foundation.layout.PaddingValues(
-                                horizontal = 18.dp,
-                                vertical = 10.dp,
-                            ),
+                base = {
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .background(palette.contentSurfaceStrong, RoundedCornerShape(24.dp)),
+                    )
+                },
+            ) { modalBackdrop ->
+                    Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(title, style = RefugeTypography.title(palette))
+                        Text(body, style = RefugeTypography.body(palette))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
                         ) {
-                            Text(primaryLabel, style = RefugeTypography.body(palette))
+                            RefugeGlassControl(
+                                backdrop = modalBackdrop,
+                                palette = palette,
+                                onClick = onPrimary,
+                                contentDescription = primaryLabel,
+                                padding = androidx.compose.foundation.layout.PaddingValues(
+                                    horizontal = 18.dp,
+                                    vertical = 10.dp,
+                                ),
+                            ) {
+                                Text(primaryLabel, style = RefugeTypography.body(palette))
+                            }
                         }
                     }
-                }
             }
         }
     }

@@ -59,9 +59,12 @@ import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeCompactUtilityPill
+import com.refuge.next.material.PageGlassScope
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
 import com.refuge.next.material.RefugeLiquidSheet
+import com.refuge.next.material.RefugeLiquidSegmented
+import com.refuge.next.material.RefugeLiquidIconButton
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.reference.ReferenceLiquidButton
@@ -118,7 +121,9 @@ fun StoreScreen(
             .toList()
     }
 
-    Box(Modifier.fillMaxSize()) {
+    PageGlassScope(
+        backdrop = backdrop,
+        content = {
         LazyColumn(
             modifier = Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(
@@ -154,7 +159,7 @@ fun StoreScreen(
                 }
             }
             item {
-                ReferenceSegmentedControl(
+                RefugeLiquidSegmented(
                     backdrop = backdrop,
                     isDark = isDark,
                     labels = StoreCategory.entries.map { it.label },
@@ -189,8 +194,11 @@ fun StoreScreen(
             }
         }
 
-        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
-    }
+        },
+        overlay = { pageBackdrop ->
+            RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
+        },
+    )
 
     if (showFilter) {
         StoreFilterSheet(
@@ -245,27 +253,32 @@ private fun StoreHeader(
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painter = painterResource(R.drawable.user_profile_pic),
-                contentDescription = "用户头像",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
-                    .semantics { contentDescription = "切换在线状态"; role = Role.Button }
-                    .clickable(onClick = onToggleOnline),
-            )
+            Box(
+                Modifier.size(46.dp),
+                contentAlignment = Alignment.BottomEnd,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.user_profile_pic),
+                    contentDescription = "用户头像",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(CircleShape)
+                        .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
+                        .semantics { contentDescription = "切换在线状态"; role = Role.Button }
+                        .clickable(onClick = onToggleOnline),
+                )
+                Box(
+                    Modifier
+                        .size(9.dp)
+                        .background(if (isOnline) palette.positive else palette.textMuted, CircleShape)
+                        .border(.5.dp, palette.background.copy(alpha = .72f), CircleShape),
+                )
+            }
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.weight(1f)) {
                 Text("商店", style = RefugeTypography.largeTitle(palette), maxLines = 1)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(7.dp).background(if (isOnline) palette.positive else palette.textMuted, CircleShape))
-                    Spacer(Modifier.width(RefugeSpacing.xxs))
-                    Text(if (isOnline) "在线 · 本地同步" else "离线 · 本地同步", style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
             }
             StoreHeaderAction(backdrop, palette, RefugeIcons.upgrade, "升级", onUpgrade)
             Spacer(Modifier.width(RefugeSpacing.xs))
@@ -273,7 +286,6 @@ private fun StoreHeader(
             Spacer(Modifier.width(RefugeSpacing.xs))
             StoreHeaderAction(backdrop, palette, if (showSearch) RefugeIcons.more else RefugeIcons.search, "搜索商品", onSearch)
         }
-    }
 }
 
 @Composable
@@ -284,13 +296,7 @@ private fun StoreHeaderAction(
     label: String,
     onClick: () -> Unit,
 ) {
-    ReferenceLiquidButton(
-        backdrop = backdrop,
-        onClick = onClick,
-        modifier = Modifier.size(44.dp),
-    ) {
-        Icon(icon, label, tint = palette.textSecondary, modifier = Modifier.size(RefugeIconSize.medium))
-    }
+    RefugeLiquidIconButton(backdrop, icon, label, onClick, Modifier.size(44.dp), iconTint = palette.textSecondary)
 }
 
 @Composable

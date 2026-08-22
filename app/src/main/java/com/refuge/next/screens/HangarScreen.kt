@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,12 +63,17 @@ import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeContentSurface
+import com.refuge.next.material.PageGlassScope
 import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeGlassControl
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeLiquidSheet
+import com.refuge.next.material.RefugeLiquidSegmented
+import com.refuge.next.material.RefugeFloatingAction
+import com.refuge.next.material.RefugeFloatingActionGroup
+import com.refuge.next.material.RefugeLiquidIconButton
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
 import com.refuge.next.reference.ReferenceLiquidButton
 import com.refuge.next.reference.ReferenceSelectionItem
@@ -100,7 +106,9 @@ fun HangarScreen(
         inventory = repository.inventory()
     }
 
-    Box(Modifier.fillMaxSize()) {
+    PageGlassScope(
+        backdrop = backdrop,
+        content = {
         LazyColumn(
             modifier = Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(
@@ -122,7 +130,7 @@ fun HangarScreen(
                 )
             }
             item {
-                ReferenceSegmentedControl(
+                RefugeLiquidSegmented(
                     backdrop = backdrop,
                     isDark = isDark,
                     labels = listOf("机库", "回购", "升级"),
@@ -199,8 +207,11 @@ fun HangarScreen(
             }
         }
 
-        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
-    }
+        },
+        overlay = { pageBackdrop ->
+            RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
+        },
+    )
 
     if (showFilter) FilterSheet(backdrop, palette, onDismiss = { showFilter = false })
     if (showSort) {
@@ -361,45 +372,42 @@ private fun HangarHeader(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Image(
-            painter = painterResource(R.drawable.user_profile_pic),
-            contentDescription = "用户头像",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
-                .semantics { contentDescription = "切换在线状态"; role = Role.Button }
-                .clickable(onClick = onToggleOnline),
-        )
+        Box(
+            Modifier.size(46.dp),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.user_profile_pic),
+                contentDescription = "用户头像",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
+                    .semantics { contentDescription = "切换在线状态"; role = Role.Button }
+                    .clickable(onClick = onToggleOnline),
+            )
+            Box(
+                Modifier
+                    .size(9.dp)
+                    .background(if (isOnline) palette.positive else palette.textMuted, CircleShape)
+                    .border(.5.dp, palette.background.copy(alpha = .72f), CircleShape),
+            )
+        }
         Spacer(Modifier.width(RefugeSpacing.md))
         Column(Modifier.weight(1f)) {
             Text("我的机库", style = RefugeTypography.largeTitle(palette))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(7.dp).background(if (isOnline) palette.positive else palette.textMuted, CircleShape))
-                Spacer(Modifier.width(RefugeSpacing.xxs))
-                Text(if (isOnline) "在线 · 本地同步" else "离线 · 本地同步", style = RefugeTypography.secondary(palette))
-            }
         }
-        ReferenceLiquidButton(
+        RefugeLiquidIconButton(
             backdrop = backdrop,
+            icon = if (palette.background == com.refuge.next.design.RefugeColors.dark.background) RefugeIcons.light else RefugeIcons.dark,
+            contentDescription = "切换明暗主题",
             onClick = onToggleTheme,
             modifier = Modifier.size(44.dp),
-        ) {
-            Icon(
-                if (palette.background == com.refuge.next.design.RefugeColors.dark.background) RefugeIcons.light else RefugeIcons.dark,
-                "切换明暗主题",
-                tint = palette.textSecondary,
-            )
-        }
+            iconTint = palette.textSecondary,
+        )
         Spacer(Modifier.width(RefugeSpacing.xs))
-        ReferenceLiquidButton(
-            backdrop = backdrop,
-            onClick = onOpenDesignLab,
-            modifier = Modifier.size(44.dp),
-        ) {
-            Icon(RefugeIcons.more, "更多操作", tint = palette.textSecondary)
-        }
+        RefugeLiquidIconButton(backdrop, RefugeIcons.more, "更多操作", onOpenDesignLab, Modifier.size(44.dp), iconTint = palette.textSecondary)
     }
 }
 
@@ -563,15 +571,37 @@ private fun HangarDetailSheet(
         palette = palette,
         title = "机库详情",
         onDismiss = onDismiss,
-        modifier = Modifier.fillMaxHeight(.88f),
+        action = { modalBackdrop ->
+            Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+            RefugeCompactUtilityPill(
+                modalBackdrop,
+                palette,
+                RefugeIcons.log,
+                "日志",
+                onLog,
+                Modifier,
+            )
+            RefugeFloatingActionGroup(
+                backdrop = modalBackdrop,
+                palette = palette,
+                actions = listOf(
+                    RefugeFloatingAction(RefugeIcons.gift, "礼物", onDismiss),
+                    RefugeFloatingAction(RefugeIcons.chevron, "跳转", onDismiss),
+                    RefugeFloatingAction(RefugeIcons.upgrade, "升级", onUpgrade),
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            RefugeCompactUtilityPill(
+                modalBackdrop,
+                palette,
+                RefugeIcons.reclaim,
+                "回收",
+                onDismiss,
+                Modifier,
+            )
+        },
     ) { modalBackdrop ->
-        Column(Modifier.fillMaxSize()) {
-            Column(
-                Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
-            ) {
+        Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
                 Row(verticalAlignment = Alignment.Top) {
                     HangarImage(detail.imageRes, "${detail.title} 图片", Modifier.size(112.dp))
                     Spacer(Modifier.width(RefugeSpacing.md))
@@ -596,17 +626,6 @@ private fun HangarDetailSheet(
                     DetailMetadataRow(palette, "从 ${detail.upgradeFrom}", detail.upgradeFromPrice ?: "—")
                     DetailMetadataRow(palette, "到 ${detail.upgradeTo}", detail.upgradeToPrice ?: "—")
                 }
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
-            Row(
-                Modifier.fillMaxWidth().padding(top = RefugeSpacing.sm),
-                horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs),
-            ) {
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.gift, "赠送", onDismiss, Modifier.weight(1f))
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "回收", onDismiss, Modifier.weight(1f))
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.upgrade, "升级", onUpgrade, Modifier.weight(1f))
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.log, "日志", onLog, Modifier.weight(1f))
-            }
         }
     }
 }

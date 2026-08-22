@@ -217,7 +217,9 @@ fun RefugeLiquidToggle(
     val density = LocalDensity.current
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     val scope = rememberCoroutineScope()
-    val dragWidth = with(density) { 20.dp.toPx() }
+    val trackWidth = 64.dp
+    val thumbWidth = 40.dp
+    val dragWidth = with(density) { (trackWidth - thumbWidth - 4.dp).toPx() }
     var didDrag by remember { mutableStateOf(false) }
     var fraction by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
     val drag = remember(scope) {
@@ -267,7 +269,12 @@ fun RefugeLiquidToggle(
             .semantics {
                 role = Role.Switch
                 this.contentDescription = contentDescription
-            },
+            }
+            .clickable(
+                interactionSource = null,
+                indication = null,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(

@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.Backdrop
 import com.refuge.next.R
 import com.refuge.next.data.CachedTerminalRepository
 import com.refuge.next.data.CcuPlan
@@ -71,11 +72,15 @@ import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeContentSurface
+import com.refuge.next.material.PageGlassScope
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeImagePlaceholder
 import com.refuge.next.material.RefugeLightweightGlassSurface
 import com.refuge.next.material.RefugeLiquidToggle
 import com.refuge.next.material.RefugeLiquidSheet
+import com.refuge.next.material.RefugeBottomTabs
+import com.refuge.next.material.RefugeLiquidSegmented
+import com.refuge.next.material.RefugeLiquidIconButton
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.reference.ReferenceLiquidButton
@@ -95,12 +100,12 @@ private val rootTabs = listOf(
 
 @Composable
 fun BoxScope.RootBottomNav(
-    backdrop: LayerBackdrop,
+    backdrop: Backdrop,
     isDark: Boolean,
     selected: Int,
     onNavigate: (Int) -> Unit,
 ) {
-    ReferenceLiquidBottomTabs(
+    RefugeBottomTabs(
         backdrop = backdrop,
         isDark = isDark,
         tabsCount = rootTabs.size,
@@ -128,7 +133,6 @@ fun BoxScope.RootBottomNav(
 private fun ProductionHeader(
     palette: RefugePalette,
     title: String,
-    subtitle: String,
     isOnline: Boolean = true,
     onAvatarClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
@@ -154,7 +158,6 @@ private fun ProductionHeader(
         Spacer(Modifier.width(RefugeSpacing.md))
         Column(Modifier.weight(1f)) {
             Text(title, style = RefugeTypography.largeTitle(palette), maxLines = 1)
-            Text(subtitle, style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         actions()
     }
@@ -198,7 +201,9 @@ fun TerminalScreen(
         if (sortDescending) filtered.sortedByDescending { it.name } else filtered.sortedBy { it.name }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    PageGlassScope(
+        backdrop = backdrop,
+        content = {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
@@ -208,7 +213,6 @@ fun TerminalScreen(
                 ProductionHeader(
                     palette = palette,
                     title = "终端",
-                    subtitle = "舰船与装备资料 · 本地缓存",
                     isOnline = isOnline,
                     onAvatarClick = onToggleOnline,
                     actions = {
@@ -224,7 +228,7 @@ fun TerminalScreen(
                 }
             }
             item {
-                ReferenceSegmentedControl(
+                RefugeLiquidSegmented(
                     backdrop = backdrop,
                     isDark = isDark,
                     labels = TerminalCategory.entries.map { it.label },
@@ -252,8 +256,11 @@ fun TerminalScreen(
                 }
             }
         }
-        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
-    }
+        },
+        overlay = { pageBackdrop ->
+            RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
+        },
+    )
 
     selectedItem?.let { TerminalDetailSheet(backdrop, palette, it) { selectedItem = null } }
     if (showFilter) TerminalFilterSheet(backdrop, palette, pricedOnly, taggedOnly, { pricedOnly = it }, { taggedOnly = it }, { showFilter = false })
@@ -261,9 +268,7 @@ fun TerminalScreen(
 
 @Composable
 private fun HeaderAction(backdrop: LayerBackdrop, palette: RefugePalette, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    ReferenceLiquidButton(backdrop, onClick, Modifier.size(44.dp)) {
-        Icon(icon, label, tint = palette.textSecondary, modifier = Modifier.size(RefugeIconSize.medium))
-    }
+    RefugeLiquidIconButton(backdrop, icon, label, onClick, Modifier.size(44.dp), iconTint = palette.textSecondary)
 }
 
 @Composable
@@ -328,7 +333,9 @@ fun ProfileScreen(
     onToggleOnline: () -> Unit,
 ) {
     val profile = remember(isOnline) { ProfileData(isOnline = isOnline) }
-    Box(Modifier.fillMaxSize()) {
+    PageGlassScope(
+        backdrop = backdrop,
+        content = {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
@@ -338,7 +345,6 @@ fun ProfileScreen(
                 ProductionHeader(
                     palette = palette,
                     title = "我的",
-                    subtitle = "${profile.handle} · 本地资料",
                     isOnline = isOnline,
                     onAvatarClick = onToggleOnline,
                     actions = {
@@ -353,8 +359,11 @@ fun ProfileScreen(
             item { ProfileAccountGroup(backdrop, palette, profile) }
             item { ProfileOrganization(backdrop, palette) }
         }
-        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
-    }
+        },
+        overlay = { pageBackdrop ->
+            RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
+        },
+    )
 }
 
 @Composable
@@ -456,7 +465,9 @@ fun ToolsScreen(
     var selectedTool by remember { mutableStateOf<ToolItem?>(null) }
     var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    Box(Modifier.fillMaxSize()) {
+    PageGlassScope(
+        backdrop = backdrop,
+        content = {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
@@ -466,7 +477,6 @@ fun ToolsScreen(
                 ProductionHeader(
                     palette,
                     "工具",
-                    "查询、资料与测试中心",
                     isOnline = isOnline,
                     onAvatarClick = onToggleOnline,
                     actions = { HeaderAction(backdrop, palette, RefugeIcons.search, "搜索", { showSearch = !showSearch }) },
@@ -505,8 +515,11 @@ fun ToolsScreen(
                 }
             }
         }
-        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
-    }
+        },
+        overlay = { pageBackdrop ->
+            RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
+        },
+    )
     selectedTool?.let { tool ->
         if (tool.id == "social") {
             SocialToolSheet(backdrop, palette) { selectedTool = null }
@@ -596,14 +609,16 @@ fun SettingsScreen(
     var syncLogs by remember { mutableStateOf(true) }
     var localOnly by remember { mutableStateOf(true) }
     var showAbout by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize()) {
+    PageGlassScope(
+        backdrop = backdrop,
+        content = {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
         ) {
             item {
-                ProductionHeader(palette, "设置", "RefugeNext · Design System", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = {
+                ProductionHeader(palette, "设置", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = {
                     HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(4) })
                 })
             }
@@ -633,8 +648,11 @@ fun SettingsScreen(
                 }
             }
         }
-        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
-    }
+        },
+        overlay = { pageBackdrop ->
+            RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
+        },
+    )
     if (showAbout) ProductionNoticeSheet(backdrop, palette, "RefugeNext", "Liquid Glass production migration is active.\n\nReference wallpaper is temporary and will be replaced by the final Refuge production background.") { showAbout = false }
 }
 
@@ -648,7 +666,7 @@ private fun SettingsGroup(palette: RefugePalette, title: String, content: @Compo
 
 @Composable
 private fun SettingsToggleRow(backdrop: LayerBackdrop, palette: RefugePalette, title: String, subtitle: String, checked: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Text(title, style = RefugeTypography.body(palette).copy(color = palette.text)); Text(subtitle, style = RefugeTypography.caption(palette)) }
         RefugeLiquidToggle(backdrop, palette, checked, onClick, title)
     }
@@ -697,13 +715,15 @@ fun CcuScreen(
     val plan = target?.let { CcuPlan(seed, it, owned, additional) }
     val shipValue = plan?.shipValue ?: calculateShipValue(seed.purchasePrice, owned.map { it.purchasePrice }, additional)
 
-    Box(Modifier.fillMaxSize()) {
+    PageGlassScope(
+        backdrop = backdrop,
+        content = {
         LazyColumn(
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
         ) {
-            item { ProductionHeader(palette, "升级规划", "CCU route · 本地计算", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = { HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(rootTab) }) }) }
+            item { ProductionHeader(palette, "升级规划", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = { HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(rootTab) }) }) }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                     Text("选择舰船", style = RefugeTypography.headline(palette))
@@ -733,8 +753,11 @@ fun CcuScreen(
             }
             item { ProductionNoticeBlock(palette, "规则", "飞船价值 = 种子舰船实际购买价 + 已拥有 CCU purchase price + 还需支付金额") }
         }
-        RootBottomNav(backdrop, isDark, selectedBottomTab, onNavigate)
-    }
+        },
+        overlay = { pageBackdrop ->
+            RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
+        },
+    )
     if (showSeed) ShipSelectorSheet(backdrop, palette, "选择起始舰船", ships, onDismiss = { showSeed = false }) { seed = it; showSeed = false }
     if (showTarget) ShipSelectorSheet(backdrop, palette, "选择目标舰船", availableTargets, onDismiss = { showTarget = false }) { target = it; showTarget = false }
     if (showOwned) {

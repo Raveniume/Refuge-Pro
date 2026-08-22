@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.Icon
@@ -134,7 +136,7 @@ fun ReferenceLiquidButton(
             )
             .then(highlight.modifier)
             .then(highlight.gestureModifier)
-            .height(42.dp)
+            .defaultMinSize(minHeight = 42.dp)
             .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
@@ -157,7 +159,9 @@ fun ReferenceLiquidSelectionBar(
     val tabsBackdrop = rememberLayerBackdrop()
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
         val density = LocalDensity.current
-        val tabWidth = with(density) { (constraints.maxWidth - 8.dp.toPx()) / tabsCount }
+        val outerInsetPx = with(density) { 3.dp.toPx() }
+        val lensOverscanPx = with(density) { 3.dp.toPx() }
+        val tabWidth = (constraints.maxWidth - outerInsetPx * 2f) / tabsCount
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val offsetAnimation = remember { Animatable(0f) }
         val panelOffset by remember(density) {
@@ -196,7 +200,7 @@ fun ReferenceLiquidSelectionBar(
         }
         val highlight = remember(scope) {
             ReferenceInteractiveHighlight(scope) { size, _ ->
-                Offset((drag.value + 0.5f) * tabWidth + panelOffset, size.height / 2f)
+                Offset(outerInsetPx + (drag.value + 0.5f) * tabWidth + panelOffset, size.height / 2f)
             }
         }
         val container = if (isDark) OfficialDarkContainer else OfficialLightContainer
@@ -251,10 +255,12 @@ fun ReferenceLiquidSelectionBar(
 
         Box(
             Modifier
-                .padding(horizontal = 3.dp)
-                .padding(horizontal = 10.dp, vertical = 6.dp)
                 .graphicsLayer {
-                    translationX = if (isLtr) drag.value * tabWidth + panelOffset else size.width - (drag.value + 1f) * tabWidth + panelOffset
+                    translationX = if (isLtr) {
+                        outerInsetPx + drag.value * tabWidth + panelOffset - lensOverscanPx
+                    } else {
+                        constraints.maxWidth - outerInsetPx - (drag.value + 1f) * tabWidth + panelOffset - lensOverscanPx
+                    }
                 }
                 .then(highlight.gestureModifier)
                 .then(drag.modifier)
@@ -279,8 +285,8 @@ fun ReferenceLiquidSelectionBar(
                         drawRect(Color.Black.copy(alpha = 0.015f * drag.pressProgress))
                     },
                 )
-                    .height(height - 18.dp)
-                    .fillMaxWidth(1f / tabsCount),
+                    .height(height - 12.dp)
+                    .width(with(density) { (tabWidth + lensOverscanPx * 2f).toDp() }),
         )
     }
 }
@@ -304,7 +310,9 @@ fun ReferenceLiquidBottomTabs(
     val tabsBackdrop = rememberLayerBackdrop()
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
         val density = LocalDensity.current
-        val tabWidth = with(density) { (constraints.maxWidth - 8.dp.toPx()) / tabsCount }
+        val outerInsetPx = with(density) { 4.dp.toPx() }
+        val lensOverscanPx = with(density) { 3.dp.toPx() }
+        val tabWidth = (constraints.maxWidth - outerInsetPx * 2f) / tabsCount
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val offsetAnimation = remember { Animatable(0f) }
         val panelOffset by remember(density) {
@@ -383,9 +391,9 @@ fun ReferenceLiquidBottomTabs(
                     onDrawSurface = { drawRect(container) },
                 )
                 .then(highlight.modifier)
-                .height(64.dp)
+                .height(58.dp)
                 .fillMaxWidth()
-                .padding(4.dp),
+                .padding(horizontal = 4.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) { renderTabs { } }
 
@@ -398,7 +406,7 @@ fun ReferenceLiquidBottomTabs(
                     translationX = panelOffset
                     colorFilter = ColorFilter.tint(OfficialAccent)
                 }
-                .height(56.dp)
+                .height(52.dp)
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -408,8 +416,8 @@ fun ReferenceLiquidBottomTabs(
             Modifier
                 .padding(horizontal = 4.dp)
                 .graphicsLayer {
-                    translationX = if (isLtr) drag.value * tabWidth + panelOffset
-                    else size.width - (drag.value + 1f) * tabWidth + panelOffset
+                    translationX = if (isLtr) drag.value * tabWidth + panelOffset - lensOverscanPx
+                    else constraints.maxWidth - (drag.value + 1f) * tabWidth + panelOffset - lensOverscanPx
                 }
                 .then(highlight.gestureModifier)
                 .then(drag.modifier)
@@ -441,8 +449,8 @@ fun ReferenceLiquidBottomTabs(
                         drawRect(Color.Black.copy(alpha = .03f * drag.pressProgress))
                     },
                 )
-                .height(56.dp)
-                .fillMaxWidth(1f / tabsCount),
+                    .height(52.dp)
+                    .width(with(density) { (tabWidth + lensOverscanPx * 2f).toDp() }),
         )
     }
 }

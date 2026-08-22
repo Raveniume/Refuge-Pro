@@ -3,25 +3,34 @@ package com.refuge.next.material
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kyant.backdrop.backdrops.LayerBackdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeSpacing
@@ -43,46 +52,70 @@ fun RefugeLiquidSheet(
     content: @Composable ColumnScope.(LayerBackdrop) -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
-            val modalBackdrop = rememberLayerBackdrop()
-            RefugeStandardGlassSurface(
-                backdrop = backdrop,
-                palette = palette,
+        BoxWithConstraints(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.BottomCenter) {
+            val maxSheetHeight = (maxHeight * .88f).coerceAtLeast(320.dp)
+            var entered by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { entered = true }
+            val translation by androidx.compose.animation.core.animateDpAsState(
+                if (entered) 0.dp else 28.dp,
+                label = "sheet-translation",
+            )
+            val opacity by androidx.compose.animation.core.animateFloatAsState(
+                if (entered) 1f else 0f,
+                label = "sheet-opacity",
+            )
+            ModalGlassScope(
                 modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 12.dp),
-                radius = RefugeRadius.sheet,
-                padding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            palette.contentSurfaceStrong.copy(
-                                alpha = if (palette.background.luminance() < .5f) .82f else .72f,
-                            ),
-                        )
-                        .layerBackdrop(modalBackdrop),
-                )
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
-                ) {
+                    .wrapContentHeight()
+                    .heightIn(max = maxSheetHeight)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 10.dp, vertical = 12.dp)
+                    .graphicsLayer {
+                        translationY = translation.toPx()
+                        alpha = opacity
+                    },
+                base = {
                     Box(
                         Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .width(34.dp)
-                            .height(4.dp)
-                            .background(palette.outline.copy(alpha = .55f), RoundedCornerShape(2.dp)),
+                            .matchParentSize()
+                            .background(
+                                palette.contentSurfaceStrong.copy(alpha = 1f),
+                                RoundedCornerShape(RefugeRadius.sheet),
+                            ),
                     )
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.material.Text(title, style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
+                },
+            ) { modalBackdrop ->
+                    val contentScroll = rememberScrollState()
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = maxSheetHeight - 24.dp)
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
+                    ) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .width(34.dp)
+                                .height(4.dp)
+                                .background(palette.outline.copy(alpha = .55f), RoundedCornerShape(2.dp)),
+                        )
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material.Text(title, style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
+                        }
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .verticalScroll(contentScroll),
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
+                                content(modalBackdrop)
+                            }
+                        }
                         action?.invoke(modalBackdrop)
                     }
-                    content(modalBackdrop)
-                }
             }
         }
     }
