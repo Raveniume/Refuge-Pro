@@ -113,7 +113,8 @@ fun BoxScope.RootBottomNav(
         onSelected = onNavigate,
         modifier = Modifier
             .align(Alignment.BottomCenter)
-            .fillMaxWidth(.90f)
+            .fillMaxWidth()
+            .padding(horizontal = 28.dp)
             .navigationBarsPadding()
             .padding(bottom = 8.dp),
     ) { selectedIndex, select ->
@@ -234,7 +235,7 @@ fun TerminalScreen(
                     labels = TerminalCategory.entries.map { it.label },
                     initialIndex = categoryIndex,
                     onSelected = { categoryIndex = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 )
             }
             item {

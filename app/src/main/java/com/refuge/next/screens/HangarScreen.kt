@@ -136,6 +136,7 @@ fun HangarScreen(
                     labels = listOf("机库", "回购", "升级"),
                     initialIndex = selectedSection,
                     onSelected = { selectedSection = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 )
             }
             if (selectedSection == 0) {
@@ -572,33 +573,24 @@ private fun HangarDetailSheet(
         title = "机库详情",
         onDismiss = onDismiss,
         action = { modalBackdrop ->
-            Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
-            RefugeCompactUtilityPill(
-                modalBackdrop,
-                palette,
-                RefugeIcons.log,
-                "日志",
-                onLog,
-                Modifier,
-            )
-            RefugeFloatingActionGroup(
-                backdrop = modalBackdrop,
-                palette = palette,
-                actions = listOf(
-                    RefugeFloatingAction(RefugeIcons.gift, "礼物", onDismiss),
-                    RefugeFloatingAction(RefugeIcons.chevron, "跳转", onDismiss),
-                    RefugeFloatingAction(RefugeIcons.upgrade, "升级", onUpgrade),
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            RefugeCompactUtilityPill(
-                modalBackdrop,
-                palette,
-                RefugeIcons.reclaim,
-                "回收",
-                onDismiss,
-                Modifier,
-            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.log, "日志", onLog)
+                RefugeFloatingActionGroup(
+                    backdrop = modalBackdrop,
+                    palette = palette,
+                    actions = listOf(
+                        RefugeFloatingAction(RefugeIcons.gift, "礼物", {}),
+                        RefugeFloatingAction(RefugeIcons.chevron, "跳转", {}),
+                        RefugeFloatingAction(RefugeIcons.upgrade, "升级", {}),
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "回收", {})
+            }
         },
     ) { modalBackdrop ->
         Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {

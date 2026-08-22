@@ -34,6 +34,14 @@ Thumbs.db
 /artifacts/*
 !/artifacts/reference-lab-v4/
 !/artifacts/reference-lab-v4/**
+!/artifacts/glass-correction-reference/
+!/artifacts/glass-correction-reference/**
+# Keep only the numbered final comparison and interaction evidence in the
+# correction set; local runtime dumps and duplicate captures stay untracked.
+/artifacts/glass-correction-reference/*
+!/artifacts/glass-correction-reference/0[1-9]-*
+!/artifacts/glass-correction-reference/1[0-9]-*
+!/artifacts/glass-correction-reference/2[0-3]-*
 
 # Read-only upstream checkout; never import its nested Git history.
 /third_party/AndroidLiquidGlass/

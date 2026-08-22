@@ -41,12 +41,18 @@ fun ModalGlassScope(
     modifier: Modifier = Modifier,
     base: @Composable BoxScope.() -> Unit,
     content: @Composable BoxScope.(LayerBackdrop) -> Unit,
+    overlay: @Composable BoxScope.(Backdrop) -> Unit = {},
 ) {
     val modalBackdrop = rememberLayerBackdrop()
+    val contentBackdrop = rememberLayerBackdrop()
+    val combinedBackdrop = rememberCombinedBackdrop(modalBackdrop, contentBackdrop)
     Box(modifier) {
         Box(Modifier.matchParentSize().layerBackdrop(modalBackdrop)) {
             base()
         }
-        content(modalBackdrop)
+        Box(Modifier.layerBackdrop(contentBackdrop)) {
+            content(modalBackdrop)
+        }
+        overlay(combinedBackdrop)
     }
 }

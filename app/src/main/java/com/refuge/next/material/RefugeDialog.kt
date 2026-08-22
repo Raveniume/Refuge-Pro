@@ -36,7 +36,7 @@ fun RefugeDialog(
     ) {
         Box(Modifier.fillMaxSize().background(palette.scrim), contentAlignment = Alignment.Center) {
             ModalGlassScope(
-                Modifier
+                modifier = Modifier
                     .fillMaxWidth(.88f)
                     .padding(20.dp),
                 base = {
@@ -46,7 +46,7 @@ fun RefugeDialog(
                             .background(palette.contentSurfaceStrong, RoundedCornerShape(24.dp)),
                     )
                 },
-            ) { modalBackdrop ->
+                content = { modalBackdrop ->
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(title, style = RefugeTypography.title(palette))
                         Text(body, style = RefugeTypography.body(palette))
@@ -68,7 +68,8 @@ fun RefugeDialog(
                             }
                         }
                     }
-            }
+                },
+            )
         }
     }
 }

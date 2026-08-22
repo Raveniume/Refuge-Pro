@@ -165,7 +165,7 @@ fun StoreScreen(
                     labels = StoreCategory.entries.map { it.label },
                     initialIndex = selectedCategory,
                     onSelected = { selectedCategory = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 )
             }
             item {

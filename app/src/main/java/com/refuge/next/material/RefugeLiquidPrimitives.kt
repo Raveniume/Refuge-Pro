@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
@@ -42,8 +44,20 @@ fun RefugeLiquidButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     tint: Color = Color.Unspecified,
+    visualInset: Dp = 0.dp,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp),
+    minHeight: Dp = 42.dp,
     content: @Composable RowScope.() -> Unit,
-) = ReferenceLiquidButton(backdrop, onClick, modifier, tint = tint, content = content)
+) = ReferenceLiquidButton(
+    backdrop = backdrop,
+    onClick = onClick,
+    modifier = modifier,
+    tint = tint,
+    visualInset = visualInset,
+    contentPadding = contentPadding,
+    minHeight = minHeight,
+    content = content,
+)
 
 @Composable
 fun RefugeLiquidIconButton(
@@ -51,16 +65,24 @@ fun RefugeLiquidIconButton(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier.size(44.dp),
+    modifier: Modifier = Modifier.size(48.dp),
     tint: Color = Color.Unspecified,
     iconTint: Color = Color.Unspecified,
 ) {
-    RefugeLiquidButton(backdrop, onClick, modifier, tint = tint) {
+    RefugeLiquidButton(
+        backdrop = backdrop,
+        onClick = onClick,
+        modifier = modifier,
+        tint = tint,
+        visualInset = 9.dp,
+        contentPadding = PaddingValues(0.dp),
+        minHeight = 0.dp,
+    ) {
         androidx.compose.material.Icon(
             icon,
             contentDescription,
             tint = if (iconTint.isSpecified) iconTint else androidx.compose.material.LocalContentColor.current,
-            modifier = Modifier,
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -107,7 +129,7 @@ fun RefugeAdaptiveBottomSheet(
     title: String,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    action: (@Composable (LayerBackdrop) -> Unit)? = null,
+    action: (@Composable (Backdrop) -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.(LayerBackdrop) -> Unit,
 ) = RefugeLiquidSheet(backdrop, palette, title, onDismiss, modifier, action, content)
 
@@ -142,7 +164,10 @@ fun RefugeFloatingActionGroup(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            actions.forEach { action ->
+            actions.forEachIndexed { index, action ->
+                if (index > 0) {
+                    Box(Modifier.width(1.dp).height(18.dp).background(palette.divider.copy(alpha = .42f)))
+                }
                 Box(
                     Modifier
                         .weight(1f)
@@ -151,7 +176,12 @@ fun RefugeFloatingActionGroup(
                             role = Role.Button
                             contentDescription = action.label
                         }
-                        .clickable(enabled = action.enabled, onClick = action.onClick),
+                        .clickable(
+                            enabled = action.enabled,
+                            interactionSource = null,
+                            indication = null,
+                            onClick = action.onClick,
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {

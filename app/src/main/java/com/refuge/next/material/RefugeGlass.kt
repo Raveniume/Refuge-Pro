@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberBackdrop
@@ -141,7 +142,7 @@ fun RefugeGlassControl(
 
 @Composable
 fun RefugeQuietControl(
-    backdrop: LayerBackdrop,
+    backdrop: Backdrop,
     palette: RefugePalette,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -180,7 +181,7 @@ fun RefugeQuietControl(
 
 @Composable
 fun RefugeCompactUtilityPill(
-    backdrop: LayerBackdrop,
+    backdrop: Backdrop,
     palette: RefugePalette,
     icon: ImageVector,
     label: String,
@@ -278,12 +279,30 @@ fun RefugeLiquidToggle(
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(
-            Modifier
-                .layerBackdrop(trackBackdrop)
-                .clip(Capsule())
-                .drawBehind { drawRect(lerp(trackColor, palette.positive, drag.value)) }
-                .size(64.dp, 28.dp),
-        )
+            Modifier.layerBackdrop(trackBackdrop),
+        ) {
+            Box(
+                Modifier
+                    .clip(Capsule())
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { Capsule() },
+                        effects = {
+                            vibrancy()
+                            blur(4.dp.toPx())
+                            lens(6.dp.toPx(), 10.dp.toPx())
+                        },
+                        highlight = { Highlight.Default.copy(alpha = .08f + .12f * drag.pressProgress) },
+                        shadow = { Shadow(alpha = .05f) },
+                        onDrawSurface = {
+                            drawRect(
+                                lerp(trackColor, palette.positive, drag.value).copy(alpha = .58f),
+                            )
+                        },
+                    )
+                    .size(64.dp, 28.dp),
+            )
+        }
         Box(
             Modifier
                 .graphicsLayer {
@@ -319,7 +338,7 @@ fun RefugeLiquidToggle(
                         scaleX /= 1f - (velocity * .75f).coerceIn(-.2f, .2f)
                         scaleY *= 1f - (velocity * .25f).coerceIn(-.2f, .2f)
                     },
-                    onDrawSurface = { drawRect(Color.White.copy(alpha = 1f - drag.pressProgress)) },
+                    onDrawSurface = { drawRect(Color.White.copy(alpha = .88f - .12f * drag.pressProgress)) },
                 )
                 .size(40.dp, 24.dp),
         )

@@ -26,10 +26,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
@@ -48,7 +52,7 @@ fun RefugeLiquidSheet(
     title: String,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    action: (@Composable (LayerBackdrop) -> Unit)? = null,
+    action: (@Composable (Backdrop) -> Unit)? = null,
     content: @Composable ColumnScope.(LayerBackdrop) -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -76,16 +80,23 @@ fun RefugeLiquidSheet(
                         alpha = opacity
                     },
                 base = {
+                    val isDark = palette.background.luminance() < .5f
                     Box(
                         Modifier
                             .matchParentSize()
                             .background(
-                                palette.contentSurfaceStrong.copy(alpha = 1f),
+                                Brush.verticalGradient(
+                                    if (isDark) {
+                                        listOf(Color(0xFF182233), Color(0xFF101722))
+                                    } else {
+                                        listOf(Color(0xFFF5F6F8), Color(0xFFE9ECF1))
+                                    },
+                                ),
                                 RoundedCornerShape(RefugeRadius.sheet),
                             ),
                     )
                 },
-            ) { modalBackdrop ->
+                content = { modalBackdrop ->
                     val contentScroll = rememberScrollState()
                     Column(
                         Modifier
@@ -114,9 +125,24 @@ fun RefugeLiquidSheet(
                                 content(modalBackdrop)
                             }
                         }
-                        action?.invoke(modalBackdrop)
+                        if (action != null) {
+                            Box(Modifier.fillMaxWidth().height(58.dp))
+                        }
                     }
-            }
+                },
+                overlay = { combinedBackdrop ->
+                    if (action != null) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 14.dp),
+                        ) {
+                            action.invoke(combinedBackdrop)
+                        }
+                    }
+                },
+            )
         }
     }
 }
