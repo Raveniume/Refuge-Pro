@@ -34,6 +34,7 @@ import com.refuge.next.data.RsiAuthDataSource
 import com.refuge.next.data.RsiLiveHangarRepository
 import com.refuge.next.data.RsiLiveProfileRepository
 import com.refuge.next.data.RsiLiveBuybackRepository
+import com.refuge.next.data.WikiTerminalRepository
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.material.RefugeScene
 import com.refuge.next.motion.RefugeRouteTransition
@@ -82,7 +83,8 @@ fun RefugeApp() {
         RsiLiveHangarRepository(auth, fallbackRepository, R.drawable.ship_placeholder, R.drawable.m80_hero)
     }
     val storeRepository = remember(cacheSource) { ProductionCatalogStoreRepository(cacheSource) }
-    val terminalRepository = remember(cacheSource) { ProductionTerminalRepository(cacheSource) }
+    val fallbackTerminalRepository = remember(cacheSource) { ProductionTerminalRepository(cacheSource) }
+    val terminalRepository = remember(fallbackTerminalRepository) { WikiTerminalRepository(fallbackTerminalRepository) }
     val fallbackBuybackRepository = remember(cacheSource) { ProductionBuybackRepository(R.drawable.m80_hero, R.drawable.ship_placeholder, cacheSource) }
     val buybackRepository = remember(auth, fallbackBuybackRepository) { RsiLiveBuybackRepository(auth, fallbackBuybackRepository, R.drawable.ship_placeholder) }
     val hangarLogRepository = remember(cacheSource) { ProductionHangarLogRepository(cacheSource) }

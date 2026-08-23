@@ -3,6 +3,9 @@ package com.refuge.next.data
 import android.text.Html
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import java.util.Locale
 
 /** Online-first adapter for the same account/pledge endpoint used by RefugeNext. */
@@ -113,6 +116,46 @@ class RsiLiveBuybackRepository(
                     BuybackItem(title, price, "—", fallbackImage, title)
                 }.toList()
                 .ifEmpty { fallback.items() }
+        }.getOrElse { fallback.items() }
+    }
+}
+
+/** Public Star Citizen Wiki adapter for the terminal's vehicle category. */
+class WikiTerminalRepository(
+    private val fallback: TerminalRepository,
+) : TerminalRepository {
+    private val client = OkHttpClient.Builder().build()
+
+    override suspend fun items(): List<TerminalItem> = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder()
+                .url("https://api.star-citizen.wiki/api/vehicles?page%5Bnumber%5D=1&page%5Bsize%5D=200")
+                .header("Accept", "application/json")
+                .header("User-Agent", "RefugeNext/1.0")
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) error("Wiki 请求失败：${response.code}")
+                val root = JSONObject(response.body?.string().orEmpty())
+                val data = root.optJSONArray("data") ?: root.optJSONObject("data")?.optJSONArray("data") ?: error("Wiki 数据为空")
+                val remote = buildList {
+                    for (index in 0 until data.length()) {
+                        val entry = data.optJSONObject(index) ?: continue
+                        val name = entry.optString("name").ifBlank { entry.optString("display_name") }.ifBlank { continue }
+                        val manufacturer = entry.optString("manufacturer").ifBlank { entry.optString("manufacturer_name") }.ifBlank { "—" }
+                        add(TerminalItem(
+                            id = entry.optString("uuid").ifBlank { "wiki-$index" },
+                            name = name,
+                            manufacturer = manufacturer,
+                            category = TerminalCategory.VEHICLES,
+                            tags = listOfNotNull(entry.optString("classification").takeIf { it.isNotBlank() }),
+                            value = "—",
+                            usd = entry.optString("price").ifBlank { "—" },
+                            description = entry.optString("description").ifBlank { "Star Citizen Wiki 载具资料" },
+                        ))
+                    }
+                }
+                (fallback.items() + remote).distinctBy { it.id }
+            }
         }.getOrElse { fallback.items() }
     }
 }
