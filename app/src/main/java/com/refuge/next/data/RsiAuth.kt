@@ -74,6 +74,8 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private var pendingEmail: String = prefs.getString(KEY_PENDING_EMAIL, "") ?: ""
     private var pendingDevice: String = prefs.getString(KEY_PENDING_DEVICE, "") ?: ""
+    private var pendingToken: String = prefs.getString(KEY_PENDING_TOKEN, "") ?: ""
+    private var pendingAuth: String = prefs.getString(KEY_PENDING_AUTH, "") ?: ""
 
     override fun session(): RsiSession? {
         val email = prefs.getString(KEY_EMAIL, "") ?: ""
@@ -226,6 +228,17 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
             .header("User-Agent", USER_AGENT)
             .header("Referer", BASE_URL)
         if (includeSession) session()?.let { builder.header("Cookie", cookie(it)) }
+        if (endpoint.endsWith("signin/multiStep")) {
+            if (pendingDevice.isNotBlank()) builder.header("x-rsi-device", pendingDevice)
+            if (pendingToken.isNotBlank()) builder.header("x-rsi-token", pendingToken)
+            if (pendingDevice.isNotBlank() || pendingToken.isNotBlank() || pendingAuth.isNotBlank()) {
+                builder.header("Cookie", buildString {
+                    if (pendingDevice.isNotBlank()) append("_rsi_device=").append(pendingDevice).append(';')
+                    if (pendingToken.isNotBlank()) append("Rsi-Token=").append(pendingToken).append(';')
+                    if (pendingAuth.isNotBlank()) append("Rsi-Account-Auth=").append(pendingAuth).append(';')
+                })
+            }
+        }
         client.newCall(builder.build()).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful && text.isBlank()) error("RSI 登录请求失败：${response.code}")
@@ -237,12 +250,24 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     private fun parseLogin(json: JSONObject, email: String, device: String): RsiLoginResult {
         val code = json.optString("code")
         val message = json.optString("msg").ifBlank { json.optString("message") }.ifBlank { "RSI 登录未完成" }
-        if (code == "ErrMultiStepRequired") return RsiLoginResult(RsiLoginStep.NEED_CODE, "需要输入 RSI 验证码")
-        if (code == "ErrCaptchaRequiredLauncher") return RsiLoginResult(RsiLoginStep.NEED_CAPTCHA, "需要输入验证码")
+        val data = json.optJSONObject("data")
+        val responseToken = data?.optString("session_id").orEmpty().ifBlank { cookieToken }
+        val responseDevice = data?.optString("device_id").orEmpty().ifBlank { device }
+        if (code == "ErrMultiStepRequired" || code == "ErrCaptchaRequiredLauncher") {
+            pendingEmail = email
+            pendingDevice = responseDevice
+            pendingToken = responseToken
+            pendingAuth = cookieAuth
+            savePending()
+            return if (code == "ErrMultiStepRequired") {
+                RsiLoginResult(RsiLoginStep.NEED_CODE, "需要输入 RSI 验证码")
+            } else {
+                RsiLoginResult(RsiLoginStep.NEED_CAPTCHA, "需要输入验证码")
+            }
+        }
         if (code == "ErrWrongPassword_email") return RsiLoginResult(RsiLoginStep.FAILED, "邮箱或密码错误")
         if (code == "ErrMaxThrottleLogin") return RsiLoginResult(RsiLoginStep.FAILED, "登录过于频繁，请稍后再试")
         val success = json.optInt("success", 0) == 1 || code == "ErrNoGamePackage"
-        val data = json.optJSONObject("data")
         if (!success || data == null && code != "ErrNoGamePackage") return RsiLoginResult(RsiLoginStep.FAILED, message)
         val token = data?.optString("session_id").orEmpty().ifBlank { cookieToken }
         val actualDevice = data?.optString("device_id").orEmpty().ifBlank { device }
@@ -256,7 +281,14 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
             .apply()
         pendingEmail = ""
         pendingDevice = ""
-        prefs.edit().remove(KEY_PENDING_EMAIL).remove(KEY_PENDING_DEVICE).apply()
+        pendingToken = ""
+        pendingAuth = ""
+        prefs.edit()
+            .remove(KEY_PENDING_EMAIL)
+            .remove(KEY_PENDING_DEVICE)
+            .remove(KEY_PENDING_TOKEN)
+            .remove(KEY_PENDING_AUTH)
+            .apply()
         return RsiLoginResult(RsiLoginStep.AUTHENTICATED, "登录成功", stored)
     }
 
@@ -282,6 +314,8 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     private fun savePending() = prefs.edit()
         .putString(KEY_PENDING_EMAIL, pendingEmail)
         .putString(KEY_PENDING_DEVICE, pendingDevice)
+        .putString(KEY_PENDING_TOKEN, pendingToken)
+        .putString(KEY_PENDING_AUTH, pendingAuth)
         .apply()
 
     companion object {
@@ -294,5 +328,7 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         private const val KEY_CSRF = "csrf"
         private const val KEY_PENDING_EMAIL = "pending_email"
         private const val KEY_PENDING_DEVICE = "pending_device"
+        private const val KEY_PENDING_TOKEN = "pending_token"
+        private const val KEY_PENDING_AUTH = "pending_auth"
     }
 }
