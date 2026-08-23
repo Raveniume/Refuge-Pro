@@ -3,6 +3,7 @@ package com.refuge.next.screens
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,8 +11,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -63,16 +67,22 @@ fun RsiLoginScreen(
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    RefugeLiquidGlass(
-        backdrop = backdrop,
-        palette = palette,
-        modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(RefugeSpacing.page),
-        radius = 24.dp,
-        padding = PaddingValues(24.dp),
-        surface = palette.contentSurfaceStrong,
-        surfaceAlpha = .72f,
-        blurRadius = 5.dp,
-    ) {
+    Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        RefugeLiquidGlass(
+            backdrop = backdrop,
+            palette = palette,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .wrapContentHeight()
+                .heightIn(max = 560.dp)
+                .padding(horizontal = RefugeSpacing.page),
+            radius = 24.dp,
+            padding = PaddingValues(24.dp),
+            surface = palette.contentSurfaceStrong,
+            surfaceAlpha = .72f,
+            blurRadius = 5.dp,
+        ) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
@@ -145,6 +155,7 @@ fun RsiLoginScreen(
                 ) {
                     if (loading) CircularProgressIndicator(Modifier.height(16.dp), strokeWidth = 2.dp) else Text(if (needCode) "验证并登录" else "登录")
                 }
+            }
             }
         }
     }
