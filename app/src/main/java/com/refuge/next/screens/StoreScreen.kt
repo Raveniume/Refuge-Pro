@@ -66,6 +66,7 @@ import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.PageGlassScope
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
+import com.refuge.next.material.RefugeQuietLiquidGlassSurface
 import com.refuge.next.material.RefugeLiquidSheet
 import com.refuge.next.material.RefugeLiquidSegmented
 import com.refuge.next.material.RefugeLiquidIconButton
@@ -202,6 +203,7 @@ fun StoreScreen(
             } else {
                 items(visibleProducts, key = { it.id }) { product ->
                     StoreProductGlassRow(
+                        backdrop = backdrop,
                         palette = palette,
                         product = product,
                         onClick = { selectedProduct = product },
@@ -350,11 +352,13 @@ private fun StoreToolbar(
 
 @Composable
 private fun StoreProductGlassRow(
+    backdrop: LayerBackdrop,
     palette: RefugePalette,
     product: StoreProduct,
     onClick: () -> Unit,
 ) {
-    RefugeLightweightGlassSurface(
+    RefugeQuietLiquidGlassSurface(
+        backdrop = backdrop,
         palette = palette,
         modifier = Modifier.fillMaxWidth().height(108.dp),
         radius = RefugeRadius.panel,

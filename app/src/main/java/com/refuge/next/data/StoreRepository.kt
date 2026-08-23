@@ -7,6 +7,9 @@ enum class StoreCategory(val label: String) {
     PAINTS("涂装"),
     GEAR("装备"),
     PACKAGES("游戏包"),
+    VEHICLES("载具"),
+    BUNDLES("组合包"),
+    SUBSCRIPTIONS("订阅"),
 }
 
 data class StoreProduct(

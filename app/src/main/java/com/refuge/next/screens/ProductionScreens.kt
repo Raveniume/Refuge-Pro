@@ -88,6 +88,7 @@ import com.refuge.next.material.PageGlassScope
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeImagePlaceholder
 import com.refuge.next.material.RefugeLightweightGlassSurface
+import com.refuge.next.material.RefugeQuietLiquidGlassSurface
 import com.refuge.next.material.RefugeLiquidToggle
 import com.refuge.next.material.RefugeLiquidSheet
 import com.refuge.next.material.RefugeBottomTabs
@@ -278,7 +279,7 @@ fun TerminalScreen(
                 item { ProductionEmptyState(palette, "暂无${category.label}资料") }
             } else {
                 items(visible, key = { it.id }) { item ->
-                    TerminalRow(palette, item) { selectedItem = item }
+                    TerminalRow(backdrop, palette, item) { selectedItem = item }
                 }
             }
         }
@@ -298,8 +299,9 @@ private fun HeaderAction(backdrop: LayerBackdrop, palette: RefugePalette, icon: 
 }
 
 @Composable
-private fun TerminalRow(palette: RefugePalette, item: TerminalItem, onClick: () -> Unit) {
-    RefugeLightweightGlassSurface(
+private fun TerminalRow(backdrop: LayerBackdrop, palette: RefugePalette, item: TerminalItem, onClick: () -> Unit) {
+    RefugeQuietLiquidGlassSurface(
+        backdrop = backdrop,
         palette = palette,
         modifier = Modifier.fillMaxWidth().height(104.dp),
         radius = RefugeRadius.panel,
@@ -357,6 +359,7 @@ fun ProfileScreen(
     profileRepository: ProfileRepository,
     utilityRepository: UtilityRepository,
     onToggleTheme: () -> Unit,
+    onOpenLogin: () -> Unit,
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
 ) {
@@ -398,6 +401,8 @@ fun ProfileScreen(
                     onAvatarClick = onToggleOnline,
                     actions = {
                         HeaderAction(backdrop, palette, if (isDark) RefugeIcons.light else RefugeIcons.dark, "切换主题", onToggleTheme)
+                        Spacer(Modifier.width(RefugeSpacing.xs))
+                        HeaderAction(backdrop, palette, RefugeIcons.profile, "连接 RSI 账户", onOpenLogin)
                     },
                 )
             }

@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -128,14 +131,19 @@ fun RefugeLiquidSegmented(
     modifier: Modifier = Modifier,
     initialIndex: Int = 0,
     onSelected: (Int) -> Unit = {},
+    scrollable: Boolean = labels.size > 4,
 ) {
+    val scrollState = rememberScrollState()
+    val minWidth = (labels.size * 82).dp
     OfficialLiquidSegmentedPort(
         selectedIndex = initialIndex,
         onSelected = onSelected,
         backdrop = backdrop,
         tabsCount = labels.size,
         isDark = isDark,
-        modifier = modifier,
+        modifier = modifier.then(
+            if (scrollable) Modifier.horizontalScroll(scrollState).widthIn(min = minWidth) else Modifier,
+        ),
         outerHeight = 48.dp,
     ) { selected, select ->
         labels.forEachIndexed { index, label ->

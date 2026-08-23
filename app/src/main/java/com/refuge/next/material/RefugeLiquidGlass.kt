@@ -123,3 +123,47 @@ fun RefugeLiquidGlassButton(
         content = content,
     )
 }
+
+/**
+ * Quiet list material: still uses the shared Liquid Glass lens pipeline, but
+ * with a shallow blur/refraction and no per-row press animation. This keeps
+ * long Store/Terminal LazyColumns responsive while preserving optical depth.
+ */
+@Composable
+fun RefugeQuietLiquidGlassSurface(
+    backdrop: Backdrop,
+    palette: RefugePalette,
+    modifier: Modifier = Modifier,
+    radius: Dp = RefugeRadius.panel,
+    onClick: (() -> Unit)? = null,
+    contentDescription: String? = null,
+    padding: PaddingValues = PaddingValues(0.dp),
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(radius)
+    val base = modifier
+        .clip(shape)
+        .drawBackdrop(
+            backdrop = backdrop,
+            shape = { shape },
+            effects = {
+                vibrancy()
+                blur(1.5.dp.toPx())
+                lens(7.dp.toPx(), 9.dp.toPx(), depthEffect = false)
+            },
+            highlight = { Highlight.Default.copy(alpha = .06f) },
+            shadow = { Shadow(radius = 3.dp, alpha = .06f) },
+            onDrawSurface = { drawRect(palette.contentSurface.copy(alpha = .20f)) },
+        )
+        .then(
+            if (onClick != null) Modifier
+                .semantics {
+                    role = Role.Button
+                    if (contentDescription != null) this.contentDescription = contentDescription
+                }
+                .clickable(interactionSource = null, indication = null, onClick = onClick)
+            else Modifier,
+        )
+        .padding(padding)
+    Box(base, contentAlignment = Alignment.Center, content = content)
+}

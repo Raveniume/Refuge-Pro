@@ -30,6 +30,10 @@ import com.refuge.next.data.PreferencesSettingsRepository
 import com.refuge.next.data.SettingsRepository
 import com.refuge.next.data.UserStatusSource
 import com.refuge.next.data.ProductionCacheDataSource
+import com.refuge.next.data.RsiAuthDataSource
+import com.refuge.next.data.RsiLiveHangarRepository
+import com.refuge.next.data.RsiLiveProfileRepository
+import com.refuge.next.data.RsiLiveBuybackRepository
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.material.RefugeScene
 import com.refuge.next.motion.RefugeRouteTransition
@@ -41,6 +45,7 @@ import com.refuge.next.screens.ProfileScreen
 import com.refuge.next.screens.ToolsScreen
 import com.refuge.next.screens.SettingsScreen
 import com.refuge.next.screens.CcuScreen
+import com.refuge.next.screens.RsiLoginScreen
 
 private val productionRootRoutes = setOf(0, 1, 2, 4)
 
@@ -50,6 +55,7 @@ fun RefugeApp() {
     val settingsRepository = remember(context) { PreferencesSettingsRepository(context) }
     var settings by remember(settingsRepository) { mutableStateOf(settingsRepository.load()) }
     val userStatus = remember { UserStatusSource(true) }
+    val auth = remember(context) { RsiAuthDataSource(context) }
     val isDark = settings.darkTheme
     val isOnline = userStatus.isOnline
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -65,19 +71,24 @@ fun RefugeApp() {
     }
     val cacheSource = remember(context) { ProductionCacheDataSource(context) }
     val cacheManifest = remember(cacheSource) { cacheSource.manifest() }
-    val repository = remember(cacheSource) {
+    val fallbackRepository = remember(cacheSource) {
         ProductionHangarRepository(
             fallbackImage = R.drawable.ship_placeholder,
             m80Image = R.drawable.m80_hero,
             source = cacheSource,
         )
     }
+    val repository = remember(auth, fallbackRepository) {
+        RsiLiveHangarRepository(auth, fallbackRepository, R.drawable.ship_placeholder, R.drawable.m80_hero)
+    }
     val storeRepository = remember(cacheSource) { ProductionCatalogStoreRepository(cacheSource) }
     val terminalRepository = remember(cacheSource) { ProductionTerminalRepository(cacheSource) }
-    val buybackRepository = remember(cacheSource) { ProductionBuybackRepository(R.drawable.m80_hero, R.drawable.ship_placeholder, cacheSource) }
+    val fallbackBuybackRepository = remember(cacheSource) { ProductionBuybackRepository(R.drawable.m80_hero, R.drawable.ship_placeholder, cacheSource) }
+    val buybackRepository = remember(auth, fallbackBuybackRepository) { RsiLiveBuybackRepository(auth, fallbackBuybackRepository, R.drawable.ship_placeholder) }
     val hangarLogRepository = remember(cacheSource) { ProductionHangarLogRepository(cacheSource) }
     val cartRepository = remember { InMemoryCartRepository() }
-    val profileRepository = remember(cacheSource) { ProductionProfileRepository(cacheSource) }
+    val fallbackProfileRepository = remember(cacheSource) { ProductionProfileRepository(cacheSource) }
+    val profileRepository = remember(auth, fallbackProfileRepository) { RsiLiveProfileRepository(auth, fallbackProfileRepository) }
     val utilityRepository = remember(cacheSource) { ProductionUtilityRepository(cacheSource) }
     val ccuRepository = remember(cacheSource) { ProductionCcuRepository(cacheSource, R.drawable.m80_hero, R.drawable.ship_placeholder) }
 
@@ -116,6 +127,8 @@ fun RefugeApp() {
                 },
                 isOnline = isOnline,
                 onToggleOnline = { userStatus.toggle() },
+                auth = auth,
+                onAuthChanged = { },
                 rootTab = rootTab,
                 settings = settings,
                 settingsRepository = settingsRepository,
@@ -149,6 +162,8 @@ private fun RefugeContent(
     utilityRepository: com.refuge.next.data.UtilityRepository,
     ccuRepository: com.refuge.next.data.CcuRepository,
     terminalRepository: com.refuge.next.data.TerminalRepository,
+    auth: RsiAuthDataSource,
+    onAuthChanged: () -> Unit,
     isDark: Boolean,
     onToggleTheme: () -> Unit,
     isOnline: Boolean,
@@ -221,6 +236,7 @@ private fun RefugeContent(
             profileRepository = profileRepository,
             utilityRepository = utilityRepository,
             onToggleTheme = onToggleTheme,
+            onOpenLogin = { onNavigate(8) },
             isOnline = isOnline,
             onToggleOnline = onToggleOnline,
         )
@@ -259,6 +275,14 @@ private fun RefugeContent(
             palette = palette,
             isDark = isDark,
             onToggleTheme = onToggleTheme,
+        )
+
+        8 -> RsiLoginScreen(
+            backdrop = backdrop,
+            palette = palette,
+            auth = auth,
+            onAuthenticated = { onAuthChanged(); onNavigate(rootTab) },
+            onClose = { onNavigate(rootTab) },
         )
 
         else -> DesignLabScreen(
