@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
@@ -53,6 +55,8 @@ import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeLiquidGlass
 import com.refuge.next.material.RefugeLiquidGlassButton
+import com.refuge.next.material.ModalGlassScope
+import com.refuge.next.material.RefugeGlassControl
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
@@ -194,6 +198,12 @@ fun RsiLoginScreen(
                                 message = if (captchaImage == null) "验证码加载失败，请重试" else null
                             } else if (result.step == RsiLoginStep.NEED_CODE) {
                                 message = "验证码已发送到你的 RSI 邮箱，请输入后登录"
+                            } else if (result.message.contains("4233")) {
+                                captcha = ""
+                                needCaptcha = true
+                                captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+                                showCaptchaDialog = captchaImage != null
+                                message = "图形验证码无效，请重新输入"
                             } else {
                                 message = result.message
                             }
@@ -212,75 +222,81 @@ fun RsiLoginScreen(
             }
         }
         if (showCaptchaDialog && captchaImage != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = .18f)),
-                contentAlignment = Alignment.Center,
+            Dialog(
+                onDismissRequest = { showCaptchaDialog = false },
+                properties = DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    decorFitsSystemWindows = false,
+                ),
             ) {
-                RefugeLiquidGlass(
-                    backdrop = backdrop,
-                    palette = palette,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    radius = 26.dp,
-                    padding = PaddingValues(20.dp),
-                    surface = palette.contentSurfaceStrong,
-                    surfaceAlpha = .86f,
-                    blurRadius = 7.dp,
+                Box(
+                    Modifier.fillMaxSize().background(palette.scrim),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
-                        Text("输入图形验证码", style = RefugeTypography.title(palette).copy(color = palette.text))
-                        Text("请按图片内容输入，验证码不会保存。", style = RefugeTypography.caption(palette).copy(color = palette.textSecondary))
-                        Image(
-                            bitmap = captchaImage!!.asImageBitmap(),
-                            contentDescription = "RSI 图形验证码",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 140.dp, max = 190.dp),
-                        )
-                        RefugeLiquidGlass(
-                            backdrop = backdrop,
-                            palette = palette,
-                            modifier = Modifier.fillMaxWidth(),
-                            radius = 18.dp,
-                            padding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                            surface = palette.glassStrong,
-                            surfaceAlpha = .20f,
-                            blurRadius = 4.dp,
-                        ) {
-                            OutlinedTextField(
-                                value = captcha,
-                                onValueChange = { captcha = it },
-                                modifier = Modifier.fillMaxWidth().focusRequester(captchaFocusRequester),
-                                label = { Text("图形验证码") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(14.dp),
-                                colors = fieldColors,
+                    ModalGlassScope(
+                        modifier = Modifier.fillMaxWidth(.88f).padding(20.dp),
+                        base = {
+                            Box(
+                                Modifier
+                                    .matchParentSize()
+                                    .background(palette.contentSurfaceStrong, RoundedCornerShape(28.dp)),
                             )
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            RefugeLiquidGlassButton(
-                                backdrop = backdrop,
-                                palette = palette,
-                                onClick = {
-                                    scope.launch {
-                                        captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
-                                    }
-                                },
-                                radius = 16.dp,
-                            ) { Text("刷新", color = palette.text) }
-                            Spacer(Modifier.width(RefugeSpacing.sm))
-                            RefugeLiquidGlassButton(
-                                backdrop = backdrop,
-                                palette = palette,
-                                onClick = { showCaptchaDialog = false },
-                                radius = 16.dp,
-                            ) { Text("完成", color = palette.text) }
-                        }
-                    }
+                        },
+                        content = { modalBackdrop ->
+                            Column(
+                                Modifier.padding(24.dp),
+                                verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
+                            ) {
+                                Text("输入图形验证码", style = RefugeTypography.title(palette).copy(color = palette.text))
+                                Text("请按图片内容输入，验证码不会保存。", style = RefugeTypography.caption(palette).copy(color = palette.textSecondary))
+                                Image(
+                                    bitmap = captchaImage!!.asImageBitmap(),
+                                    contentDescription = "RSI 图形验证码",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 140.dp, max = 190.dp),
+                                )
+                                RefugeLiquidGlass(
+                                    backdrop = modalBackdrop,
+                                    palette = palette,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    radius = 18.dp,
+                                    padding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                    surface = palette.glassStrong,
+                                    surfaceAlpha = .20f,
+                                    blurRadius = 4.dp,
+                                ) {
+                                    OutlinedTextField(
+                                        value = captcha,
+                                        onValueChange = { captcha = it },
+                                        modifier = Modifier.fillMaxWidth().focusRequester(captchaFocusRequester),
+                                        label = { Text("图形验证码") },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = fieldColors,
+                                    )
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    RefugeGlassControl(
+                                        backdrop = modalBackdrop,
+                                        palette = palette,
+                                        onClick = {
+                                            scope.launch {
+                                                captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+                                            }
+                                        },
+                                    ) { Text("刷新", color = palette.text) }
+                                    Spacer(Modifier.width(RefugeSpacing.sm))
+                                    RefugeGlassControl(
+                                        backdrop = modalBackdrop,
+                                        palette = palette,
+                                        onClick = { showCaptchaDialog = false },
+                                    ) { Text("完成", color = palette.text) }
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }
