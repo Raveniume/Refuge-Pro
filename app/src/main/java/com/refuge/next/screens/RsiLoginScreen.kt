@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.verticalScroll
@@ -21,12 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material.Button
-import androidx.compose.material.ButtonDefaults
-import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
-import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,18 +31,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.data.RsiAuthDataSource
 import com.refuge.next.data.RsiLoginStep
@@ -83,14 +79,6 @@ fun RsiLoginScreen(
     val scope = rememberCoroutineScope()
     val captchaFocusRequester = remember { FocusRequester() }
     val codeFocusRequester = remember { FocusRequester() }
-    val fieldColors = TextFieldDefaults.outlinedTextFieldColors(
-        textColor = palette.text,
-        cursorColor = palette.accent,
-        focusedBorderColor = palette.accent,
-        unfocusedBorderColor = palette.outline,
-        focusedLabelColor = palette.accent,
-        unfocusedLabelColor = palette.textSecondary,
-    )
     LaunchedEffect(showCaptchaDialog) {
         if (showCaptchaDialog) {
             delay(120)
@@ -127,27 +115,26 @@ fun RsiLoginScreen(
             Text("连接后才能读取你的真实机库、商店和终端资料。", style = RefugeTypography.body(palette).copy(color = palette.textSecondary))
             Text("密码只用于本次登录请求，不会写入本地。", style = RefugeTypography.caption(palette).copy(color = palette.textMuted))
             Spacer(Modifier.height(4.dp))
-            OutlinedTextField(
+            RefugeLiquidGlassField(
                 value = email,
                 onValueChange = { email = it },
+                backdrop = backdrop,
+                palette = palette,
+                label = "RSI 邮箱",
+                placeholder = "name@example.com",
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("RSI 邮箱") },
-                placeholder = { Text("name@example.com") },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                colors = fieldColors,
             )
-            OutlinedTextField(
+            RefugeLiquidGlassField(
                 value = password,
                 onValueChange = { password = it },
+                backdrop = backdrop,
+                palette = palette,
+                label = "密码",
+                placeholder = "输入 RSI 密码",
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("密码") },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                colors = fieldColors,
             )
             if (needCaptcha) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
@@ -170,23 +157,26 @@ fun RsiLoginScreen(
                     ) { Text("重新打开", color = palette.text) }
                 }
             }
-            if (needCode) OutlinedTextField(
+            if (needCode) RefugeLiquidGlassField(
                 value = code,
                 onValueChange = { code = it },
+                backdrop = backdrop,
+                palette = palette,
+                label = "RSI 邮件验证码",
+                placeholder = "输入邮件中的验证码",
                 modifier = Modifier.fillMaxWidth().focusRequester(codeFocusRequester),
-                label = { Text("RSI 邮件验证码") },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                colors = fieldColors,
             )
             message?.let { Text(it, style = RefugeTypography.secondary(palette).copy(color = palette.error)) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (allowClose) {
-                    Button(onClick = onClose, enabled = !loading, colors = ButtonDefaults.buttonColors(backgroundColor = palette.glassStrong, contentColor = palette.text)) { Text("返回") }
+                    RefugeGlassControl(backdrop, palette, onClick = { if (!loading) onClose() }, modifier = Modifier.alpha(if (loading) .5f else 1f)) { Text("返回", color = palette.text) }
                     Spacer(Modifier.width(RefugeSpacing.sm))
                 }
-                Button(
+                RefugeLiquidGlassButton(
+                    backdrop = backdrop,
+                    palette = palette,
                     onClick = {
+                        if (!loading && email.isNotBlank() && password.isNotBlank() && (!needCaptcha || captcha.isNotBlank()) && (!needCode || code.isNotBlank())) {
                         loading = true
                         message = null
                         scope.launch {
@@ -211,12 +201,19 @@ fun RsiLoginScreen(
                             loading = false
                             if (result.success) onAuthenticated()
                         }
+                        }
                     },
-                    enabled = !loading && email.isNotBlank() && password.isNotBlank() &&
-                        (!needCaptcha || captcha.isNotBlank()) && (!needCode || code.isNotBlank()),
-                    colors = ButtonDefaults.buttonColors(backgroundColor = palette.accent, contentColor = palette.background),
+                    modifier = Modifier.heightIn(min = 44.dp).alpha(if (loading || email.isBlank() || password.isBlank() || (needCaptcha && captcha.isBlank()) || (needCode && code.isBlank())) .55f else 1f),
                 ) {
-                    if (loading) CircularProgressIndicator(Modifier.height(16.dp), strokeWidth = 2.dp)
+                    if (loading) androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
+                        drawArc(
+                            color = palette.accent,
+                            startAngle = -90f,
+                            sweepAngle = 250f,
+                            useCenter = false,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx()),
+                        )
+                    }
                     else Text(if (needCode) "验证并登录" else if (needCaptcha) "提交验证码" else "登录")
                 }
             }

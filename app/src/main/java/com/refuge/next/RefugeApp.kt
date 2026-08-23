@@ -94,7 +94,7 @@ fun RefugeApp() {
     val hangarLogRepository = remember(cacheSource) { ProductionHangarLogRepository(cacheSource) }
     val cartRepository = remember { InMemoryCartRepository() }
     val fallbackProfileRepository = remember(cacheSource) { ProductionProfileRepository(cacheSource) }
-    val profileRepository = remember(auth, fallbackProfileRepository) { RsiLiveProfileRepository(auth, fallbackProfileRepository) }
+    val profileRepository = remember(auth, fallbackProfileRepository, repository) { RsiLiveProfileRepository(auth, fallbackProfileRepository, repository) }
     val utilityRepository = remember(cacheSource) { ProductionUtilityRepository(cacheSource) }
     val ccuRepository = remember(cacheSource) { ProductionCcuRepository(cacheSource, R.drawable.m80_hero, R.drawable.ship_placeholder) }
 
@@ -130,7 +130,7 @@ fun RefugeApp() {
                     }
                     selectedTab = it
                 },
-                onOpenDesignLab = { selectedTab = 7 },
+                onOpenDesignLab = { /* Hangar overflow is intentionally handled in-page. */ },
                 backdrop = backdrop,
                 palette = palette,
                 repository = repository,

@@ -17,17 +17,17 @@ class RsiLiveHangarRepository(
 ) : HangarRepository {
     override suspend fun ownedShips(): List<OwnedShip> {
         val items = inventory()
-        val ship = items.firstOrNull { it.title.contains("M80", true) }
-        return if (ship == null) fallback.ownedShips() else listOf(
+        val ships = items.filter { it.typeLabel.contains("舰船", true) || isShipTitle(it.title) }
+        return ships.map { ship ->
             OwnedShip(
-                name = ship.title.substringBefore(" - ").ifBlank { ship.title },
+                name = ship.title.substringBefore(" - ").substringBefore(" — ").trim().ifBlank { ship.title },
                 packageName = ship.typeLabel,
                 currentValue = ship.currentValue,
                 paidValue = ship.price,
                 insurance = ship.insurance,
-                imageRes = if (ship.title.contains("M80", true)) m80Image else fallbackImage,
-            ),
-        )
+                imageRes = if (isM80(ship.title)) m80Image else fallbackImage,
+            )
+        }.ifEmpty { if (items.isEmpty()) fallback.ownedShips() else emptyList() }
     }
 
     override suspend fun inventory(): List<HangarItem> = withContext(Dispatchers.IO) {
@@ -45,55 +45,111 @@ class RsiLiveHangarRepository(
     }
 
     private fun parseRows(html: String): List<HangarItem> {
-        val rows = Regex("(?is)<div[^>]+class=[\"'][^\"']*row[^\"']*[\"'][^>]*>(.*?)</div>\\s*</div>").findAll(html).map { it.groupValues[1] }.toList()
-        val candidates = if (rows.isEmpty()) listOf(html) else rows
-        return candidates.mapNotNull { row ->
-            val name = attr(row, "js-pledge-name") ?: text(row, "title") ?: return@mapNotNull null
-            val price = attr(row, "js-pledge-value")?.let(::price) ?: "—"
-            val date = text(row, "date-col") ?: "—"
+        val namePattern = Regex("(?is)<input[^>]+class=[\"'][^\"']*js-pledge-name[^\"']*[\"'][^>]+value=[\"']([^\"']+)")
+        return namePattern.findAll(html).mapNotNull { match ->
+            val start = (match.range.first - 2800).coerceAtLeast(0)
+            val end = (match.range.last + 3200).coerceAtMost(html.length)
+            val window = html.substring(start, end)
+            val name = match.groupValues[1]
+            val price = inputValue(window, "js-pledge-value")?.let(::price) ?: "—"
+            val date = text(window, "date-col") ?: "—"
             val decoded = Html.fromHtml(name, Html.FROM_HTML_MODE_LEGACY).toString().trim()
+            val ship = isShipTitle(decoded)
+            val type = when {
+                ship -> "舰船 / 游戏包"
+                decoded.contains("paint", true) || decoded.contains("涂装") -> "涂装"
+                decoded.contains("armor", true) || decoded.contains("gear", true) || decoded.contains("装备") -> "装备"
+                else -> "机库项目"
+            }
             HangarItem(
                 title = decoded,
                 price = price,
-                date = Html.fromHtml(date, Html.FROM_HTML_MODE_LEGACY).toString().trim(),
-                imageRes = if (decoded.contains("M80", true)) m80Image else fallbackImage,
+                date = cleanDate(date),
+                imageRes = if (isM80(decoded)) m80Image else fallbackImage,
                 originalName = decoded,
-                typeLabel = if (row.contains("js-gift", true)) "可赠送" else "机库项目",
-                insurance = if (row.contains("LTI", true)) "LTI" else "—",
-                isGiftable = row.contains("js-gift", true),
-                isReclaimable = row.contains("js-reclaim", true),
+                typeLabel = type,
+                insurance = if (window.contains("LTI", true)) "LTI" else "—",
+                isGiftable = window.contains("js-gift", true),
+                isReclaimable = window.contains("js-reclaim", true),
+                currentValue = price,
             )
-        }.distinctBy { it.title + it.date + it.price }
+        }.distinctBy { it.title + it.date + it.price }.toList()
     }
 
-    private fun attr(html: String, className: String): String? {
-        val match = Regex("(?is)<[^>]+class=[\"'][^\"']*$className[^\"']*[\"'][^>]*(?:value|data-value)=[\"']([^\"']+)").find(html)
+    private fun inputValue(html: String, className: String): String? {
+        val match = Regex("(?is)<input[^>]*class=[\"'][^\"']*$className[^\"']*[\"'][^>]*value=[\"']([^\"']+)").find(html)
         return match?.groupValues?.getOrNull(1)
     }
 
-    private fun text(html: String, className: String): String? = Regex("(?is)<[^>]+class=[\"'][^\"']*$className[^\"']*[\"'][^>]*>(.*?)</").find(html)?.groupValues?.getOrNull(1)?.replace(Regex("<[^>]+>"), "")?.trim()
+    private fun text(html: String, className: String): String? = Regex("(?is)<[^>]*class=[\"'][^\"']*$className[^\"']*[\"'][^>]*>(.*?)</[^>]+>")
+        .find(html)?.groupValues?.getOrNull(1)?.replace(Regex("<[^>]+>"), "")?.trim()
 
-    private fun price(raw: String): String = raw.replace(",", "").trim().toDoubleOrNull()?.let {
+    private fun price(raw: String): String = Regex("[0-9]+(?:\\.[0-9]+)?").find(raw.replace(",", ""))?.value?.toDoubleOrNull()?.let {
         String.format(Locale.US, "$%.2f", it)
     } ?: raw
+
+    private fun cleanDate(raw: String): String = Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString()
+        .replace(Regex("(?i)created:\\s*"), "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    private fun isM80(title: String) = title.contains("M80", true)
+    private fun isShipTitle(title: String): Boolean {
+        if (Regex("(?i)(paint|paints|livery|skin|涂装|油漆|armor|装甲|装备|component|组件)").containsMatchIn(title)) return false
+        return isM80(title) || Regex("(?i)\\b(aurora|atls|avenger|gladius|mercury|carrack|cutlass|freelancer|nomad|reclaimer|constellation|vulture|prospector|buccaneer|hull|ship|舰船|战舰)\\b").containsMatchIn(title)
+    }
 }
 
 /** Online account projection used by the Profile page; cache remains a safe fallback. */
 class RsiLiveProfileRepository(
     private val auth: RsiAuthDataSource,
     private val fallback: ProfileRepository,
+    private val hangar: HangarRepository,
 ) : ProfileRepository {
     override suspend fun profile(): ProfileData {
         auth.session() ?: return fallback.profile()
         return runCatching {
             val account = auth.accountGraphql().optJSONObject("data")?.optJSONObject("account") ?: error("账户响应为空")
             val fallbackProfile = fallback.profile()
+            val items = hangar.inventory()
+            val paid = items.mapNotNull { Regex("[0-9]+(?:\\.[0-9]+)?").find(it.price.replace(",", ""))?.value?.toDoubleOrNull() }.sum()
+            val current = items.mapNotNull { Regex("[0-9]+(?:\\.[0-9]+)?").find(it.currentValue.replace(",", ""))?.value?.toDoubleOrNull() }.sum()
+            val money = { value: Double -> String.format(Locale.US, "$%.2f", value) }
             fallbackProfile.copy(
                 handle = account.optString("nickname").ifBlank { account.optString("username") }.ifBlank { fallbackProfile.handle },
-                city = account.optString("displayname").ifBlank { fallbackProfile.city },
+                city = "RSI 账户",
+                rank = if (account.optBoolean("hasGamePackage", false)) "已拥有游戏包" else "RSI 账户",
                 registerDate = account.optString("createdAt").ifBlank { fallbackProfile.registerDate },
+                totalSpent = money(paid),
+                hangarValue = money(current),
+                currentValue = money(current),
+                credit = "—",
+                uec = "—",
+                rec = "—",
+                referralCode = account.optString("referral_code").ifBlank { "—" },
+                avatarUrl = account.optString("avatar").ifBlank { null },
+                email = account.optString("email").ifBlank { null },
+                username = account.optString("username").ifBlank { null },
+                hasGamePackage = account.optBoolean("hasGamePackage", false),
+                isAuthenticated = true,
             )
-        }.getOrElse { fallback.profile() }
+        }.getOrElse {
+            val session = auth.session()
+            ProfileData(
+                handle = session?.email ?: "RSI 账户",
+                city = "RSI 账户",
+                rank = "在线资料暂不可用",
+                totalSpent = "—",
+                hangarValue = "—",
+                credit = "—",
+                registerDate = "—",
+                uec = "—",
+                rec = "—",
+                currentValue = "—",
+                referralCode = "—",
+                isAuthenticated = session != null,
+            )
+        }
     }
 }
 
@@ -141,22 +197,36 @@ class WikiTerminalRepository(
                     for (index in 0 until data.length()) {
                         val entry = data.optJSONObject(index) ?: continue
                         val name = entry.optString("name").ifBlank { entry.optString("display_name") }.ifBlank { continue }
-                        val manufacturer = entry.optString("manufacturer").ifBlank { entry.optString("manufacturer_name") }.ifBlank { "—" }
+                        val manufacturer = entry.optJSONObject("manufacturer")?.optString("name").orEmpty()
+                            .ifBlank { entry.optString("manufacturer_name") }.ifBlank { "—" }
+                        val description = localized(entry.optJSONObject("description") ?: entry.optJSONObject("game_description"))
+                            .ifBlank { "Star Citizen Wiki 载具资料" }
+                        val imageUrl = entry.optJSONObject("images")?.optString("thumbnail_url").orEmpty().ifBlank { null }
+                        val role = entry.optString("role").ifBlank { entry.optString("career") }
+                        val msrp = entry.opt("msrp")?.toString()?.takeIf { it.isNotBlank() && it != "null" }?.let { "$$it" } ?: "—"
                         add(TerminalItem(
                             id = entry.optString("uuid").ifBlank { "wiki-$index" },
                             name = name,
                             manufacturer = manufacturer,
                             category = TerminalCategory.VEHICLES,
-                            tags = listOfNotNull(entry.optString("classification").takeIf { it.isNotBlank() }),
+                            tags = listOfNotNull(role.takeIf { it.isNotBlank() }, entry.optString("size_class").takeIf { it.isNotBlank() }),
                             value = "—",
-                            usd = entry.optString("price").ifBlank { "—" },
-                            description = entry.optString("description").ifBlank { "Star Citizen Wiki 载具资料" },
+                            usd = msrp,
+                            description = description,
+                            imageUrl = imageUrl,
                         ))
                     }
                 }
                 (fallback.items() + remote).distinctBy { it.id }
             }
         }.getOrElse { fallback.items() }
+    }
+
+    private fun localized(node: JSONObject?): String {
+        if (node == null) return ""
+        return listOf("zh_CN", "en_EN", "en_US", "en").firstNotNullOfOrNull { key ->
+            node.optString(key).takeIf { it.isNotBlank() }
+        } ?: node.optString("text")
     }
 }
 

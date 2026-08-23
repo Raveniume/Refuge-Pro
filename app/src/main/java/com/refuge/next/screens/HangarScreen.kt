@@ -172,7 +172,7 @@ fun HangarScreen(
                     backdrop = backdrop,
                     palette = palette,
                     onToggleTheme = onToggleTheme,
-                    onOpenDesignLab = onOpenDesignLab,
+                    onOpenDesignLab = { showLogs = true },
                     isOnline = isOnline,
                     onToggleOnline = onToggleOnline,
                     onSearch = { showSearch = !showSearch },
@@ -226,32 +226,23 @@ fun HangarScreen(
                         newestFirst = newestFirst,
                     )
                 }
-                item {
-                    if (visibleInventory.isEmpty()) {
+                if (visibleInventory.isEmpty()) {
+                    item {
                         ProductionEmptyState(
                             palette = palette,
                             label = if (inventory.isEmpty()) "暂无机库清单" else "没有匹配的机库项目",
                         )
-                    } else {
-                        InventoryGlassGroup(
-                            backdrop = backdrop,
+                    }
+                } else {
+                    items(visibleInventory, key = { it.title + it.date + it.price }) { item ->
+                        HangarInventoryRow(
                             palette = palette,
-                            modifier = Modifier.fillMaxWidth(),
-                            padding = PaddingValues(horizontal = RefugeSpacing.md),
-                        ) {
-                            Column(Modifier.fillMaxWidth()) {
-                                visibleInventory.forEachIndexed { index, item ->
-                                    HangarInventoryRow(
-                                        palette = palette,
-                                        item = item,
-                                        isLast = index == visibleInventory.lastIndex,
-                                        onClick = { selectedDetail = item.toHangarDetail() },
-                                        onGift = { safeNoOp.execute(DestructiveAction.GIFT); pendingAction = "赠送" },
-                                        onReclaim = { safeNoOp.execute(DestructiveAction.RECLAIM); pendingAction = "回收" },
-                                    )
-                                }
-                            }
-                        }
+                            item = item,
+                            isLast = item == visibleInventory.lastOrNull(),
+                            onClick = { selectedDetail = item.toHangarDetail() },
+                            onGift = { safeNoOp.execute(DestructiveAction.GIFT); pendingAction = "赠送" },
+                            onReclaim = { safeNoOp.execute(DestructiveAction.RECLAIM); pendingAction = "回收" },
+                        )
                     }
                 }
                 item {

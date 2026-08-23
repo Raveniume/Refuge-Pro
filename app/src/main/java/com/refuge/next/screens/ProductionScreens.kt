@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import coil3.compose.AsyncImage
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -259,7 +260,7 @@ fun TerminalScreen(
                     labels = TerminalCategory.entries.map { it.label },
                     initialIndex = categoryIndex,
                     onSelected = { categoryIndex = it },
-                    modifier = Modifier.padding(horizontal = 18.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 )
             }
             item {
@@ -310,7 +311,9 @@ private fun TerminalRow(backdrop: LayerBackdrop, palette: RefugePalette, item: T
         padding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.Top) {
-            if (item.id == "v-m80") {
+            if (!item.imageUrl.isNullOrBlank()) {
+                AsyncImage(model = item.imageUrl, contentDescription = "${item.name} 图片", contentScale = ContentScale.Crop, modifier = Modifier.size(88.dp).clip(RoundedCornerShape(RefugeRadius.image)))
+            } else if (item.id == "v-m80") {
                 Image(painter = painterResource(R.drawable.m80_hero), contentDescription = "${item.name} 图片", contentScale = ContentScale.Crop, modifier = Modifier.size(88.dp).clip(RoundedCornerShape(RefugeRadius.image)))
             } else {
                 RefugeImagePlaceholder(palette, Modifier.size(88.dp), item.category.label)
@@ -414,7 +417,6 @@ fun ProfileScreen(
                 item { ProfileHero(backdrop, palette, profile) }
                 item { ProfileStats(backdrop, palette, profile) }
                 item { ProfileAccountGroup(backdrop, palette, profile) }
-                item { ProfileOrganization(backdrop, palette) }
                 item { ProfileUtilities(backdrop, palette, profileToolGroups) { selectedTool = it } }
                 item { ProfileSettingsButton(backdrop, palette) { onNavigate(5) } }
             }
@@ -441,7 +443,7 @@ private fun ProfileHero(backdrop: LayerBackdrop, palette: RefugePalette, profile
         padding = PaddingValues(14.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Image(
+            if (profile.avatarUrl.isNullOrBlank()) Image(
                 painter = painterResource(R.drawable.user_profile_pic),
                 contentDescription = "用户头像",
                 contentScale = ContentScale.Crop,
@@ -449,6 +451,13 @@ private fun ProfileHero(backdrop: LayerBackdrop, palette: RefugePalette, profile
                     .size(64.dp)
                     .clip(RoundedCornerShape(RefugeRadius.image))
                     .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f },
+            ) else AsyncImage(
+                model = profile.avatarUrl,
+                placeholder = painterResource(R.drawable.user_profile_pic),
+                error = painterResource(R.drawable.user_profile_pic),
+                contentDescription = "用户头像",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(RefugeRadius.image)),
             )
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
@@ -458,7 +467,7 @@ private fun ProfileHero(backdrop: LayerBackdrop, palette: RefugePalette, profile
                     Box(Modifier.size(8.dp).background(if (profile.isOnline) palette.positive else palette.textMuted, CircleShape))
                 }
                 Text("${profile.city} · ${profile.rank}", style = RefugeTypography.secondary(palette))
-                Text("Online · 使用本地资料", style = RefugeTypography.caption(palette).copy(color = if (profile.isOnline) palette.positive else palette.textMuted))
+                Text(if (profile.isAuthenticated) "Online · RSI 已连接" else "Offline · 未连接 RSI", style = RefugeTypography.caption(palette).copy(color = if (profile.isOnline) palette.positive else palette.textMuted))
             }
             Text("4.8", style = RefugeTypography.value(palette).copy(color = palette.accent))
         }

@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.VisualTransformation
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -151,6 +152,7 @@ fun RefugeLiquidGlassField(
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
     singleLine: Boolean = true,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -160,6 +162,7 @@ fun RefugeLiquidGlassField(
         onValueChange = onValueChange,
         singleLine = singleLine,
         keyboardOptions = keyboardOptions,
+        visualTransformation = visualTransformation,
         textStyle = RefugeTypography.body(palette).copy(color = palette.text),
         cursorBrush = SolidColor(palette.accent),
         modifier = modifier.onFocusChanged { focused = it.isFocused },

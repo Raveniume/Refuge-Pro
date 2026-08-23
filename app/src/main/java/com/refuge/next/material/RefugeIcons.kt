@@ -45,6 +45,7 @@ object RefugeIcons {
     val home: ImageVector = Icons.Outlined.Home
     /** Navigation glyphs mirror RefugeNext's Flutter MainNavigationBar. */
     val homeSelected: ImageVector = Icons.Rounded.Home
+    /** Hollow grid glyph for the unselected terminal tab; selected state uses the filled rounded glyph. */
     val terminal: ImageVector = Icons.Outlined.GridView
     val terminalSelected: ImageVector = Icons.Rounded.GridView
     val storeOutline: ImageVector = Icons.Outlined.ShoppingBag

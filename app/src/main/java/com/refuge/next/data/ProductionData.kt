@@ -11,6 +11,7 @@ data class TerminalItem(
     val value: String,
     val usd: String,
     val description: String,
+    val imageUrl: String? = null,
 )
 
 enum class TerminalCategory(val label: String) {
@@ -67,6 +68,11 @@ data class ProfileData(
     val rec: String = "2,960",
     val currentValue: String = "$300",
     val referralCode: String = "RAVEN-7K2Q",
+    val avatarUrl: String? = null,
+    val email: String? = null,
+    val username: String? = null,
+    val hasGamePackage: Boolean? = null,
+    val isAuthenticated: Boolean = false,
 )
 
 interface ProfileRepository {
