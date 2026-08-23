@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil3.compose.AsyncImage
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.R
 import com.refuge.next.data.HangarItem
@@ -64,6 +65,12 @@ import com.refuge.next.data.HangarLogRepository
 import com.refuge.next.data.DestructiveAction
 import com.refuge.next.data.SafeNoOpDestructiveActionExecutor
 import com.refuge.next.data.OwnedShip
+import com.refuge.next.data.CcuRepository
+import com.refuge.next.data.CcuShip
+import com.refuge.next.data.OwnedCcu
+import com.refuge.next.data.calculateRemainingPayment
+import com.refuge.next.data.eligibleTargetShips
+import com.refuge.next.data.formatUsd
 import com.refuge.next.design.RefugeIconSize
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
@@ -75,6 +82,7 @@ import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.RefugeGlassControl
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLightweightGlassSurface
+import com.refuge.next.material.RefugeQuietLiquidGlassSurface
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeLiquidSheet
 import com.refuge.next.material.RefugeLiquidSegmented
@@ -95,6 +103,7 @@ fun HangarScreen(
     repository: HangarRepository,
     buybackRepository: BuybackRepository,
     hangarLogRepository: HangarLogRepository,
+    ccuRepository: CcuRepository,
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
@@ -104,8 +113,8 @@ fun HangarScreen(
     isOnline: Boolean,
     onToggleOnline: () -> Unit,
 ) {
-    var ownedShips by remember { mutableStateOf(emptyList<OwnedShip>()) }
-    var inventory by remember { mutableStateOf(emptyList<HangarItem>()) }
+    var ownedShips by remember(repository) { mutableStateOf(repository.cachedOwnedShips()) }
+    var inventory by remember(repository) { mutableStateOf(repository.cachedInventory()) }
     var showFilter by remember { mutableStateOf(false) }
     var showSort by remember { mutableStateOf(false) }
     var selectedDetail by remember { mutableStateOf<HangarDetail?>(null) }
@@ -120,6 +129,8 @@ fun HangarScreen(
     var buybackItems by remember { mutableStateOf(emptyList<BuybackItem>()) }
     var logEntries by remember { mutableStateOf(emptyList<String>()) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
+    var ccuShips by remember { mutableStateOf(emptyList<CcuShip>()) }
+    var ownedCcu by remember { mutableStateOf(emptyList<OwnedCcu>()) }
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var loadAttempt by remember { mutableIntStateOf(0) }
@@ -141,6 +152,10 @@ fun HangarScreen(
             logEntries = loaded.logs
         }.onFailure { loadError = it.message ?: "机库缓存读取失败" }
         loading = false
+    }
+    LaunchedEffect(ccuRepository) {
+        runCatching { ccuRepository.ships() to ccuRepository.owned() }
+            .onSuccess { (ships, owned) -> ccuShips = ships; ownedCcu = owned }
     }
 
     val visibleInventory = remember(inventory, query, giftableOnly, reclaimableOnly, shipOnly, newestFirst) {
@@ -202,13 +217,14 @@ fun HangarScreen(
                     )
                 }
             }
-            if (loading) {
+            if (loading && ownedShips.isEmpty() && inventory.isEmpty()) {
                 item { ProductionLoadingState(backdrop, palette, "正在读取机库资料") }
-            } else if (loadError != null) {
+            } else if (loadError != null && ownedShips.isEmpty() && inventory.isEmpty()) {
                 item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
             } else if (selectedSection == 0) {
                 items(ownedShips, key = { it.name }) { ship ->
                     OwnedShipHero(
+                        backdrop = backdrop,
                         palette = palette,
                         ship = ship,
                         onClick = {
@@ -234,15 +250,23 @@ fun HangarScreen(
                         )
                     }
                 } else {
-                    items(visibleInventory, key = { it.title + it.date + it.price }) { item ->
-                        HangarInventoryRow(
+                    item {
+                        InventoryGlassGroup(
+                            backdrop = backdrop,
                             palette = palette,
-                            item = item,
-                            isLast = item == visibleInventory.lastOrNull(),
-                            onClick = { selectedDetail = item.toHangarDetail() },
-                            onGift = { safeNoOp.execute(DestructiveAction.GIFT); pendingAction = "赠送" },
-                            onReclaim = { safeNoOp.execute(DestructiveAction.RECLAIM); pendingAction = "回收" },
-                        )
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            visibleInventory.forEachIndexed { index, inventoryItem ->
+                                HangarInventoryRow(
+                                    palette = palette,
+                                    item = inventoryItem,
+                                    isLast = index == visibleInventory.lastIndex,
+                                    onClick = { selectedDetail = inventoryItem.toHangarDetail() },
+                                    onGift = { safeNoOp.execute(DestructiveAction.GIFT); pendingAction = "赠送" },
+                                    onReclaim = { safeNoOp.execute(DestructiveAction.RECLAIM); pendingAction = "回收" },
+                                )
+                            }
+                        }
                     }
                 }
                 item {
@@ -274,7 +298,7 @@ fun HangarScreen(
                 }
             } else {
                 item {
-                    HangarUpgradePanel(backdrop, palette) { onOpenCcu() }
+                    HangarUpgradePanel(backdrop, palette, ccuShips, ownedCcu)
                 }
             }
             }
@@ -338,12 +362,7 @@ fun HangarScreen(
         RefugeModalDialog(
             backdrop = backdrop,
             palette = palette,
-            title = "${action}操作",
-            body = if (action == "跳转到 RSI") {
-                "该入口仅保留导航意图，外部页面适配器尚未启用。不会执行账户变更。"
-            } else {
-                "Debug safeNoOp：已构造 $action 确认边界，但不会提交真实 RSI 请求。"
-            },
+            title = action,
             primaryLabel = "知道了",
             onDismiss = { pendingAction = null },
             onPrimary = { pendingAction = null },
@@ -357,6 +376,7 @@ private data class HangarDetail(
     val price: String,
     val date: String,
     val imageRes: Int,
+    val imageUrl: String? = null,
     val description: String,
     val isGiftable: Boolean,
     val isReclaimable: Boolean,
@@ -386,7 +406,8 @@ private fun detailForShip(ship: OwnedShip) = HangarDetail(
     price = ship.paidValue,
     date = "2026年08月02日",
     imageRes = ship.imageRes,
-    description = "${ship.name} 已加入本地机库。保留原始购买、保险与礼包内容信息。",
+    imageUrl = ship.imageUrl,
+    description = ship.name,
     isGiftable = true,
     isReclaimable = true,
     meltValue = ship.paidValue,
@@ -404,14 +425,15 @@ private fun HangarItem.toHangarDetail() = HangarDetail(
     price = price,
     date = date,
     imageRes = imageRes,
-    description = "${title} · 已同步到本地机库。",
+    imageUrl = imageUrl,
+    description = title,
     isGiftable = isGiftable,
     isReclaimable = isReclaimable,
     meltValue = price,
     currentValue = currentValue,
     savings = savings,
     insurance = insurance,
-    includedItems = includedItems.ifEmpty { listOf(title, "本地同步项目") },
+    includedItems = includedItems.ifEmpty { listOf(title) },
     originalName = originalName,
     typeLabel = typeLabel,
     upgradeFrom = upgradeFrom,
@@ -426,7 +448,7 @@ private fun BuybackItem.toHangarDetail() = HangarDetail(
     price = price,
     date = date,
     imageRes = imageRes,
-    description = "$title · 已从本地回购缓存读取。确认操作不会提交真实购买。",
+    description = title,
     isGiftable = false,
     isReclaimable = false,
     meltValue = price,
@@ -465,13 +487,60 @@ private fun HangarRebuyRow(palette: RefugePalette, item: BuybackItem, onClick: (
 }
 
 @Composable
-private fun HangarUpgradePanel(backdrop: LayerBackdrop, palette: RefugePalette, onOpen: () -> Unit) {
-    RefugeContentSurface(palette = palette, modifier = Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(18.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
-            Text("升级 / CCU", style = RefugeTypography.title(palette))
-            Text("选择起始舰船和目标舰船，按已拥有 CCU 计算实际还需支付金额。", style = RefugeTypography.body(palette))
-            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.upgrade, "打开升级规划", onOpen)
+private fun HangarUpgradePanel(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    ships: List<CcuShip>,
+    owned: List<OwnedCcu>,
+) {
+    var seedIndex by remember(ships) { mutableIntStateOf(0) }
+    val seed = ships.getOrNull(seedIndex.coerceIn(0, (ships.size - 1).coerceAtLeast(0)))
+    val targets = seed?.let { eligibleTargetShips(it, ships) }.orEmpty()
+    var targetIndex by remember(targets) { mutableIntStateOf(0) }
+    val target = targets.getOrNull(targetIndex.coerceIn(0, (targets.size - 1).coerceAtLeast(0)))
+    val remaining = if (seed != null && target != null) calculateRemainingPayment(seed, target, owned) else 0
+
+    RefugeQuietLiquidGlassSurface(
+        backdrop = backdrop,
+        palette = palette,
+        modifier = Modifier.fillMaxWidth(),
+        radius = RefugeRadius.panel,
+        padding = PaddingValues(14.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
+            Text("升级规划", style = RefugeTypography.title(palette))
+            Row(horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
+                RefugeGlassControl(
+                    backdrop = backdrop,
+                    palette = palette,
+                    onClick = { if (ships.isNotEmpty()) seedIndex = (seedIndex + 1) % ships.size },
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "选择起始舰船",
+                    padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) { Column { Text("起始舰船", style = RefugeTypography.caption(palette)); Text(seed?.name ?: "暂无", style = RefugeTypography.body(palette)) } }
+                RefugeGlassControl(
+                    backdrop = backdrop,
+                    palette = palette,
+                    onClick = { if (targets.isNotEmpty()) targetIndex = (targetIndex + 1) % targets.size },
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "选择目标舰船",
+                    padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                ) { Column { Text("目标舰船", style = RefugeTypography.caption(palette)); Text(target?.name ?: "暂无", style = RefugeTypography.body(palette)) } }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
+                InlineUpgradeMetric(palette, seed?.let { formatUsd(it.purchasePrice) } ?: "—", "舰船价值")
+                InlineUpgradeMetric(palette, formatUsd(owned.sumOf { it.purchasePrice }), "已有 CCU")
+                InlineUpgradeMetric(palette, formatUsd(remaining), "还需支付")
+            }
         }
+    }
+}
+
+@Composable
+private fun RowScope.InlineUpgradeMetric(palette: RefugePalette, value: String, label: String) {
+    Column(Modifier.weight(1f)) {
+        Text(value, style = RefugeTypography.value(palette).copy(color = palette.accent), maxLines = 1, softWrap = false)
+        Text(label, style = RefugeTypography.caption(palette))
     }
 }
 
@@ -522,6 +591,7 @@ private fun HangarHeader(
 
 @Composable
 private fun OwnedShipHero(
+    backdrop: LayerBackdrop,
     palette: RefugePalette,
     ship: OwnedShip,
     onClick: () -> Unit,
@@ -536,11 +606,18 @@ private fun OwnedShipHero(
         padding = PaddingValues(RefugeSpacing.sm),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            HangarImage(
-                imageRes = ship.imageRes,
-                contentDescription = "${ship.name} 图片",
-                modifier = Modifier.size(92.dp),
-            )
+            if (ship.imageUrl.isNullOrBlank()) {
+                HangarImage(ship.imageRes, "${ship.name} 图片", Modifier.size(92.dp))
+            } else {
+                AsyncImage(
+                    model = ship.imageUrl,
+                    contentDescription = "${ship.name} 图片",
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(ship.imageRes),
+                    error = painterResource(ship.imageRes),
+                    modifier = Modifier.size(92.dp).aspectRatio(1f).clip(RoundedCornerShape(RefugeRadius.image)),
+                )
+            }
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.weight(1f)) {
                 Text(ship.name, style = RefugeTypography.title(palette))
@@ -628,11 +705,18 @@ private fun HangarInventoryRow(
             Modifier.fillMaxSize().padding(vertical = RefugeSpacing.sm),
             verticalAlignment = Alignment.Top,
         ) {
-            HangarImage(
-                imageRes = item.imageRes,
-                contentDescription = "${item.title} 图片",
-                modifier = Modifier.size(88.dp),
-            )
+            if (item.imageUrl.isNullOrBlank()) {
+                HangarImage(item.imageRes, "${item.title} 图片", Modifier.size(88.dp))
+            } else {
+                AsyncImage(
+                    model = item.imageUrl,
+                    contentDescription = "${item.title} 图片",
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(item.imageRes),
+                    error = painterResource(item.imageRes),
+                    modifier = Modifier.size(88.dp).aspectRatio(1f).clip(RoundedCornerShape(RefugeRadius.image)),
+                )
+            }
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.fillMaxSize()) {
                 Text(
@@ -735,7 +819,18 @@ private fun HangarDetailSheet(
     ) { modalBackdrop ->
         Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md)) {
                 Row(verticalAlignment = Alignment.Top) {
-                    HangarImage(detail.imageRes, "${detail.title} 图片", Modifier.size(112.dp))
+                    if (detail.imageUrl.isNullOrBlank()) {
+                        HangarImage(detail.imageRes, "${detail.title} 图片", Modifier.size(112.dp))
+                    } else {
+                        AsyncImage(
+                            model = detail.imageUrl,
+                            contentDescription = "${detail.title} 图片",
+                            contentScale = ContentScale.Crop,
+                            placeholder = painterResource(detail.imageRes),
+                            error = painterResource(detail.imageRes),
+                            modifier = Modifier.size(112.dp).aspectRatio(1f).clip(RoundedCornerShape(RefugeRadius.image)),
+                        )
+                    }
                     Spacer(Modifier.width(RefugeSpacing.md))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xxs)) {
                         Text(detail.title, style = RefugeTypography.title(palette))
@@ -752,7 +847,7 @@ private fun HangarDetailSheet(
                 Text("其他信息", style = RefugeTypography.headline(palette))
                 DetailMetadataRow(palette, "入库日期", detail.date)
                 DetailMetadataRow(palette, "保险", detail.insurance)
-                DetailMetadataRow(palette, "状态", "已同步到本地机库")
+                DetailMetadataRow(palette, "状态", "已拥有")
                 if (detail.upgradeFrom != null && detail.upgradeTo != null) {
                     Text("升级路径", style = RefugeTypography.headline(palette))
                     DetailMetadataRow(palette, "从 ${detail.upgradeFrom}", detail.upgradeFromPrice ?: "—")
@@ -933,13 +1028,13 @@ private fun RefugeModalDialog(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     title: String,
-    body: String,
+    body: String? = null,
     primaryLabel: String,
     onDismiss: () -> Unit,
     onPrimary: () -> Unit,
 ) {
     RefugeLiquidSheet(backdrop, palette, title, onDismiss) { modalBackdrop ->
-        Text(body, style = RefugeTypography.body(palette))
+        if (!body.isNullOrBlank()) Text(body, style = RefugeTypography.body(palette))
         RefugeGlassControl(modalBackdrop, palette, onPrimary, contentDescription = primaryLabel) {
             Text(primaryLabel, style = RefugeTypography.body(palette))
         }

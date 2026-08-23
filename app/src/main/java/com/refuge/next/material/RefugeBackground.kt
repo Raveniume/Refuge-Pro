@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
@@ -83,24 +85,23 @@ fun RefugeScene(
     Box(Modifier.fillMaxSize()) {
         val backdrop = rememberLayerBackdrop()
         val isDark = palette.background.luminance() < .5f
-        if (isDark) {
-            Canvas(
-                Modifier
-                    .fillMaxSize()
-                    .layerBackdrop(backdrop),
-            ) {
-                ReferenceWallpaper(palette)
-            }
-        } else {
-            Image(
-                painter = painterResource(R.drawable.reference_wallpaper_light),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .layerBackdrop(backdrop),
-            )
-        }
+        val darkFilter = if (isDark) ColorFilter.colorMatrix(
+            ColorMatrix(floatArrayOf(
+                .34f, 0f, 0f, 0f, 3f,
+                0f, .39f, 0f, 0f, 5f,
+                0f, 0f, .52f, 0f, 13f,
+                0f, 0f, 0f, 1f, 0f,
+            )),
+        ) else null
+        Image(
+            painter = painterResource(R.drawable.reference_wallpaper_light),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            colorFilter = darkFilter,
+            modifier = Modifier
+                .fillMaxSize()
+                .layerBackdrop(backdrop),
+        )
         content(backdrop)
     }
 }

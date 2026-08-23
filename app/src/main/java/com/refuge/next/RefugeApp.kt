@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -199,13 +200,16 @@ private fun RefugeContent(
     onToggleSyncLogs: () -> Unit,
     onToggleLocalOnly: () -> Unit,
 ) {
-    when (selectedTab) {
+    val stateHolder = rememberSaveableStateHolder()
+    stateHolder.SaveableStateProvider(selectedTab) {
+      when (selectedTab) {
         0 -> HangarScreen(
             backdrop = backdrop,
             palette = palette,
             repository = repository,
             buybackRepository = buybackRepository,
             hangarLogRepository = hangarLogRepository,
+            ccuRepository = ccuRepository,
             isDark = isDark,
             selectedBottomTab = selectedTab,
             onNavigate = onNavigate,
@@ -315,5 +319,6 @@ private fun RefugeContent(
             isDark = isDark,
             onToggleTheme = onToggleTheme,
         )
+      }
     }
 }

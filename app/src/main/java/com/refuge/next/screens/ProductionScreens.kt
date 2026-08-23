@@ -272,9 +272,9 @@ fun TerminalScreen(
                     RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.sort, if (sortDescending) "排序：Z-A" else "排序：默认", { sortDescending = !sortDescending })
                 }
             }
-            if (loading) {
+            if (loading && items.isEmpty()) {
                 item { ProductionLoadingState(backdrop, palette, "正在读取终端资料") }
-            } else if (loadError != null) {
+            } else if (loadError != null && items.isEmpty()) {
                 item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
             } else if (visible.isEmpty()) {
                 item { ProductionEmptyState(palette, "暂无${category.label}资料") }
@@ -409,9 +409,9 @@ fun ProfileScreen(
                     },
                 )
             }
-            if (profileLoading) {
+            if (profileLoading && !profileData.isAuthenticated) {
                 item { ProductionLoadingState(backdrop, palette, "正在读取账户资料") }
-            } else if (profileError != null) {
+            } else if (profileError != null && !profileData.isAuthenticated) {
                 item { ProductionErrorState(backdrop, palette, profileError!!, onRetry = { loadAttempt++ }) }
             } else {
                 item { ProfileHero(backdrop, palette, profile) }
@@ -674,9 +674,9 @@ fun ToolsScreen(
                     )
                 }
             }
-            if (loading) {
+            if (loading && groups.isEmpty()) {
                 item { ProductionLoadingState(backdrop, palette, "正在读取工具目录") }
-            } else if (loadError != null) {
+            } else if (loadError != null && groups.isEmpty()) {
                 item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
             }
             if (!loading && loadError == null && visibleGroups.isEmpty()) {
@@ -912,9 +912,9 @@ fun CcuScreen(
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
         ) {
             item { ProductionHeader(palette, "升级规划", isOnline = isOnline, onAvatarClick = onToggleOnline, actions = { HeaderAction(backdrop, palette, RefugeIcons.chevron, "返回", { onNavigate(rootTab) }) }) }
-            if (loading) {
+            if (loading && ships.isEmpty() && owned.isEmpty()) {
                 item { ProductionLoadingState(backdrop, palette, "正在读取舰船与 CCU 目录") }
-            } else if (loadError != null) {
+            } else if (loadError != null && ships.isEmpty() && owned.isEmpty()) {
                 item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
             } else if (seed == null) {
                 item { ProductionEmptyState(palette, "暂无可用的 CCU 目录") }

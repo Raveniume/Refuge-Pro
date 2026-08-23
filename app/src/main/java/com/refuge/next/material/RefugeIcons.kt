@@ -39,14 +39,21 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathData
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.unit.dp
 
 object RefugeIcons {
     val home: ImageVector = Icons.Outlined.Home
     /** Navigation glyphs mirror RefugeNext's Flutter MainNavigationBar. */
     val homeSelected: ImageVector = Icons.Rounded.Home
-    /** Hollow grid glyph for the unselected terminal tab; selected state uses the filled rounded glyph. */
-    val terminal: ImageVector = Icons.Outlined.GridView
+    /** Hollow rounded grid matching the selected terminal glyph's four cells. */
+    val terminal: ImageVector by lazy { roundedTerminalGrid() }
     val terminalSelected: ImageVector = Icons.Rounded.GridView
     val storeOutline: ImageVector = Icons.Outlined.ShoppingBag
     val storeSelected: ImageVector = Icons.Rounded.ShoppingBag
@@ -86,3 +93,38 @@ object RefugeIcons {
     val science: ImageVector = Icons.Outlined.Science
     val description: ImageVector = Icons.Outlined.Description
 }
+
+private fun roundedTerminalGrid(): ImageVector = ImageVector.Builder(
+    name = "TerminalGridOutline",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+).addPath(
+    pathData = PathData {
+        fun roundedRect(left: Float, top: Float) {
+            val right = left + 8f
+            val bottom = top + 8f
+            val radius = 1.6f
+            moveTo(left + radius, top)
+            lineTo(right - radius, top)
+            curveTo(right - .7f, top, right, top + .7f, right, top + radius)
+            lineTo(right, bottom - radius)
+            curveTo(right, bottom - .7f, right - .7f, bottom, right - radius, bottom)
+            lineTo(left + radius, bottom)
+            curveTo(left + .7f, bottom, left, bottom - .7f, left, bottom - radius)
+            lineTo(left, top + radius)
+            curveTo(left, top + .7f, left + .7f, top, left + radius, top)
+            close()
+        }
+        roundedRect(2f, 2f)
+        roundedRect(14f, 2f)
+        roundedRect(2f, 14f)
+        roundedRect(14f, 14f)
+    },
+    fill = null,
+    stroke = SolidColor(Color.Black),
+    strokeLineWidth = 1.8f,
+    strokeLineCap = StrokeCap.Round,
+    strokeLineJoin = StrokeJoin.Round,
+).build()

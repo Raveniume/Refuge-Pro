@@ -7,6 +7,7 @@ data class OwnedShip(
     val paidValue: String,
     val insurance: String,
     val imageRes: Int,
+    val imageUrl: String? = null,
 )
 
 data class HangarItem(
@@ -26,11 +27,16 @@ data class HangarItem(
     val upgradeTo: String? = null,
     val upgradeFromPrice: String? = null,
     val upgradeToPrice: String? = null,
+    /** Ship contained by a package row when RSI does not expose a typed child item. */
+    val containedShip: String? = null,
+    val imageUrl: String? = null,
 )
 
 interface HangarRepository {
     suspend fun ownedShips(): List<OwnedShip>
     suspend fun inventory(): List<HangarItem>
+    fun cachedOwnedShips(): List<OwnedShip> = emptyList()
+    fun cachedInventory(): List<HangarItem> = emptyList()
 }
 
 /** Versioned read-only adapter for the bundled legacy cache import. */
@@ -50,6 +56,15 @@ class ProductionHangarRepository(
         HangarItem("M80 - 公民新手包", "$140", "2026年08月02日", m80Image, originalName = "Origin M80 Starter Package", typeLabel = "游戏包 / 舰船", insurance = "LTI", currentValue = "$300", savings = "$160", includedItems = listOf("M80", "星际公民数字下载", "LTI 保险"), upgradeFrom = "Aurora ES", upgradeTo = "M80", upgradeFromPrice = "$20", upgradeToPrice = "$300"),
         HangarItem("舰船组件 - 轻型量子驱动", "$25", "2026年07月22日", fallbackImage, originalName = "Light Quantum Drive", typeLabel = "Weapon / Component", includedItems = listOf("量子驱动", "S1 组件")),
     )
+
+    override fun cachedOwnedShips() = ownedShipsSnapshot()
+    override fun cachedInventory() = inventorySnapshot()
+
+    private fun ownedShipsSnapshot() = source?.ownedShips(m80Image, fallbackImage) ?: listOf(
+        OwnedShip("M80", "游戏包 - 公民新手包", "$300", "$140", "LTI", m80Image),
+    )
+
+    private fun inventorySnapshot() = source?.hangarItems(m80Image, fallbackImage) ?: emptyList()
 }
 
 data class BuybackItem(

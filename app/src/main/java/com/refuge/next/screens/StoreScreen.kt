@@ -194,9 +194,9 @@ fun StoreScreen(
                     onSort = { showSort = true },
                 )
             }
-            if (isLoading) {
+            if (isLoading && products.isEmpty()) {
                 item { ProductionLoadingState(backdrop, palette, "正在读取商店目录") }
-            } else if (loadError != null) {
+            } else if (loadError != null && products.isEmpty()) {
                 item { ProductionErrorState(backdrop, palette, loadError!!, onRetry = { loadAttempt++ }) }
             } else if (visibleProducts.isEmpty()) {
                 item { StoreEmptyState(palette, search, category.label) }
@@ -541,7 +541,6 @@ private fun StoreCartSheet(
                 RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "清空", onClear)
                 RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.check, "安全结算预览", onCheckout)
             }
-            Text("结算仅保留本地购买意图，不会提交真实 RSI 订单。", style = RefugeTypography.caption(palette))
         }
     }
 }

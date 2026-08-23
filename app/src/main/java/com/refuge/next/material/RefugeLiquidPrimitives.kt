@@ -135,17 +135,7 @@ fun RefugeLiquidSegmented(
 ) {
     val scrollState = rememberScrollState()
     val minWidth = (labels.size * 82).dp
-    OfficialLiquidSegmentedPort(
-        selectedIndex = initialIndex,
-        onSelected = onSelected,
-        backdrop = backdrop,
-        tabsCount = labels.size,
-        isDark = isDark,
-        modifier = modifier.then(
-            if (scrollable) Modifier.widthIn(min = minWidth).horizontalScroll(scrollState) else Modifier,
-        ),
-        outerHeight = 48.dp,
-    ) { selected, select ->
+    val content: @Composable RowScope.(Int, (Int) -> Unit) -> Unit = { selected, select ->
         labels.forEachIndexed { index, label ->
             Box(
                 Modifier
@@ -167,6 +157,39 @@ fun RefugeLiquidSegmented(
                 )
             }
         }
+    }
+    if (scrollable) {
+        // Keep a bounded viewport so LazyColumn does not measure the glass lens as a
+        // zero-width unbounded child. The official lens itself remains the scrolled
+        // content and keeps its real drag/refraction pipeline.
+        Box(
+            modifier = modifier
+                .height(48.dp)
+                .horizontalScroll(scrollState),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            OfficialLiquidSegmentedPort(
+                selectedIndex = initialIndex,
+                onSelected = onSelected,
+                backdrop = backdrop,
+                tabsCount = labels.size,
+                isDark = isDark,
+                modifier = Modifier.width(minWidth).height(48.dp),
+                outerHeight = 48.dp,
+                content = content,
+            )
+        }
+    } else {
+        OfficialLiquidSegmentedPort(
+            selectedIndex = initialIndex,
+            onSelected = onSelected,
+            backdrop = backdrop,
+            tabsCount = labels.size,
+            isDark = isDark,
+            modifier = modifier,
+            outerHeight = 48.dp,
+            content = content,
+        )
     }
 }
 

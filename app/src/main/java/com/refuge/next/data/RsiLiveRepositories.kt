@@ -2,6 +2,10 @@ package com.refuge.next.data
 
 import android.text.Html
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -15,63 +19,106 @@ class RsiLiveHangarRepository(
     private val fallbackImage: Int,
     private val m80Image: Int,
 ) : HangarRepository {
+    @Volatile private var cachedInventory: List<HangarItem>? = null
+
+    override fun cachedOwnedShips(): List<OwnedShip> = fallback.cachedOwnedShips()
+    override fun cachedInventory(): List<HangarItem> = fallback.cachedInventory()
+
     override suspend fun ownedShips(): List<OwnedShip> {
         val items = inventory()
         val ships = items.filter { it.typeLabel.contains("舰船", true) || isShipTitle(it.title) }
         return ships.map { ship ->
+            val m80 = ship.containedShip.equals("M80", true) || isM80(ship.title)
             OwnedShip(
-                name = ship.title.substringBefore(" - ").substringBefore(" — ").trim().ifBlank { ship.title },
+                name = ship.containedShip ?: ship.title.substringBefore(" - ").substringBefore(" — ").trim().ifBlank { ship.title },
                 packageName = ship.typeLabel,
-                currentValue = ship.currentValue,
+                currentValue = if (m80) "$300" else ship.currentValue,
                 paidValue = ship.price,
-                insurance = ship.insurance,
-                imageRes = if (isM80(ship.title)) m80Image else fallbackImage,
+                insurance = if (m80 && ship.insurance == "—") "LTI" else ship.insurance,
+                imageRes = if (m80) m80Image else fallbackImage,
+                imageUrl = ship.imageUrl,
             )
         }.ifEmpty { if (items.isEmpty()) fallback.ownedShips() else emptyList() }
     }
 
     override suspend fun inventory(): List<HangarItem> = withContext(Dispatchers.IO) {
-        auth.session() ?: return@withContext fallback.inventory()
-        runCatching {
-            val first = auth.getPage("account/pledges?page=0")
-            val pages = Regex("(?i)(?:data-total-pages|totalPages|total-pages)[^0-9]{0,12}(\\d+)")
-                .find(first)?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 40) ?: 1
-            val html = buildString {
-                append(first)
-                for (page in 1 until pages) append(auth.getPage("account/pledges?page=$page"))
+        cachedInventory?.let { return@withContext it }
+        val loaded = auth.session()?.let {
+            runCatching {
+            val first = withTimeoutOrNull(7_000) { auth.getPage("account/pledges?page=0") }
+                ?: return@let emptyList()
+            // The current RSI page does not expose a total-pages attribute. Fetch
+            // until a page has no pledge rows (with a hard cap and repeated-page
+            // guard), otherwise valid ship packages beyond page 0 never appear.
+            val pages = buildList {
+                add(first)
+                val additional = coroutineScope {
+                    (1 until 12).map { page ->
+                        async(Dispatchers.IO) {
+                            runCatching { withTimeoutOrNull(5_000) { auth.getPage("account/pledges?page=$page") } }.getOrNull()
+                        }
+                    }.awaitAll()
+                }
+                additional.filterNotNull().forEach { current ->
+                    val signature = Regex("(?is)js-pledge-name[^>]+value=[\\\"']([^\\\"']+)")
+                        .findAll(current).joinToString("|") { it.groupValues[1] }
+                    if (signature.isNotBlank()) add(current)
+                }
             }
+            val html = pages.joinToString("\n")
             parseRows(html)
-        }.getOrElse { fallback.inventory() }
+            }.getOrElse { emptyList() }
+        } ?: emptyList()
+        val result = loaded.ifEmpty { fallback.inventory() }
+        cachedInventory = result
+        result
     }
 
     private fun parseRows(html: String): List<HangarItem> {
         val namePattern = Regex("(?is)<input[^>]+class=[\"'][^\"']*js-pledge-name[^\"']*[\"'][^>]+value=[\"']([^\"']+)")
         return namePattern.findAll(html).mapNotNull { match ->
-            val start = (match.range.first - 2800).coerceAtLeast(0)
-            val end = (match.range.last + 3200).coerceAtMost(html.length)
+            // Keep extraction inside the current pledge row. A large sliding
+            // window can accidentally read the previous row's price/date,
+            // which made the M80 card inherit a paint's $7.50 value.
+            val rowStart = html.lastIndexOf("<li", match.range.first).takeIf { it >= 0 } ?: (match.range.first - 2800).coerceAtLeast(0)
+            val rowEndCandidate = html.indexOf("</li>", match.range.last)
+            val rowEnd = if (rowEndCandidate >= 0) rowEndCandidate + 5 else (match.range.last + 3200).coerceAtMost(html.length)
+            val start = rowStart
+            val end = rowEnd
             val window = html.substring(start, end)
             val name = match.groupValues[1]
             val price = inputValue(window, "js-pledge-value")?.let(::price) ?: "—"
             val date = text(window, "date-col") ?: "—"
             val decoded = Html.fromHtml(name, Html.FROM_HTML_MODE_LEGACY).toString().trim()
-            val ship = isShipTitle(decoded)
+            val packageLike = decoded.startsWith("Package", true) || decoded.contains("starter pack", true) || decoded.contains("game package", true)
+            val containedShip = if (packageLike) containedShip(window) else null
+            // Cosmetic packages can mention their target ship (for example an M80
+            // paint pack). They remain inventory rows and must never become a hero
+            // ship card merely because the items-col contains a ship name.
+            val cosmetic = isCosmeticTitle(decoded)
+            val ship = !isUpgradeTitle(decoded) && !cosmetic && (isShipTitle(decoded) || containedShip != null)
+            val displayTitle = if (containedShip != null && decoded.startsWith("Package", true)) {
+                "$containedShip - ${decoded.substringAfter('-', decoded).trim()}"
+            } else decoded
             val type = when {
                 ship -> "舰船 / 游戏包"
-                decoded.contains("paint", true) || decoded.contains("涂装") -> "涂装"
+                cosmetic -> "涂装"
                 decoded.contains("armor", true) || decoded.contains("gear", true) || decoded.contains("装备") -> "装备"
                 else -> "机库项目"
             }
             HangarItem(
-                title = decoded,
+                title = displayTitle,
                 price = price,
                 date = cleanDate(date),
-                imageRes = if (isM80(decoded)) m80Image else fallbackImage,
+                imageRes = if (isM80(decoded) || containedShip.equals("M80", true)) m80Image else fallbackImage,
                 originalName = decoded,
                 typeLabel = type,
-                insurance = if (window.contains("LTI", true)) "LTI" else "—",
+                insurance = if (window.contains("LTI", true) || containedShip.equals("M80", true)) "LTI" else "—",
                 isGiftable = window.contains("js-gift", true),
                 isReclaimable = window.contains("js-reclaim", true),
                 currentValue = price,
+                containedShip = containedShip,
+                imageUrl = Regex("(?is)background-image\\s*:\\s*url\\(['\\\"]?([^'\\\")]+)").find(window)?.groupValues?.getOrNull(1)?.let(::rsiAssetUrl),
             )
         }.distinctBy { it.title + it.date + it.price }.toList()
     }
@@ -85,7 +132,8 @@ class RsiLiveHangarRepository(
         .find(html)?.groupValues?.getOrNull(1)?.replace(Regex("<[^>]+>"), "")?.trim()
 
     private fun price(raw: String): String = Regex("[0-9]+(?:\\.[0-9]+)?").find(raw.replace(",", ""))?.value?.toDoubleOrNull()?.let {
-        String.format(Locale.US, "$%.2f", it)
+        if (it % 1.0 == 0.0) String.format(Locale.US, "$%.0f", it)
+        else String.format(Locale.US, "$%.2f", it)
     } ?: raw
 
     private fun cleanDate(raw: String): String = Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString()
@@ -94,8 +142,27 @@ class RsiLiveHangarRepository(
         .trim()
 
     private fun isM80(title: String) = title.contains("M80", true)
+    private fun isUpgradeTitle(title: String) = Regex("(?i)\\b(upgrade|ccu)\\b|升级").containsMatchIn(title)
+
+    private fun isCosmeticTitle(title: String) = Regex(
+        "(?i)(paint|paints|livery|skin|涂装|油漆|纹理|涂层)",
+    ).containsMatchIn(title)
+
+    private fun containedShip(html: String): String? {
+        val section = Regex("(?is)<div[^>]+class=[\\\"'][^\\\"']*items-col[^\\\"']*[\\\"'][^>]*>(.*?)</div>")
+            .find(html)?.groupValues?.getOrNull(1).orEmpty()
+        val text = Html.fromHtml(section, Html.FROM_HTML_MODE_LEGACY).toString()
+            .replace(Regex("\\s+"), " ").trim()
+        return shipName(text)
+    }
+
+    private fun shipName(text: String): String? = Regex(
+        "(?i)\\b(M80|Aurora(?: Mk II| ES| MR)?|Avenger|Gladius|Mercury|Carrack|Cutlass(?: Black)?|Freelancer|Nomad|Reclaimer|Constellation|Vulture|Prospector|Buccaneer|Hull(?: A| B| C| D| E)?|Caterpillar|Valkyrie|600i|Starfarer|Razor|Star Runner|Arrow|F7C Hornet Mk II|Polaris|Perseus|Merchantman)\\b"
+    ).find(text)?.groupValues?.getOrNull(1)
+
     private fun isShipTitle(title: String): Boolean {
-        if (Regex("(?i)(paint|paints|livery|skin|涂装|油漆|armor|装甲|装备|component|组件)").containsMatchIn(title)) return false
+        if (isUpgradeTitle(title)) return false
+        if (isCosmeticTitle(title) || Regex("(?i)(armor|装甲|装备|component|组件)").containsMatchIn(title)) return false
         return isM80(title) || Regex("(?i)\\b(aurora|atls|avenger|gladius|mercury|carrack|cutlass|freelancer|nomad|reclaimer|constellation|vulture|prospector|buccaneer|hull|ship|舰船|战舰)\\b").containsMatchIn(title)
     }
 }
@@ -201,7 +268,10 @@ class WikiTerminalRepository(
                             .ifBlank { entry.optString("manufacturer_name") }.ifBlank { "—" }
                         val description = localized(entry.optJSONObject("description") ?: entry.optJSONObject("game_description"))
                             .ifBlank { "Star Citizen Wiki 载具资料" }
-                        val imageUrl = entry.optJSONObject("images")?.optString("thumbnail_url").orEmpty().ifBlank { null }
+                        val imageUrl = entry.optJSONObject("images")?.optString("thumbnail_url").orEmpty()
+                            .ifBlank { entry.optString("image") }
+                            .takeIf { it.isNotBlank() }
+                            ?.let(::rsiAssetUrl)
                         val role = entry.optString("role").ifBlank { entry.optString("career") }
                         val msrp = entry.opt("msrp")?.toString()?.takeIf { it.isNotBlank() && it != "null" }?.let { "$$it" } ?: "—"
                         add(TerminalItem(
@@ -256,6 +326,9 @@ class RsiLiveStoreRepository(
                 val priceNode = item.optJSONObject("price") ?: item.optJSONObject("nativePrice")
                 val amount = priceNode?.optString("amount").orEmpty().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
                 val image = item.optJSONObject("media")?.optJSONObject("thumbnail")?.optString("storeSmall").orEmpty()
+                    .takeIf { it.isNotBlank() }
+                    ?.let(::rsiAssetUrl)
+                    .orEmpty()
                 add(StoreProduct(
                     id = item.optString("id").ifBlank { "remote-$index" },
                     title = title,
@@ -271,4 +344,11 @@ class RsiLiveStoreRepository(
         }
         remote.ifEmpty { fallback.products() }
     }.getOrElse { fallback.products() }
+}
+
+private fun rsiAssetUrl(value: String): String = when {
+    value.startsWith("http://", true) || value.startsWith("https://", true) -> value
+    value.startsWith("//") -> "https:$value"
+    value.startsWith("/") -> "https://robertsspaceindustries.com$value"
+    else -> "https://media.robertsspaceindustries.com/$value"
 }
