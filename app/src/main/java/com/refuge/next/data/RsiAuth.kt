@@ -195,6 +195,18 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         graphql(session, query)
     }
 
+    suspend fun creditGraphql(): JSONObject = withContext(Dispatchers.IO) {
+        val session = session() ?: error("需要先登录 RSI")
+        val query = """
+            query credit { customer {
+              ledgerCredit: ledger(ledgerCode: "credit") { amount { value currency { code symbol } } }
+              ledgerUec: ledger(ledgerCode: "uec") { amount { value currency { code symbol } } }
+              ledgerRec: ledger(ledgerCode: "rec") { amount { value currency { code symbol } } }
+            } }
+        """.trimIndent()
+        graphql(session, query)
+    }
+
     suspend fun storeCatalogPage(page: Int): JSONObject = withContext(Dispatchers.IO) {
         val query = """
             mutation UpdateCatalogQueryMutation(${ '$' }storeFront: String, ${ '$' }query: SearchQuery!) {

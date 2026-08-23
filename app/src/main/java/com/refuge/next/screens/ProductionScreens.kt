@@ -312,7 +312,14 @@ private fun TerminalRow(backdrop: LayerBackdrop, palette: RefugePalette, item: T
     ) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.Top) {
             if (!item.imageUrl.isNullOrBlank()) {
-                AsyncImage(model = item.imageUrl, contentDescription = "${item.name} 图片", contentScale = ContentScale.Crop, modifier = Modifier.size(88.dp).clip(RoundedCornerShape(RefugeRadius.image)))
+                AsyncImage(
+                    model = item.imageUrl,
+                    contentDescription = "${item.name} 图片",
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(R.drawable.ship_placeholder),
+                    error = painterResource(R.drawable.ship_placeholder),
+                    modifier = Modifier.size(88.dp).clip(RoundedCornerShape(RefugeRadius.image)),
+                )
             } else if (item.id == "v-m80") {
                 Image(painter = painterResource(R.drawable.m80_hero), contentDescription = "${item.name} 图片", contentScale = ContentScale.Crop, modifier = Modifier.size(88.dp).clip(RoundedCornerShape(RefugeRadius.image)))
             } else {
@@ -417,7 +424,15 @@ fun ProfileScreen(
                 item { ProfileHero(backdrop, palette, profile) }
                 item { ProfileStats(backdrop, palette, profile) }
                 item { ProfileAccountGroup(backdrop, palette, profile) }
-                item { ProfileUtilities(backdrop, palette, profileToolGroups) { selectedTool = it } }
+                item {
+                    ProfileUtilities(backdrop, palette, profileToolGroups) { tool ->
+                        // The original app's ship/equipment utility entries open
+                        // the searchable terminal directly; keep that behavior
+                        // instead of trapping the user in a static info sheet.
+                        if (tool.id == "ships" || tool.id == "equipment") onNavigate(2)
+                        else selectedTool = tool
+                    }
+                }
                 item { ProfileSettingsButton(backdrop, palette) { onNavigate(5) } }
             }
         }
@@ -428,7 +443,7 @@ fun ProfileScreen(
     )
     selectedTool?.let { tool ->
         selectedToolDetail?.let { detail ->
-            ToolDataSheet(backdrop, palette, tool, detail) { selectedTool = null }
+            ToolDataSheet(backdrop, palette, isDark, tool, detail) { selectedTool = null }
         }
     }
 }
@@ -705,7 +720,7 @@ fun ToolsScreen(
     )
     selectedTool?.let { tool ->
         selectedToolDetail?.let { detail ->
-            ToolDataSheet(backdrop, palette, tool, detail) { selectedTool = null }
+            ToolDataSheet(backdrop, palette, isDark, tool, detail) { selectedTool = null }
         }
     }
 }
@@ -731,16 +746,26 @@ private fun toolIcon(tool: ToolItem) = when (tool.id) {
     "ships" -> RefugeIcons.ship
     "equipment" -> RefugeIcons.inventory
     "referrals", "referral-reverse" -> RefugeIcons.personAdd
-    "test-center" -> RefugeIcons.science
     "web-hangar", "web-buyback", "my-fleet", "referral-program", "spectrum", "service-center", "roadmap", "service-status" -> RefugeIcons.hangarOpenExternal
     else -> RefugeIcons.description
 }
 
 @Composable
-private fun ToolDataSheet(backdrop: LayerBackdrop, palette: RefugePalette, tool: ToolItem, detail: ToolDetail, onDismiss: () -> Unit) {
+private fun ToolDataSheet(backdrop: LayerBackdrop, palette: RefugePalette, isDark: Boolean, tool: ToolItem, detail: ToolDetail, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    var playerHandle by remember(tool.id) { mutableStateOf("") }
     RefugeLiquidSheet(backdrop, palette, tool.title, onDismiss) { modalBackdrop ->
         Text(tool.subtitle, style = RefugeTypography.secondary(palette))
+        if (tool.id == "player-search") {
+            ReferenceSearchField(
+                backdrop = modalBackdrop,
+                isDark = isDark,
+                value = playerHandle,
+                onValueChange = { playerHandle = it },
+                searchIcon = RefugeIcons.personSearch,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         detail.rows.forEach { (label, value) ->
             RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -749,7 +774,10 @@ private fun ToolDataSheet(backdrop: LayerBackdrop, palette: RefugePalette, tool:
                 }
             }
         }
-        detail.externalUrl?.let { url ->
+        val actionUrl = if (tool.id == "player-search" && playerHandle.isNotBlank()) {
+            "https://robertsspaceindustries.com/citizens/${android.net.Uri.encode(playerHandle.trim())}"
+        } else detail.externalUrl
+        actionUrl?.let { url ->
             RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.hangarOpenExternal, "打开外部入口", {
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             }, Modifier.align(Alignment.End))
@@ -815,8 +843,6 @@ fun SettingsScreen(
                     SettingsActionRow(palette, "版本", "0.1.0 · Compose production migration") { showAbout = true }
                     DividerLine(palette)
                     SettingsActionRow(palette, "开源协议", "GNU AGPLv3") {}
-                    DividerLine(palette)
-                    SettingsActionRow(palette, "测试中心", "验证共享组件和运行状态") { onNavigate(3) }
                 }
             }
         }
@@ -838,7 +864,16 @@ private fun SettingsGroup(palette: RefugePalette, title: String, content: @Compo
 
 @Composable
 private fun SettingsToggleRow(backdrop: LayerBackdrop, palette: RefugePalette, title: String, subtitle: String, checked: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+    // Make the whole row an accessible hit target. The liquid thumb still
+    // supports drag/press physics, while a tap on the label or track always
+    // reaches the same persisted setting callback.
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f)) { Text(title, style = RefugeTypography.body(palette).copy(color = palette.text)); Text(subtitle, style = RefugeTypography.caption(palette)) }
         RefugeLiquidToggle(backdrop, palette, checked, onClick, title)
     }

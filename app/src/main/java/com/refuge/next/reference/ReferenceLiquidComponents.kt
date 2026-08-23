@@ -255,7 +255,9 @@ fun RowScope.ReferenceSelectionItem(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val tint = if (selected) ReferenceAccent else if (isDark) Color.White.copy(alpha = .78f) else Color.Black.copy(alpha = .72f)
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(if (selected) 21.dp else 19.dp))
+        // Keep the idle glyph optically smaller than the selected lens glyph;
+        // custom hollow terminal paths otherwise read larger than GridView.
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(if (selected) 21.dp else 17.dp))
         Text(label, color = tint, style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp))
     }
 }

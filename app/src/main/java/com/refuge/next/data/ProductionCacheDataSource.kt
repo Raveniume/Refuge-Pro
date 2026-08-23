@@ -104,6 +104,7 @@ class ProductionCacheDataSource(
                 value = entry.getString("value"),
                 usd = entry.getString("usd"),
                 description = entry.getString("description"),
+                imageUrl = entry.optNullableString("imageUrl"),
             )
         }
 
@@ -111,15 +112,15 @@ class ProductionCacheDataSource(
         ProfileData(
             handle = entry.optString("handle", "Raveniume"),
             city = entry.optString("city", "星环城"),
-            rank = entry.optString("rank", "Experienced"),
-            totalSpent = entry.optString("totalSpent", "$140"),
-            hangarValue = entry.optString("hangarValue", "$300"),
-            credit = entry.optString("credit", "$60"),
-            registerDate = entry.optString("registerDate", "2023-06-18"),
-            uec = entry.optString("uec", "128,400"),
-            rec = entry.optString("rec", "2,960"),
-            currentValue = entry.optString("currentValue", "$300"),
-            referralCode = entry.optString("referralCode", "RAVEN-7K2Q"),
+            rank = entry.optString("rank", "—"),
+            totalSpent = entry.optString("totalSpent", "—"),
+            hangarValue = entry.optString("hangarValue", "—"),
+            credit = entry.optString("credit", "—"),
+            registerDate = entry.optString("registerDate", "—"),
+            uec = entry.optString("uec", "—"),
+            rec = entry.optString("rec", "—"),
+            currentValue = entry.optString("currentValue", "—"),
+            referralCode = entry.optString("referralCode", "—"),
         )
     }
 

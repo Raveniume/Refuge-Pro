@@ -1,6 +1,7 @@
 package com.refuge.next.data
 
 import android.text.Html
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -81,14 +82,27 @@ class RsiLiveHangarRepository(
             // window can accidentally read the previous row's price/date,
             // which made the M80 card inherit a paint's $7.50 value.
             val rowStart = html.lastIndexOf("<li", match.range.first).takeIf { it >= 0 } ?: (match.range.first - 2800).coerceAtLeast(0)
-            val rowEndCandidate = html.indexOf("</li>", match.range.last)
-            val rowEnd = if (rowEndCandidate >= 0) rowEndCandidate + 5 else (match.range.last + 3200).coerceAtMost(html.length)
+            // RSI has used both <li> and <div class="row"> wrappers over
+            // time. The next pledge name is the stable boundary and keeps
+            // date/value extraction inside the same pledge.
+            // Avoid matching the similarly named js-pledge-nameable-ships
+            // script that appears before the date inside the same row.
+            val nextName = namePattern.find(html, match.range.last + 1)?.range?.first ?: -1
+            val rowEnd = if (nextName >= 0) nextName else html.length
             val start = rowStart
             val end = rowEnd
             val window = html.substring(start, end)
             val name = match.groupValues[1]
             val price = inputValue(window, "js-pledge-value")?.let(::price) ?: "—"
-            val date = text(window, "date-col") ?: "—"
+            val date = text(window, "date-col")
+                ?.takeUnless { it.equals("Created:", true) || it.isBlank() }
+                ?: Regex("(?is)date-col.*?((?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},\\s+\\d{4})")
+                    .find(window)?.groupValues?.getOrNull(1)
+                ?: Regex("(?i)(January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},\\s+\\d{4}")
+                    .find(window)?.value
+                ?: Regex("\\b\\d{4}[-/]\\d{2}[-/]\\d{2}\\b").find(window)?.value
+                ?: Regex("(?i)(?:datetime|data-date|data-created|created)[^=]*=[\\\"']([^\\\"']+)").find(window)?.groupValues?.getOrNull(1)
+                ?: "—"
             val decoded = Html.fromHtml(name, Html.FROM_HTML_MODE_LEGACY).toString().trim()
             val packageLike = decoded.startsWith("Package", true) || decoded.contains("starter pack", true) || decoded.contains("game package", true)
             val containedShip = if (packageLike) containedShip(window) else null
@@ -97,8 +111,9 @@ class RsiLiveHangarRepository(
             // ship card merely because the items-col contains a ship name.
             val cosmetic = isCosmeticTitle(decoded)
             val ship = !isUpgradeTitle(decoded) && !cosmetic && (isShipTitle(decoded) || containedShip != null)
+            val localizedTitle = translateHangarTitle(decoded)
             val displayTitle = if (containedShip != null && decoded.startsWith("Package", true)) {
-                "$containedShip - ${decoded.substringAfter('-', decoded).trim()}"
+                "$containedShip - ${localizedTitle.substringAfter('-', localizedTitle).trim()}"
             } else decoded
             val type = when {
                 ship -> "舰船 / 游戏包"
@@ -118,17 +133,18 @@ class RsiLiveHangarRepository(
                 isReclaimable = window.contains("js-reclaim", true),
                 currentValue = price,
                 containedShip = containedShip,
+                includedEntries = extractIncludedEntries(window),
                 imageUrl = Regex("(?is)background-image\\s*:\\s*url\\(['\\\"]?([^'\\\")]+)").find(window)?.groupValues?.getOrNull(1)?.let(::rsiAssetUrl),
             )
         }.distinctBy { it.title + it.date + it.price }.toList()
     }
 
     private fun inputValue(html: String, className: String): String? {
-        val match = Regex("(?is)<input[^>]*class=[\"'][^\"']*$className[^\"']*[\"'][^>]*value=[\"']([^\"']+)").find(html)
+        val match = Regex("(?is)<input[^>]*class=[\"'][^\"']*\\b$className\\b[^\"']*[\"'][^>]*value=[\"']([^\"']+)").find(html)
         return match?.groupValues?.getOrNull(1)
     }
 
-    private fun text(html: String, className: String): String? = Regex("(?is)<[^>]*class=[\"'][^\"']*$className[^\"']*[\"'][^>]*>(.*?)</[^>]+>")
+    private fun text(html: String, className: String): String? = Regex("(?is)<[^>]*class=[\"'][^\"']*\\b$className\\b[^\"']*[\"'][^>]*>(.*?)</[^>]+>")
         .find(html)?.groupValues?.getOrNull(1)?.replace(Regex("<[^>]+>"), "")?.trim()
 
     private fun price(raw: String): String = Regex("[0-9]+(?:\\.[0-9]+)?").find(raw.replace(",", ""))?.value?.toDoubleOrNull()?.let {
@@ -147,6 +163,29 @@ class RsiLiveHangarRepository(
     private fun isCosmeticTitle(title: String) = Regex(
         "(?i)(paint|paints|livery|skin|涂装|油漆|纹理|涂层)",
     ).containsMatchIn(title)
+
+    private fun translateHangarTitle(title: String): String = when {
+        title.equals("Package - Citizen Starter Pack", true) -> "游戏包 - 公民新手包"
+        title.startsWith("Gear -", true) -> title.replaceFirst("Gear -", "装备包 -")
+        title.startsWith("Paints -", true) -> title.replaceFirst("Paints -", "涂装包 -")
+        title.startsWith("Beanie Bundle", true) -> "毛线帽套装 - 莫基节新手指导奖励"
+        else -> title
+    }
+
+    private fun extractIncludedEntries(html: String): List<HangarIncludedItem> = Regex(
+        "(?is)<div[^>]+class=[\"'][^\"']*\\bitem\\b[^\"']*[\"'][^>]*>.*?" +
+            "background-image\\s*:\\s*url\\(['\"]?([^'\")]+).*?" +
+            "<div[^>]+class=[\"'][^\"']*title[^\"']*[\"'][^>]*>(.*?)</div>",
+    ).findAll(html).mapNotNull { match ->
+        val title = Html.fromHtml(match.groupValues.getOrNull(2).orEmpty(), Html.FROM_HTML_MODE_LEGACY)
+            .toString()
+            .replace(Regex("\\[\\]\\s*null", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\bAttributed\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+"), " ").trim()
+        title.takeIf { it.isNotBlank() }?.let {
+            HangarIncludedItem(it, match.groupValues.getOrNull(1)?.let(::rsiAssetUrl))
+        }
+    }.toList().distinctBy { it.title }
 
     private fun containedShip(html: String): String? {
         val section = Regex("(?is)<div[^>]+class=[\\\"'][^\\\"']*items-col[^\\\"']*[\\\"'][^>]*>(.*?)</div>")
@@ -178,23 +217,37 @@ class RsiLiveProfileRepository(
         return runCatching {
             val account = auth.accountGraphql().optJSONObject("data")?.optJSONObject("account") ?: error("账户响应为空")
             val fallbackProfile = fallback.profile()
-            val items = hangar.inventory()
-            val paid = items.mapNotNull { Regex("[0-9]+(?:\\.[0-9]+)?").find(it.price.replace(",", ""))?.value?.toDoubleOrNull() }.sum()
-            val current = items.mapNotNull { Regex("[0-9]+(?:\\.[0-9]+)?").find(it.currentValue.replace(",", ""))?.value?.toDoubleOrNull() }.sum()
-            val money = { value: Double -> String.format(Locale.US, "$%.2f", value) }
+            val ships = hangar.ownedShips()
+            val current = ships.mapNotNull { numericUsd(it.currentValue) }.sum()
+            val billing = runCatching { auth.getPage("account/billing") }.getOrDefault("")
+            val citizen = account.optString("nickname").takeIf { it.isNotBlank() }?.let { handle ->
+                runCatching { auth.getPage("citizens/$handle") }.getOrDefault("")
+            }.orEmpty()
+            val credit = runCatching { auth.creditGraphql() }.getOrDefault(JSONObject())
+            val totalSpent = Regex("(?is)<div[^>]+class=[\"'][^\"']*spent-line[^\"']*[\"'][^>]*>.*?<em>\\s*\\$?([0-9,.]+)")
+                .findAll(billing).lastOrNull()?.groupValues?.getOrNull(1)?.let { "$$it" } ?: "—"
+            val creditValue = ledgerValue(credit, "ledgerCredit")
+            val uecValue = ledgerValue(credit, "ledgerUec")
+            val recValue = ledgerValue(credit, "ledgerRec")
+            val avatar = account.optString("avatar").ifBlank {
+                Regex("(?is)<div[^>]+class=[\"'][^\"']*thumb[^\"']*[\"'][^>]*>.*?<img[^>]+src=[\"']([^\"']+)").find(citizen)?.groupValues?.getOrNull(1).orEmpty()
+            }.takeIf { it.isNotBlank() }?.let(::rsiAssetUrl)
+            val register = Regex("(?is)<div[^>]+class=[\"'][^\"']*entry[^\"']*[\"'][^>]*>.*?<strong>(.*?)</strong>")
+                .find(citizen)?.groupValues?.getOrNull(1)?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
+                ?: account.optString("createdAt")
             fallbackProfile.copy(
                 handle = account.optString("nickname").ifBlank { account.optString("username") }.ifBlank { fallbackProfile.handle },
                 city = "RSI 账户",
                 rank = if (account.optBoolean("hasGamePackage", false)) "已拥有游戏包" else "RSI 账户",
-                registerDate = account.optString("createdAt").ifBlank { fallbackProfile.registerDate },
-                totalSpent = money(paid),
-                hangarValue = money(current),
-                currentValue = money(current),
-                credit = "—",
-                uec = "—",
-                rec = "—",
+                registerDate = register.ifBlank { fallbackProfile.registerDate },
+                totalSpent = totalSpent,
+                hangarValue = formatUsdValue(current),
+                currentValue = formatUsdValue(current),
+                credit = creditValue,
+                uec = uecValue,
+                rec = recValue,
                 referralCode = account.optString("referral_code").ifBlank { "—" },
-                avatarUrl = account.optString("avatar").ifBlank { null },
+                avatarUrl = avatar,
                 email = account.optString("email").ifBlank { null },
                 username = account.optString("username").ifBlank { null },
                 hasGamePackage = account.optBoolean("hasGamePackage", false),
@@ -218,6 +271,24 @@ class RsiLiveProfileRepository(
             )
         }
     }
+
+    private fun numericUsd(value: String): Double? = Regex("[0-9]+(?:\\.[0-9]+)?")
+        .find(value.replace(",", ""))?.value?.toDoubleOrNull()
+
+    private fun formatUsdValue(value: Double): String = if (value % 1.0 == 0.0) {
+        String.format(Locale.US, "$%.0f", value)
+    } else {
+        String.format(Locale.US, "$%.2f", value)
+    }
+
+    private fun ledgerValue(root: JSONObject, key: String): String {
+        val value = root.optJSONObject("data")?.optJSONObject("customer")
+            ?.optJSONObject(key)?.optJSONObject("amount")?.opt("value") ?: return "—"
+        return when (value) {
+            is Number -> String.format(Locale.US, "%,d", value.toLong())
+            else -> value.toString()
+        }
+    }
 }
 
 class RsiLiveBuybackRepository(
@@ -228,19 +299,48 @@ class RsiLiveBuybackRepository(
     override suspend fun items(): List<BuybackItem> {
         if (auth.session() == null) return fallback.items()
         return runCatching {
-            val html = auth.getPage("account/buy-back-pledges?page=0&pagesize=100")
-            Regex("(?is)<article[^>]+class=[\"'][^\"']*pledge[^\"']*[\"'][^>]*>(.*?)</article>")
+            // RSI buyback uses page=1 and exposes up to 100 article rows. The
+            // previous adapter requested page=0 and silently returned only the
+            // bundled three-item fallback.
+            val html = auth.getPage("account/buy-back-pledges?page=1&pagesize=100")
+            Regex("(?is)<article[^>]+class=[\"'][^\"']*\\bpledge\\b[^\"']*[\"'][^>]*>(.*?)</article>")
                 .findAll(html)
                 .mapNotNull { match ->
                     val row = match.groupValues[1]
-                    val title = Regex("(?is)<h1[^>]*>(.*?)</h1>").find(row)?.groupValues?.getOrNull(1)?.replace(Regex("<[^>]+>"), "")?.trim()
-                        ?: return@mapNotNull null
-                    val price = Regex("(?i)\\$\\s*([0-9,.]+)").find(row)?.groupValues?.getOrNull(1)?.let { "$$it" } ?: "—"
-                    BuybackItem(title, price, "—", fallbackImage, title)
+                    val title = Regex("(?is)<h1[^>]*>(.*?)</h1>").find(row)?.groupValues?.getOrNull(1)
+                        ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
+                        ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    val dds = Regex("(?is)<dd[^>]*>(.*?)</dd>").findAll(row)
+                        .map { Html.fromHtml(it.groupValues[1], Html.FROM_HTML_MODE_LEGACY).toString().trim() }
+                        .toList()
+                    val image = Regex("(?is)<img[^>]+src=[\"']([^\"']+)").find(row)?.groupValues?.getOrNull(1)?.let(::rsiAssetUrl)
+                    val href = Regex("(?is)class=[\"'][^\"']*holosmallbtn[^\"']*[\"'][^>]+href=[\"']([^\"']+)").find(row)?.groupValues?.getOrNull(1).orEmpty()
+                    val isUpgrade = title.contains("upgrade", true) || title.contains("升级")
+                    BuybackItem(
+                        title = translateBuybackTitle(title),
+                        price = "—",
+                        date = dds.firstOrNull()?.let(::cleanBuybackDate) ?: "—",
+                        imageRes = fallbackImage,
+                        originalName = title,
+                        isUpgrade = isUpgrade || row.contains("data-fromshipid", true),
+                        imageUrl = image,
+                        contains = dds.drop(1),
+                    )
                 }.toList()
+                .distinctBy { it.originalName + it.date }
                 .ifEmpty { fallback.items() }
         }.getOrElse { fallback.items() }
     }
+
+    private fun translateBuybackTitle(title: String): String = when {
+        title.startsWith("Subscribers Store - ", true) -> title.removePrefix("Subscribers Store - ")
+        else -> title
+    }
+
+    private fun cleanBuybackDate(value: String): String = runCatching {
+        val parsed = java.time.LocalDate.parse(value, java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.US))
+        parsed.format(java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日", Locale.CHINA))
+    }.getOrDefault(value)
 }
 
 /** Public Star Citizen Wiki adapter for the terminal's vehicle category. */
@@ -268,10 +368,8 @@ class WikiTerminalRepository(
                             .ifBlank { entry.optString("manufacturer_name") }.ifBlank { "—" }
                         val description = localized(entry.optJSONObject("description") ?: entry.optJSONObject("game_description"))
                             .ifBlank { "Star Citizen Wiki 载具资料" }
-                        val imageUrl = entry.optJSONObject("images")?.optString("thumbnail_url").orEmpty()
-                            .ifBlank { entry.optString("image") }
-                            .takeIf { it.isNotBlank() }
-                            ?.let(::rsiAssetUrl)
+                        val imageUrl = terminalImage(entry)
+                            ?: terminalImageFallback(name)
                         val role = entry.optString("role").ifBlank { entry.optString("career") }
                         val msrp = entry.opt("msrp")?.toString()?.takeIf { it.isNotBlank() && it != "null" }?.let { "$$it" } ?: "—"
                         add(TerminalItem(
@@ -289,7 +387,8 @@ class WikiTerminalRepository(
                 }
                 (fallback.items() + remote).distinctBy { it.id }
             }
-        }.getOrElse { fallback.items() }
+        }.onFailure { Log.w("RefugeTerminal", "Wiki terminal refresh failed", it) }
+            .getOrElse { fallback.items() }
     }
 
     private fun localized(node: JSONObject?): String {
@@ -297,6 +396,28 @@ class WikiTerminalRepository(
         return listOf("zh_CN", "en_EN", "en_US", "en").firstNotNullOfOrNull { key ->
             node.optString(key).takeIf { it.isNotBlank() }
         } ?: node.optString("text")
+    }
+
+    // The public wiki occasionally omits thumbnails for the first page of
+    // vehicles. Keep the terminal visual list image-backed instead of
+    // rendering a blank card while the upstream catalogue catches up.
+    private fun terminalImageFallback(name: String): String? = when {
+        name.equals("A1 Spirit", true) -> "https://media.starcitizen.tools/thumb/6/66/A1_x2_bombing_ground_vehicle_attackers_-_Cut.jpg/600px-A1_x2_bombing_ground_vehicle_attackers_-_Cut.jpg.webp"
+        name.equals("A2 Hercules Starlifter", true) -> "https://media.starcitizen.tools/thumb/8/8f/A2_Hercules_Starlifter_-_Cargo.jpg/600px-A2_Hercules_Starlifter_-_Cargo.jpg.webp"
+        else -> null
+    }
+
+    private fun terminalImage(entry: JSONObject): String? {
+        val images = entry.opt("images")
+        val raw = when (images) {
+            null -> ""
+            is JSONObject -> images.optString("thumbnail_url").ifBlank { images.optString("original_url") }
+            is org.json.JSONArray -> images.optJSONObject(0)?.let {
+                it.optString("thumbnail_url").ifBlank { it.optString("original_url") }
+            }.orEmpty()
+            else -> ""
+        }.ifBlank { entry.optString("image") }
+        return raw.takeIf { it.isNotBlank() }?.let(::rsiAssetUrl)
     }
 }
 

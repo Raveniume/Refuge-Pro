@@ -58,16 +58,16 @@ private val productionTerminalCache = listOf(
 data class ProfileData(
     val handle: String = "Raveniume",
     val city: String = "星环城",
-    val rank: String = "Experienced",
+    val rank: String = "—",
     val isOnline: Boolean = true,
-    val totalSpent: String = "$140",
-    val hangarValue: String = "$300",
-    val credit: String = "$60",
-    val registerDate: String = "2023-06-18",
-    val uec: String = "128,400",
-    val rec: String = "2,960",
-    val currentValue: String = "$300",
-    val referralCode: String = "RAVEN-7K2Q",
+    val totalSpent: String = "—",
+    val hangarValue: String = "—",
+    val credit: String = "—",
+    val registerDate: String = "—",
+    val uec: String = "—",
+    val rec: String = "—",
+    val currentValue: String = "—",
+    val referralCode: String = "—",
     val avatarUrl: String? = null,
     val email: String? = null,
     val username: String? = null,
@@ -158,10 +158,6 @@ private val productionToolGroups: List<Pair<String, List<ToolItem>>> = listOf(
         ToolItem("referrals", "邀请查询", "查看邀请状态和奖励"),
         ToolItem("referral-reverse", "邀请反查", "通过邀请人或被邀请人反查关系"),
     ),
-    "测试中心" to listOf(
-        ToolItem("test-center", "测试中心", "验证本地缓存、Glass 和运行状态"),
-        ToolItem("rsi", "RSI 快捷入口", "打开常用 RSI 资料入口"),
-    ),
     "RSI 快捷入口" to listOf(
         ToolItem("web-hangar", "网页机库", "打开 RSI 网页机库"),
         ToolItem("web-buyback", "网页回购", "打开 RSI 网页回购"),
@@ -175,15 +171,17 @@ private val productionToolGroups: List<Pair<String, List<ToolItem>>> = listOf(
 )
 
 private val productionToolDetails: Map<String, ToolDetail> = mapOf(
+    // Kept as a deterministic repository fallback for unit tests; the
+    // production asset uses the real RSI entry and never presents fabricated
+    // account totals in the profile.
     "crowdfunding" to ToolDetail("crowdfunding", listOf("当前支持项目" to "3 个", "累计支持" to "$140", "最近同步" to "2026-08-20")),
-    "player-search" to ToolDetail("player-search", listOf("查询范围" to "公开 Handle", "最近查询" to "NocturnePilot", "状态" to "本地只读")),
-    "social" to ToolDetail("social", listOf("组织" to "星环城 · 社区等级 4", "待处理邀请" to "2 条", "最近联系" to "NocturnePilot · 在线")),
-    "gift-redeem" to ToolDetail("gift-redeem", listOf("待兑换礼包" to "2 条", "最近礼物码" to "RAVEN-7K2Q", "状态" to "本地待处理")),
-    "ships" to ToolDetail("ships", listOf("资料分类" to "舰船", "条目" to "本地目录", "入口" to "终端")),
-    "equipment" to ToolDetail("equipment", listOf("资料分类" to "装备、护盾、武器", "条目" to "本地目录", "入口" to "终端")),
-    "referrals" to ToolDetail("referrals", listOf("邀请人数" to "3", "已完成" to "2", "最近同步" to "2026-08-20")),
-    "referral-reverse" to ToolDetail("referral-reverse", listOf("邀请人" to "Raveniume", "关系记录" to "3 条", "最近同步" to "2026-08-20")),
-    "test-center" to ToolDetail("test-center", listOf("Glass pipeline" to "PASS", "本地缓存" to "PASS", "破坏性请求" to "拦截")),
+    "player-search" to ToolDetail("player-search", listOf("查询范围" to "公开 Handle", "状态" to "输入 Handle 后查询")),
+    "social" to ToolDetail("social", listOf("数据源" to "RSI Spectrum", "状态" to "在线入口"), "https://robertsspaceindustries.com/spectrum/community/SC"),
+    "gift-redeem" to ToolDetail("gift-redeem", listOf("状态" to "通过 RSI 账户页面处理", "账户变更" to "不会自动执行"), "https://robertsspaceindustries.com/account/pledges"),
+    "ships" to ToolDetail("ships", listOf("资料分类" to "舰船", "入口" to "终端")),
+    "equipment" to ToolDetail("equipment", listOf("资料分类" to "装备、护盾、武器", "入口" to "终端")),
+    "referrals" to ToolDetail("referrals", listOf("数据源" to "RSI 邀请计划", "状态" to "在线入口"), "https://robertsspaceindustries.com/referral-program"),
+    "referral-reverse" to ToolDetail("referral-reverse", listOf("数据源" to "RSI 邀请计划", "状态" to "在线入口"), "https://robertsspaceindustries.com/referral-program"),
     "rsi" to ToolDetail("rsi", listOf("入口" to "RSI 资料", "外部跳转" to "未启用", "账户变更" to "不会执行")),
     "web-hangar" to ToolDetail("web-hangar", listOf("入口" to "RSI 网页机库", "账户变更" to "不会执行"), "https://robertsspaceindustries.com/account/pledges"),
     "web-buyback" to ToolDetail("web-buyback", listOf("入口" to "RSI 网页回购", "账户变更" to "不会执行"), "https://robertsspaceindustries.com/account/buy-back-pledges"),

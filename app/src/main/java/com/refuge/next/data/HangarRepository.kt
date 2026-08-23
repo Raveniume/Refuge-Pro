@@ -27,8 +27,14 @@ data class HangarItem(
     val upgradeTo: String? = null,
     val upgradeFromPrice: String? = null,
     val upgradeToPrice: String? = null,
+    val includedEntries: List<HangarIncludedItem> = emptyList(),
     /** Ship contained by a package row when RSI does not expose a typed child item. */
     val containedShip: String? = null,
+    val imageUrl: String? = null,
+)
+
+data class HangarIncludedItem(
+    val title: String,
     val imageUrl: String? = null,
 )
 
@@ -74,6 +80,8 @@ data class BuybackItem(
     val imageRes: Int,
     val originalName: String = "—",
     val isUpgrade: Boolean = false,
+    val imageUrl: String? = null,
+    val contains: List<String> = emptyList(),
 )
 
 interface BuybackRepository {

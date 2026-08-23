@@ -58,6 +58,7 @@ import coil3.compose.AsyncImage
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.R
 import com.refuge.next.data.HangarItem
+import com.refuge.next.data.HangarIncludedItem
 import com.refuge.next.data.HangarRepository
 import com.refuge.next.data.BuybackItem
 import com.refuge.next.data.BuybackRepository
@@ -228,7 +229,15 @@ fun HangarScreen(
                         palette = palette,
                         ship = ship,
                         onClick = {
-                            selectedDetail = detailForShip(ship)
+                            // A hero card is the aggregate of its real pledge.
+                            // Reuse that pledge's detail so the sheet contains
+                            // the same date, image and included items as the
+                            // connected inventory row instead of synthetic
+                            // placeholder children.
+                            selectedDetail = inventory.firstOrNull { item ->
+                                item.containedShip.equals(ship.name, true) ||
+                                    item.title.contains(ship.name, true)
+                            }?.toHangarDetail() ?: detailForShip(ship)
                         },
                     )
                 }
@@ -385,6 +394,7 @@ private data class HangarDetail(
     val savings: String,
     val insurance: String,
     val includedItems: List<String>,
+    val includedEntries: List<HangarIncludedItem> = emptyList(),
     val originalName: String = "—",
     val typeLabel: String = "本地机库项目",
     val upgradeFrom: String? = null,
@@ -412,12 +422,18 @@ private fun detailForShip(ship: OwnedShip) = HangarDetail(
     isReclaimable = true,
     meltValue = ship.paidValue,
     currentValue = ship.currentValue,
-    savings = "$160",
+    savings = usdDifference(ship.currentValue, ship.paidValue),
     insurance = ship.insurance,
     includedItems = listOf("${ship.name} 游戏包", "数字下载", "${ship.insurance} 保险"),
     originalName = ship.name,
     typeLabel = "舰船 / 游戏包",
 )
+
+private fun usdDifference(current: String, paid: String): String {
+    fun amount(value: String) = Regex("[0-9]+(?:\\.[0-9]+)?").find(value)?.value?.toDoubleOrNull() ?: 0.0
+    val difference = (amount(current) - amount(paid)).coerceAtLeast(0.0)
+    return if (difference % 1.0 == 0.0) "$${difference.toInt()}" else String.format(java.util.Locale.US, "$%.2f", difference)
+}
 
 private fun HangarItem.toHangarDetail() = HangarDetail(
     title = title,
@@ -434,6 +450,7 @@ private fun HangarItem.toHangarDetail() = HangarDetail(
     savings = savings,
     insurance = insurance,
     includedItems = includedItems.ifEmpty { listOf(title) },
+    includedEntries = includedEntries,
     originalName = originalName,
     typeLabel = typeLabel,
     upgradeFrom = upgradeFrom,
@@ -448,6 +465,7 @@ private fun BuybackItem.toHangarDetail() = HangarDetail(
     price = price,
     date = date,
     imageRes = imageRes,
+    imageUrl = imageUrl,
     description = title,
     isGiftable = false,
     isReclaimable = false,
@@ -469,7 +487,18 @@ private fun HangarRebuyRow(palette: RefugePalette, item: BuybackItem, onClick: (
         padding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.Top) {
-            HangarImage(item.imageRes, "${item.title} 图片", Modifier.size(88.dp))
+            if (item.imageUrl.isNullOrBlank()) {
+                HangarImage(item.imageRes, "${item.title} 图片", Modifier.size(88.dp))
+            } else {
+                AsyncImage(
+                    model = item.imageUrl,
+                    contentDescription = "${item.title} 图片",
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(item.imageRes),
+                    error = painterResource(item.imageRes),
+                    modifier = Modifier.size(88.dp).aspectRatio(1f).clip(RoundedCornerShape(RefugeRadius.image)),
+                )
+            }
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.fillMaxSize()) {
                 Text(item.title, style = RefugeTypography.headline(palette), maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -693,7 +722,7 @@ private fun HangarInventoryRow(
     Box(
         Modifier
             .fillMaxWidth()
-            .height(116.dp)
+            .height(132.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -725,14 +754,18 @@ private fun HangarInventoryRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Text(
+                    "日期 · ${item.date.ifBlank { "—" }}",
+                    style = RefugeTypography.secondary(palette),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Spacer(Modifier.weight(1f))
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(item.price, style = RefugeTypography.value(palette))
-                    Spacer(Modifier.width(RefugeSpacing.md))
-                    Text(item.date, style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.weight(1f))
                     InventoryAction(RefugeIcons.gift, "赠送", palette, item.isGiftable, onGift)
                     InventoryAction(RefugeIcons.reclaim, "回收", palette, item.isReclaimable, onReclaim)
@@ -841,8 +874,15 @@ private fun HangarDetailSheet(
                 Text(detail.description, style = RefugeTypography.body(palette))
                 DetailValueSummary(palette, detail)
                 Text("内含项目", style = RefugeTypography.headline(palette))
-                detail.includedItems.forEachIndexed { index, item ->
-                    DetailIncludedRow(palette, detail.imageRes, item, index == detail.includedItems.lastIndex)
+                val included = detail.includedEntries
+                if (included.isNotEmpty()) {
+                    included.forEachIndexed { index, item ->
+                        DetailIncludedRow(palette, detail.imageRes, item.title, index == included.lastIndex, item.imageUrl)
+                    }
+                } else {
+                    detail.includedItems.forEachIndexed { index, item ->
+                        DetailIncludedRow(palette, detail.imageRes, item, index == detail.includedItems.lastIndex)
+                    }
                 }
                 Text("其他信息", style = RefugeTypography.headline(palette))
                 DetailMetadataRow(palette, "入库日期", detail.date)
@@ -885,10 +925,22 @@ private fun DetailIncludedRow(
     imageRes: Int,
     title: String,
     isLast: Boolean,
+    imageUrl: String? = null,
 ) {
     Column {
         Row(Modifier.fillMaxWidth().padding(vertical = RefugeSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
-            HangarImage(imageRes, "$title 图片", Modifier.size(52.dp))
+            if (imageUrl.isNullOrBlank()) {
+                HangarImage(imageRes, "$title 图片", Modifier.size(52.dp))
+            } else {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = "$title 图片",
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(imageRes),
+                    error = painterResource(imageRes),
+                    modifier = Modifier.size(52.dp).aspectRatio(1f).clip(RoundedCornerShape(RefugeRadius.image)),
+                )
+            }
             Spacer(Modifier.width(RefugeSpacing.sm))
             Text(title, style = RefugeTypography.body(palette).copy(color = palette.text), modifier = Modifier.weight(1f))
             Icon(RefugeIcons.chevron, null, tint = palette.textMuted, modifier = Modifier.size(RefugeIconSize.small))
