@@ -5,6 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -46,7 +49,28 @@ interface RsiAuthRepository {
  */
 class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     private val prefs = context.getSharedPreferences("refuge_rsi_session", Context.MODE_PRIVATE)
-    private val client = OkHttpClient.Builder().build()
+    /**
+     * RSI's image-CAPTCHA flow is stateful: the CAPTCHA response establishes a
+     * short-lived challenge cookie that must be sent with the following sign-in
+     * request. Keep those cookies in the same in-memory client session rather
+     * than relying on a new request having no cookie context.
+     */
+    private val client = OkHttpClient.Builder()
+        .cookieJar(object : CookieJar {
+            private val jar = linkedMapOf<String, Cookie>()
+
+            override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+                cookies.forEach { cookie ->
+                    val key = "${cookie.domain};${cookie.path};${cookie.name}"
+                    if (cookie.expiresAt < System.currentTimeMillis()) jar.remove(key)
+                    else jar[key] = cookie
+                }
+            }
+
+            override fun loadForRequest(url: HttpUrl): List<Cookie> =
+                jar.values.filter { it.matches(url) }
+        })
+        .build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private var pendingEmail: String = prefs.getString(KEY_PENDING_EMAIL, "") ?: ""
     private var pendingDevice: String = prefs.getString(KEY_PENDING_DEVICE, "") ?: ""
