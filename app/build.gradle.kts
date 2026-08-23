@@ -20,6 +20,14 @@ android {
         compose = true
     }
 
+    // Keep the standard per-user debug keystore explicit so every desktop APK
+    // remains upgrade-compatible during phone testing.
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
     packaging {
         resources.excludes += setOf(
             "META-INF/LICENSE.md",

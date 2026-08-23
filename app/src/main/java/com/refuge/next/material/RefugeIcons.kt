@@ -34,10 +34,22 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Upgrade
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.ShoppingBag
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.ui.graphics.vector.ImageVector
 
 object RefugeIcons {
     val home: ImageVector = Icons.Outlined.Home
+    /** Navigation glyphs mirror RefugeNext's Flutter MainNavigationBar. */
+    val homeSelected: ImageVector = Icons.Rounded.Home
+    val terminal: ImageVector = Icons.Outlined.GridView
+    val terminalSelected: ImageVector = Icons.Rounded.GridView
+    val storeOutline: ImageVector = Icons.Outlined.ShoppingBag
+    val storeSelected: ImageVector = Icons.Rounded.ShoppingBag
+    val profileSelected: ImageVector = Icons.Rounded.Person
     val tools: ImageVector = Icons.Outlined.Build
     val design: ImageVector = Icons.Outlined.Tune
     val filter: ImageVector = Icons.Outlined.FilterList

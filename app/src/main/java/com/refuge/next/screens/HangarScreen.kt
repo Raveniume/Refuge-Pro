@@ -523,15 +523,6 @@ private fun HangarHeader(
         Column(Modifier.weight(1f)) {
             Text("我的机库", style = RefugeTypography.largeTitle(palette))
         }
-        RefugeLiquidIconButton(
-            backdrop = backdrop,
-            icon = if (palette.background == com.refuge.next.design.RefugeColors.dark.background) RefugeIcons.light else RefugeIcons.dark,
-            contentDescription = "切换明暗主题",
-            onClick = onToggleTheme,
-            modifier = Modifier.size(44.dp),
-            iconTint = palette.textSecondary,
-        )
-        Spacer(Modifier.width(RefugeSpacing.xs))
         RefugeLiquidIconButton(backdrop, RefugeIcons.search, "搜索机库", onSearch, Modifier.size(44.dp), iconTint = palette.textSecondary)
         Spacer(Modifier.width(RefugeSpacing.xs))
         RefugeLiquidIconButton(backdrop, RefugeIcons.more, "更多操作", onOpenDesignLab, Modifier.size(44.dp), iconTint = palette.textSecondary)

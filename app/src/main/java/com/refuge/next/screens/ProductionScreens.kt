@@ -106,14 +106,15 @@ import com.refuge.next.reference.ReferenceSelectionItem
 private data class RootTab(
     val route: Int,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     val label: String,
 )
 
 private val rootTabs = listOf(
-    RootTab(0, RefugeIcons.home, "机库"),
-    RootTab(1, RefugeIcons.store, "商店"),
-    RootTab(2, RefugeIcons.design, "终端"),
-    RootTab(4, RefugeIcons.profile, "我的"),
+    RootTab(0, RefugeIcons.home, RefugeIcons.homeSelected, "机库"),
+    RootTab(1, RefugeIcons.storeOutline, RefugeIcons.storeSelected, "商店"),
+    RootTab(2, RefugeIcons.terminal, RefugeIcons.terminalSelected, "终端"),
+    RootTab(4, RefugeIcons.profile, RefugeIcons.profileSelected, "我的"),
 )
 
 @Composable
@@ -139,7 +140,7 @@ fun BoxScope.RootBottomNav(
     ) { selectedIndex, select ->
         rootTabs.forEachIndexed { index, tab ->
             ReferenceSelectionItem(
-                icon = tab.icon,
+                icon = if (index == selectedIndex) tab.selectedIcon else tab.icon,
                 label = tab.label,
                 selected = index == selectedIndex,
                 isDark = isDark,

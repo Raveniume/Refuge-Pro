@@ -1,6 +1,8 @@
 package com.refuge.next
 
 import android.app.Activity
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,7 +64,6 @@ fun RefugeApp() {
     val isOnline = userStatus.isOnline
     var selectedTab by remember { mutableIntStateOf(0) }
     var rootTab by remember { mutableIntStateOf(0) }
-    val palette = if (isDark) RefugeColors.dark else RefugeColors.light
     val view = LocalView.current
     SideEffect {
         val window = (view.context as Activity).window
@@ -102,8 +103,14 @@ fun RefugeApp() {
         selectedTab = rootTab
     }
 
-    RefugeScene(palette) { backdrop ->
-        RefugeRouteTransition(targetState = selectedTab, modifier = Modifier.fillMaxSize()) { route ->
+    Crossfade(
+        targetState = isDark,
+        animationSpec = tween(durationMillis = 420),
+        label = "theme-transition",
+    ) { animatedDark ->
+        val palette = if (animatedDark) RefugeColors.dark else RefugeColors.light
+        RefugeScene(palette) { backdrop ->
+            RefugeRouteTransition(targetState = selectedTab, modifier = Modifier.fillMaxSize()) { route ->
             RefugeContent(
                 selectedTab = route,
                 onNavigate = {
@@ -124,7 +131,7 @@ fun RefugeApp() {
                 utilityRepository = utilityRepository,
                 ccuRepository = ccuRepository,
                 terminalRepository = terminalRepository,
-                isDark = isDark,
+                isDark = animatedDark,
                 onToggleTheme = {
                     settings = settings.copy(darkTheme = !settings.darkTheme)
                     settingsRepository.save(settings)
@@ -146,6 +153,7 @@ fun RefugeApp() {
                     settingsRepository.save(settings)
                 },
             )
+            }
         }
     }
 }
