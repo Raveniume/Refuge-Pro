@@ -11,7 +11,6 @@ import okhttp3.HttpUrl
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.util.UUID
 
 /** Persisted RSI session. Passwords are intentionally never stored. */
 data class RsiSession(
@@ -96,7 +95,20 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
             if (email.isBlank() || password.isBlank()) {
                 return@withContext RsiLoginResult(RsiLoginStep.FAILED, "请输入邮箱和密码")
             }
-            val device = pendingDevice.ifBlank { UUID.randomUUID().toString().replace("-", "").take(24) }
+            // A blank captcha means a fresh first step. Discard any persisted
+            // half-finished challenge so a restarted app cannot reuse an old
+            // token/device pair with a new image.
+            if (captcha.isNullOrBlank()) {
+                pendingToken = ""
+                pendingDevice = ""
+                pendingAuth = ""
+                savePending()
+            }
+            // Do not invent a device header for the captcha challenge. RSI
+            // assigns the device only when it returns one in the response;
+            // sending a client-generated value binds the image to a different
+            // challenge and makes an otherwise valid answer fail.
+            val device = pendingDevice
             pendingEmail = email
             pendingDevice = device
             savePending()
@@ -270,7 +282,7 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         val message = json.optString("msg").ifBlank { json.optString("message") }.ifBlank { "RSI 登录未完成" }
         val data = json.optJSONObject("data")
         val responseToken = data?.optString("session_id").orEmpty().ifBlank { cookieToken }
-        val responseDevice = data?.optString("device_id").orEmpty().ifBlank { device }
+        val responseDevice = data?.optString("device_id").orEmpty().ifBlank { cookieDevice }
         if (code == "ErrMultiStepRequired" || code == "ErrCaptchaRequiredLauncher") {
             pendingEmail = email
             pendingDevice = responseDevice
@@ -288,7 +300,9 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         val success = json.optInt("success", 0) == 1 || code == "ErrNoGamePackage"
         if (!success || data == null && code != "ErrNoGamePackage") return RsiLoginResult(RsiLoginStep.FAILED, message)
         val token = data?.optString("session_id").orEmpty().ifBlank { cookieToken }
-        val actualDevice = data?.optString("device_id").orEmpty().ifBlank { device }
+        val actualDevice = data?.optString("device_id").orEmpty()
+            .ifBlank { cookieDevice }
+            .ifBlank { device }
         if (token.isBlank()) return RsiLoginResult(RsiLoginStep.FAILED, "RSI 未返回会话令牌")
         val stored = RsiSession(email, actualDevice, token, cookieAuth)
         prefs.edit()
@@ -312,6 +326,7 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
 
     private var cookieToken: String = ""
     private var cookieAuth: String = ""
+    private var cookieDevice: String = ""
     private fun captureCookie(value: String) {
         val pair = value.substringBefore(';')
         val key = pair.substringBefore('=').trim()
@@ -319,7 +334,7 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         when (key) {
             "Rsi-Token" -> cookieToken = token
             "Rsi-Account-Auth" -> cookieAuth = token
-            "_rsi_device" -> if (pendingDevice.isBlank()) pendingDevice = token
+            "_rsi_device" -> cookieDevice = token
         }
     }
 
