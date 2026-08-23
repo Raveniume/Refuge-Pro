@@ -12,10 +12,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
+import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +31,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.data.RsiAuthDataSource
@@ -56,19 +66,51 @@ fun RsiLoginScreen(
     RefugeLiquidGlass(
         backdrop = backdrop,
         palette = palette,
-        modifier = Modifier.fillMaxSize().padding(RefugeSpacing.page),
+        modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(RefugeSpacing.page),
         radius = 24.dp,
         padding = PaddingValues(24.dp),
         surface = palette.contentSurfaceStrong,
         surfaceAlpha = .72f,
         blurRadius = 5.dp,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
-            Text("连接 RSI 账户", style = RefugeTypography.largeTitle(palette))
-            Text("使用原 RefugeNext 的 RSI launcher 登录接口。密码仅用于本次请求，不会写入本地。", style = RefugeTypography.secondary(palette))
+        Column(
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
+        ) {
+            Text("登录 RSI", style = RefugeTypography.largeTitle(palette).copy(color = palette.text))
+            Text("连接后才能读取你的真实机库、商店和终端资料。", style = RefugeTypography.body(palette).copy(color = palette.textSecondary))
+            Text("密码只用于本次登录请求，不会写入本地。", style = RefugeTypography.caption(palette).copy(color = palette.textMuted))
             Spacer(Modifier.height(4.dp))
-            OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("邮箱") }, singleLine = true)
-            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("密码") }, singleLine = true)
+            val fieldColors = TextFieldDefaults.outlinedTextFieldColors(
+                textColor = palette.text,
+                cursorColor = palette.accent,
+                focusedBorderColor = palette.accent,
+                unfocusedBorderColor = palette.outline,
+                focusedLabelColor = palette.accent,
+                unfocusedLabelColor = palette.textSecondary,
+            )
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("RSI 邮箱") },
+                placeholder = { Text("name@example.com") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                colors = fieldColors,
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("密码") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                colors = fieldColors,
+            )
             if (needCaptcha) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                     captchaImage?.let { Image(it.asImageBitmap(), "RSI 验证码", Modifier.height(48.dp).weight(1f)) }
@@ -76,13 +118,13 @@ fun RsiLoginScreen(
                         scope.launch { captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) } }
                     }) { Text("获取验证码") }
                 }
-                OutlinedTextField(captcha, { captcha = it }, Modifier.fillMaxWidth(), label = { Text("验证码") }, singleLine = true)
+                OutlinedTextField(captcha, { captcha = it }, Modifier.fillMaxWidth(), label = { Text("图形验证码") }, singleLine = true, shape = RoundedCornerShape(14.dp), colors = fieldColors)
             }
-            if (needCode) OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), label = { Text("RSI 验证码") }, singleLine = true)
+            if (needCode) OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), label = { Text("RSI 邮件验证码") }, singleLine = true, shape = RoundedCornerShape(14.dp), colors = fieldColors)
             message?.let { Text(it, style = RefugeTypography.secondary(palette).copy(color = palette.error)) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (allowClose) {
-                    Button(onClick = onClose, enabled = !loading) { Text("返回") }
+                    Button(onClick = onClose, enabled = !loading, colors = ButtonDefaults.buttonColors(backgroundColor = palette.glassStrong, contentColor = palette.text)) { Text("返回") }
                     Spacer(Modifier.width(RefugeSpacing.sm))
                 }
                 Button(
@@ -98,7 +140,8 @@ fun RsiLoginScreen(
                             if (result.success) onAuthenticated()
                         }
                     },
-                    enabled = !loading,
+                    enabled = !loading && email.isNotBlank() && password.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(backgroundColor = palette.accent, contentColor = palette.background),
                 ) {
                     if (loading) CircularProgressIndicator(Modifier.height(16.dp), strokeWidth = 2.dp) else Text(if (needCode) "验证并登录" else "登录")
                 }
