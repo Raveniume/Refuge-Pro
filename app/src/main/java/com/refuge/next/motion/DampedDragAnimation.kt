@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import kotlin.math.abs
 import kotlin.time.Clock
 
@@ -52,6 +53,7 @@ class DampedDragAnimation(
         Animatable(initialScale, 0.001f)
 
     private val mutatorMutex = MutatorMutex()
+    private var valueUpdateJob: Job? = null
 
     private val velocityTracker = VelocityTracker()
 
@@ -108,8 +110,12 @@ class DampedDragAnimation(
 
     fun updateValue(value: Float) {
         val targetValue = value.coerceIn(valueRange)
-        animationScope.launch {
-            launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() } }
+        // Pointer move events can arrive faster than a spring frame. Cancel the
+        // previous update instead of queueing one coroutine per pixel; this is
+        // the difference between the reference lens feeling fluid and lagging.
+        valueUpdateJob?.cancel()
+        valueUpdateJob = animationScope.launch {
+            valueAnimation.snapTo(targetValue)
         }
     }
 

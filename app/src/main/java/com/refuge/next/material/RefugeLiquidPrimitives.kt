@@ -142,7 +142,7 @@ fun RefugeLiquidSegmented(
         tabsCount = labels.size,
         isDark = isDark,
         modifier = modifier.then(
-            if (scrollable) Modifier.horizontalScroll(scrollState).widthIn(min = minWidth) else Modifier,
+            if (scrollable) Modifier.widthIn(min = minWidth).horizontalScroll(scrollState) else Modifier,
         ),
         outerHeight = 48.dp,
     ) { selected, select ->

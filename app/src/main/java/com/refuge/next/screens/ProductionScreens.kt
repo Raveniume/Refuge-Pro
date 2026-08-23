@@ -91,7 +91,6 @@ import com.refuge.next.material.RefugeLightweightGlassSurface
 import com.refuge.next.material.RefugeQuietLiquidGlassSurface
 import com.refuge.next.material.RefugeLiquidToggle
 import com.refuge.next.material.RefugeLiquidSheet
-import com.refuge.next.material.RefugeBottomTabs
 import com.refuge.next.material.RefugeLiquidSegmented
 import com.refuge.next.material.RefugeLiquidIconButton
 import com.refuge.next.material.RefugeModalSurface
@@ -125,7 +124,7 @@ fun BoxScope.RootBottomNav(
     onNavigate: (Int) -> Unit,
 ) {
     val selectedIndex = rootTabs.indexOfFirst { it.route == selected }.coerceAtLeast(0)
-    RefugeBottomTabs(
+    ReferenceLiquidBottomTabs(
         backdrop = backdrop,
         isDark = isDark,
         tabsCount = rootTabs.size,
@@ -260,7 +259,7 @@ fun TerminalScreen(
                     labels = TerminalCategory.entries.map { it.label },
                     initialIndex = categoryIndex,
                     onSelected = { categoryIndex = it },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                    modifier = Modifier.padding(horizontal = 18.dp),
                 )
             }
             item {

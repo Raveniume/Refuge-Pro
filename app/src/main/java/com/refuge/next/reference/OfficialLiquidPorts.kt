@@ -1,7 +1,7 @@
 package com.refuge.next.reference
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -220,10 +221,11 @@ private fun OfficialLiquidTabsCore(
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
         val density = LocalDensity.current
         val tabWidth = with(density) { (constraints.maxWidth.toFloat() - 8.dp.toPx()) / tabsCount }
-        val offsetAnimation = remember { Animatable(0f) }
+        var gestureOffset by remember { mutableFloatStateOf(0f) }
+        val settleOffset = remember { Animatable(0f) }
         val panelOffset by remember(density) {
             derivedStateOf {
-                val fraction = (offsetAnimation.value / constraints.maxWidth).fastCoerceIn(-1f, 1f)
+                val fraction = ((gestureOffset + settleOffset.value) / constraints.maxWidth).fastCoerceIn(-1f, 1f)
                 with(density) { 4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction)) }
             }
         }
@@ -239,14 +241,24 @@ private fun OfficialLiquidTabsCore(
                 visibilityThreshold = .001f,
                 initialScale = 1f,
                 pressedScale = 78f / 56f,
-                onDragStarted = {},
+                onDragStarted = {
+                    animationScope.launch {
+                        settleOffset.stop()
+                        settleOffset.snapTo(0f)
+                    }
+                },
                 onDragStopped = {
                     val target = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
                     currentIndex = target
                     animateToValue(target.toFloat())
                     onSelected(target)
-                    animationScope.launch {
-                        offsetAnimation.animateTo(0f, spring(1f, 300f, .5f))
+                    val releasedOffset = gestureOffset
+                    gestureOffset = 0f
+                    if (releasedOffset != 0f) {
+                        animationScope.launch {
+                            settleOffset.snapTo(releasedOffset)
+                            settleOffset.animateTo(0f, spring(1f, 300f, .5f))
+                        }
                     }
                 },
                 onDrag = { _, dragAmount ->
@@ -254,7 +266,7 @@ private fun OfficialLiquidTabsCore(
                         (targetValue + dragAmount.x / tabWidth * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat()),
                     )
-                    animationScope.launch { offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x) }
+                    gestureOffset += dragAmount.x
                 },
             )
         }

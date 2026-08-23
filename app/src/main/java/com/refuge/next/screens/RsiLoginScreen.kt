@@ -39,6 +39,7 @@ fun RsiLoginScreen(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     auth: RsiAuthDataSource,
+    allowClose: Boolean = true,
     onAuthenticated: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -80,8 +81,10 @@ fun RsiLoginScreen(
             if (needCode) OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), label = { Text("RSI 验证码") }, singleLine = true)
             message?.let { Text(it, style = RefugeTypography.secondary(palette).copy(color = palette.error)) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Button(onClick = onClose, enabled = !loading) { Text("返回") }
-                Spacer(Modifier.width(RefugeSpacing.sm))
+                if (allowClose) {
+                    Button(onClick = onClose, enabled = !loading) { Text("返回") }
+                    Spacer(Modifier.width(RefugeSpacing.sm))
+                }
                 Button(
                     onClick = {
                         loading = true

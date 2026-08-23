@@ -60,6 +60,7 @@ fun RefugeApp() {
     var settings by remember(settingsRepository) { mutableStateOf(settingsRepository.load()) }
     val userStatus = remember { UserStatusSource(true) }
     val auth = remember(context) { RsiAuthDataSource(context) }
+    var authenticated by remember(auth) { mutableStateOf(auth.session()?.isAuthenticated == true) }
     val isDark = settings.darkTheme
     val isOnline = userStatus.isOnline
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -110,8 +111,18 @@ fun RefugeApp() {
     ) { animatedDark ->
         val palette = if (animatedDark) RefugeColors.dark else RefugeColors.light
         RefugeScene(palette) { backdrop ->
-            RefugeRouteTransition(targetState = selectedTab, modifier = Modifier.fillMaxSize()) { route ->
-            RefugeContent(
+            if (!authenticated) {
+                RsiLoginScreen(
+                    backdrop = backdrop,
+                    palette = palette,
+                    auth = auth,
+                    allowClose = false,
+                    onAuthenticated = { authenticated = true },
+                    onClose = {},
+                )
+            } else {
+                RefugeRouteTransition(targetState = selectedTab, modifier = Modifier.fillMaxSize()) { route ->
+                RefugeContent(
                 selectedTab = route,
                 onNavigate = {
                     if (it in productionRootRoutes) {
@@ -139,7 +150,7 @@ fun RefugeApp() {
                 isOnline = isOnline,
                 onToggleOnline = { userStatus.toggle() },
                 auth = auth,
-                onAuthChanged = { },
+                onAuthChanged = { authenticated = true },
                 rootTab = rootTab,
                 settings = settings,
                 settingsRepository = settingsRepository,
@@ -152,7 +163,8 @@ fun RefugeApp() {
                     settings = settings.copy(localOnly = !settings.localOnly)
                     settingsRepository.save(settings)
                 },
-            )
+                )
+                }
             }
         }
     }
