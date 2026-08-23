@@ -121,12 +121,24 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     }
 
     override suspend fun captcha(): ByteArray? = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
+        val builder = Request.Builder()
             .url(BASE_URL + "api/launcher/v3/signin/captcha")
             .post("{}".toRequestBody(jsonType))
             .header("User-Agent", USER_AGENT)
-            .build()
-        runCatching { client.newCall(request).execute().use { it.body?.bytes() } }.getOrNull()
+            .header("Referer", BASE_URL)
+        // The launcher client sends the challenge token with captcha requests.
+        // Without it RSI can return a visually valid image that is not bound to
+        // the pending sign-in challenge, so every answer is rejected.
+        if (pendingToken.isNotBlank()) builder.header("x-rsi-token", pendingToken)
+        if (pendingDevice.isNotBlank()) builder.header("x-rsi-device", pendingDevice)
+        runCatching {
+            client.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val type = response.header("Content-Type").orEmpty()
+                if (!type.startsWith("image/")) return@use null
+                response.body?.bytes()
+            }
+        }.getOrNull()
     }
 
     override fun logout() {
@@ -228,6 +240,12 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
             .header("User-Agent", USER_AGENT)
             .header("Referer", BASE_URL)
         if (includeSession) session()?.let { builder.header("Cookie", cookie(it)) }
+        if (endpoint.contains("signin")) {
+            // RsiApiClient adds these launcher headers on every request after
+            // the first response, including the CAPTCHA retry.
+            if (pendingToken.isNotBlank()) builder.header("x-rsi-token", pendingToken)
+            if (pendingDevice.isNotBlank()) builder.header("x-rsi-device", pendingDevice)
+        }
         if (endpoint.endsWith("signin/multiStep")) {
             if (pendingDevice.isNotBlank()) builder.header("x-rsi-device", pendingDevice)
             if (pendingToken.isNotBlank()) builder.header("x-rsi-token", pendingToken)

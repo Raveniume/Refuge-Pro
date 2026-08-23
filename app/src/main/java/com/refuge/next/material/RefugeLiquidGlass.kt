@@ -6,14 +6,26 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -31,6 +43,7 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
+import com.refuge.next.design.RefugeTypography
 
 /** Shared optical material used by every functional glass component and the optical test. */
 @Composable
@@ -121,6 +134,75 @@ fun RefugeLiquidGlassButton(
         surfaceAlpha = .028f,
         interactionProgress = progress,
         content = content,
+    )
+}
+
+/**
+ * Reference-Lab field: the editable layer is deliberately BasicTextField so
+ * no Material OutlinedTextField frame leaks into the Liquid Glass surface.
+ */
+@Composable
+fun RefugeLiquidGlassField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    backdrop: Backdrop,
+    palette: RefugePalette,
+    label: String,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    singleLine: Boolean = true,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val progress by animateFloatAsState(if (focused) 1f else 0f, label = "liquid-glass-field-focus")
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = singleLine,
+        keyboardOptions = keyboardOptions,
+        textStyle = RefugeTypography.body(palette).copy(color = palette.text),
+        cursorBrush = SolidColor(palette.accent),
+        modifier = modifier.onFocusChanged { focused = it.isFocused },
+        decorationBox = { innerTextField ->
+            RefugeLiquidGlass(
+                backdrop = backdrop,
+                palette = palette,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = 1.dp,
+                        color = palette.accent.copy(alpha = if (focused) .72f else .26f),
+                        shape = RoundedCornerShape(18.dp),
+                    ),
+                radius = 18.dp,
+                padding = PaddingValues(horizontal = 16.dp, vertical = 11.dp),
+                refractionHeight = 11.dp,
+                refractionAmount = 16.dp,
+                blurRadius = 3.dp,
+                surface = palette.glassStrong,
+                surfaceAlpha = if (focused) .14f else .085f,
+                interactionProgress = progress,
+            ) {
+                Column {
+                    androidx.compose.material.Text(
+                        text = label,
+                        style = RefugeTypography.caption(palette).copy(
+                            color = if (focused) palette.accent else palette.textSecondary,
+                        ),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Box {
+                        if (value.isEmpty() && placeholder != null) {
+                            androidx.compose.material.Text(
+                                placeholder,
+                                style = RefugeTypography.body(palette).copy(color = palette.textMuted),
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            }
+        },
     )
 }
 

@@ -54,6 +54,7 @@ import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.material.RefugeLiquidGlass
+import com.refuge.next.material.RefugeLiquidGlassField
 import com.refuge.next.material.RefugeLiquidGlassButton
 import com.refuge.next.material.ModalGlassScope
 import com.refuge.next.material.RefugeGlassControl
@@ -257,26 +258,15 @@ fun RsiLoginScreen(
                                         .fillMaxWidth()
                                         .heightIn(min = 140.dp, max = 190.dp),
                                 )
-                                RefugeLiquidGlass(
+                                RefugeLiquidGlassField(
+                                    value = captcha,
+                                    onValueChange = { captcha = it },
                                     backdrop = modalBackdrop,
                                     palette = palette,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    radius = 18.dp,
-                                    padding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                                    surface = palette.glassStrong,
-                                    surfaceAlpha = .20f,
-                                    blurRadius = 4.dp,
-                                ) {
-                                    OutlinedTextField(
-                                        value = captcha,
-                                        onValueChange = { captcha = it },
-                                        modifier = Modifier.fillMaxWidth().focusRequester(captchaFocusRequester),
-                                        label = { Text("图形验证码") },
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = fieldColors,
-                                    )
-                                }
+                                    label = "图形验证码",
+                                    placeholder = "输入图片中的字符",
+                                    modifier = Modifier.fillMaxWidth().focusRequester(captchaFocusRequester),
+                                )
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                     RefugeGlassControl(
                                         backdrop = modalBackdrop,
