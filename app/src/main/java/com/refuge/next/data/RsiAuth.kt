@@ -145,21 +145,50 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         graphql(session, query)
     }
 
+    suspend fun storeCatalogPage(page: Int): JSONObject = withContext(Dispatchers.IO) {
+        val query = """
+            mutation UpdateCatalogQueryMutation(${ '$' }storeFront: String, ${ '$' }query: SearchQuery!) {
+              store(name: ${ '$' }storeFront, browse: true) { listing: search(query: ${ '$' }query) {
+                resources { id name title subtitle body type
+                  media { thumbnail { storeSmall } }
+                  nativePrice { amount discounted }
+                  price { amount discounted }
+                  tags { name }
+                  ... on TySku { isWarbond isPackage }
+                }
+              } }
+            }
+        """.trimIndent()
+        val variables = JSONObject()
+            .put("storeFront", "pledge")
+            .put("query", JSONObject()
+                .put("page", page)
+                .put("sort", JSONObject().put("field", "weight").put("direction", "desc"))
+                .put("skus", JSONObject().put("products", org.json.JSONArray())))
+        publicGraphql(query, variables)
+    }
+
     private fun graphql(session: RsiSession, query: String): JSONObject {
+        return executeGraphql(query, JSONObject(), session)
+    }
+
+    private fun publicGraphql(query: String, variables: JSONObject): JSONObject = executeGraphql(query, variables, null)
+
+    private fun executeGraphql(query: String, variables: JSONObject, session: RsiSession?): JSONObject {
         val request = Request.Builder()
             .url(BASE_URL + "graphql")
-            .post(JSONObject().put("query", query).put("variables", JSONObject()).toString().toRequestBody(jsonType))
-            .headers(okhttp3.Headers.headersOf(
-                "Content-Type", jsonType.toString(),
-                "Cookie", cookie(session),
-                "User-Agent", USER_AGENT,
-                "Referer", BASE_URL,
-                "x-rsi-token", session.token,
-                "x-rsi-device", session.device,
-                "x-csrf-token", session.csrf,
-            ))
-            .build()
-        client.newCall(request).execute().use { response ->
+            .post(JSONObject().put("query", query).put("variables", variables).toString().toRequestBody(jsonType))
+            .header("Content-Type", jsonType.toString())
+            .header("User-Agent", USER_AGENT)
+            .header("Referer", BASE_URL)
+        if (session != null) {
+            request.header("Cookie", cookie(session))
+                .header("x-rsi-token", session.token)
+                .header("x-rsi-device", session.device)
+                .header("x-csrf-token", session.csrf)
+        }
+        val built = request.build()
+        client.newCall(built).execute().use { response ->
             if (!response.isSuccessful) error("RSI GraphQL 请求失败：${response.code}")
             return JSONObject(response.body?.string().orEmpty())
         }

@@ -159,3 +159,46 @@ class WikiTerminalRepository(
         }.getOrElse { fallback.items() }
     }
 }
+
+/** Public RSI GraphQL catalog adapter; cache is retained when the storefront changes schema. */
+class RsiLiveStoreRepository(
+    private val auth: RsiAuthDataSource,
+    private val fallback: StoreRepository,
+) : StoreRepository {
+    override suspend fun products(): List<StoreProduct> = runCatching {
+        val resources = auth.storeCatalogPage(1)
+            .optJSONObject("data")?.optJSONObject("store")
+            ?.optJSONObject("listing")?.optJSONArray("resources") ?: error("RSI 商店目录为空")
+        val remote = buildList {
+            for (index in 0 until resources.length()) {
+                val item = resources.optJSONObject(index) ?: continue
+                val title = item.optString("title").ifBlank { item.optString("name") }.ifBlank { continue }
+                val tags = item.optJSONArray("tags")
+                val tagText = tags?.let { array -> (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("name") }.joinToString(" ") }.orEmpty()
+                val type = (item.optString("type") + " " + tagText).lowercase()
+                val category = when {
+                    "paint" in type || "涂装" in title -> StoreCategory.PAINTS
+                    "gear" in type || "equipment" in type || "装备" in title -> StoreCategory.GEAR
+                    "package" in type || "游戏包" in title -> StoreCategory.PACKAGES
+                    "vehicle" in type || "载具" in title -> StoreCategory.VEHICLES
+                    else -> StoreCategory.SHIPS
+                }
+                val priceNode = item.optJSONObject("price") ?: item.optJSONObject("nativePrice")
+                val amount = priceNode?.optString("amount").orEmpty().replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
+                val image = item.optJSONObject("media")?.optJSONObject("thumbnail")?.optString("storeSmall").orEmpty()
+                add(StoreProduct(
+                    id = item.optString("id").ifBlank { "remote-$index" },
+                    title = title,
+                    category = category,
+                    metadata = item.optString("subtitle").ifBlank { tagText.ifBlank { "RSI 商品" } },
+                    priceCents = (amount * 100).toInt(),
+                    imageUrl = image,
+                    description = item.optString("body").ifBlank { item.optString("subtitle") },
+                    isWarbond = item.optBoolean("isWarbond", false),
+                    isPackage = item.optBoolean("isPackage", false),
+                ))
+            }
+        }
+        remote.ifEmpty { fallback.products() }
+    }.getOrElse { fallback.products() }
+}
