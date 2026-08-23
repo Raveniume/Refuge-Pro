@@ -31,6 +31,8 @@ Thumbs.db
 
 # Runtime evidence is local unless explicitly promoted below.
 /evidence-*.png
+/vm-*.png
+/captcha-*.png
 /artifacts/*
 !/artifacts/reference-lab-v4/
 !/artifacts/reference-lab-v4/**
