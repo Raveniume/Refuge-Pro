@@ -8,6 +8,8 @@ data class OwnedShip(
     val insurance: String,
     val imageRes: Int,
     val imageUrl: String? = null,
+    val sourceItemId: Long = 0,
+    val shipId: Int? = null,
 )
 
 data class HangarItem(
@@ -31,18 +33,49 @@ data class HangarItem(
     /** Ship contained by a package row when RSI does not expose a typed child item. */
     val containedShip: String? = null,
     val imageUrl: String? = null,
+    val id: Long = 0,
+    val status: String = "—",
+    val canUpgrade: Boolean = false,
+    val isUpgrade: Boolean = false,
+    val resolvedFinalShip: String? = containedShip,
+    val page: Int = 0,
+    val shipId: Int? = null,
+    val quantity: Int = 1,
+    val idList: List<Long> = if (id > 0) listOf(id) else emptyList(),
 )
 
 data class HangarIncludedItem(
     val title: String,
     val imageUrl: String? = null,
+    val kind: String = "",
+    val subtitle: String = "",
+    val value: String = "—",
 )
 
+/**
+ * Featured cards represent ships currently owned through a standalone pledge
+ * or package. An unapplied CCU is an inventory asset, not an owned ship, even
+ * when its destination can be resolved to a ship.
+ */
+fun heroShipName(item: HangarItem): String? = item.containedShip
+    ?.takeUnless { item.isUpgrade }
+    ?.trim()
+    ?.takeIf { it.isNotBlank() }
+
+fun isHeroShipCandidate(item: HangarItem): Boolean = heroShipName(item) != null
+
 interface HangarRepository {
+    suspend fun refreshInventory(): List<HangarItem> = error("当前数据源不支持实时机库刷新")
+    suspend fun reclaim(request: HangarReclaimRequest, deviceVerified: Boolean): HangarReclaimResult =
+        error("当前数据源不支持回收")
     suspend fun ownedShips(): List<OwnedShip>
     suspend fun inventory(): List<HangarItem>
     fun cachedOwnedShips(): List<OwnedShip> = emptyList()
     fun cachedInventory(): List<HangarItem> = emptyList()
+    suspend fun awaitCachedOwnedShips(): List<OwnedShip> = cachedOwnedShips()
+    suspend fun awaitCachedInventory(): List<HangarItem> = cachedInventory()
+    fun cachedUpgradeTargets(upgradeId: Long): List<HangarItem> = emptyList()
+    suspend fun upgradeTargets(upgradeId: Long): List<HangarItem> = error("Upgrade eligibility is unavailable")
 }
 
 /** Versioned read-only adapter for the bundled legacy cache import. */
@@ -51,24 +84,32 @@ class ProductionHangarRepository(
     private val m80Image: Int = fallbackImage,
     private val source: ProductionCacheDataSource? = null,
 ) : HangarRepository {
-    override suspend fun ownedShips() = source?.ownedShips(m80Image, fallbackImage) ?: listOf(
-        OwnedShip("M80", "游戏包 - 公民新手包", "$300", "$140", "LTI", m80Image),
-    )
+    init {
+        // Begin parsing the bundled cache on IO as soon as the shared fallback
+        // repository is constructed. Cached getters stay synchronous for the
+        // existing contract, but normally hit the warmed projections by the
+        // time the first route composes.
+        source?.warmCachesInBackground(m80Image, fallbackImage)
+    }
 
-    override suspend fun inventory() = source?.hangarItems(m80Image, fallbackImage) ?: listOf(
-        HangarItem("装备包 - SteelTek - 掳绑包", "$30", "2026年08月16日", fallbackImage, originalName = "SteelTek Armor Set", typeLabel = "装备 / 包含物品", includedItems = listOf("SteelTek 装备包", "数字物品")),
-        HangarItem("涂装包 - M80 - Dynasty Paint", "$7.50", "2026年08月12日", fallbackImage, originalName = "M80 Dynasty Paint", typeLabel = "Paint", includedItems = listOf("M80 专用涂装")),
-        HangarItem("毛线帽套装 - 莫基节新手指导奖励", "$0", "2026年08月07日", fallbackImage, originalName = "MobiGlas Tutorial Reward", typeLabel = "个人物品", isGiftable = false, isReclaimable = false, includedItems = listOf("毛线帽套装")),
-        HangarItem("M80 - 公民新手包", "$140", "2026年08月02日", m80Image, originalName = "Origin M80 Starter Package", typeLabel = "游戏包 / 舰船", insurance = "LTI", currentValue = "$300", savings = "$160", includedItems = listOf("M80", "星际公民数字下载", "LTI 保险"), upgradeFrom = "Aurora ES", upgradeTo = "M80", upgradeFromPrice = "$20", upgradeToPrice = "$300"),
-        HangarItem("舰船组件 - 轻型量子驱动", "$25", "2026年07月22日", fallbackImage, originalName = "Light Quantum Drive", typeLabel = "Weapon / Component", includedItems = listOf("量子驱动", "S1 组件")),
-    )
+    override suspend fun ownedShips() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        source?.ownedShips(m80Image, fallbackImage).orEmpty()
+    }
 
-    override fun cachedOwnedShips() = ownedShipsSnapshot()
-    override fun cachedInventory() = inventorySnapshot()
+    override suspend fun inventory() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        source?.hangarItems(m80Image, fallbackImage).orEmpty()
+    }
 
-    private fun ownedShipsSnapshot() = source?.ownedShips(m80Image, fallbackImage) ?: listOf(
-        OwnedShip("M80", "游戏包 - 公民新手包", "$300", "$140", "LTI", m80Image),
-    )
+    override fun cachedOwnedShips() = source?.peekOwnedShips(m80Image, fallbackImage).orEmpty()
+    override fun cachedInventory() = source?.peekHangarItems(m80Image, fallbackImage).orEmpty()
+    override suspend fun awaitCachedOwnedShips() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        ownedShipsSnapshot()
+    }
+    override suspend fun awaitCachedInventory() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        inventorySnapshot()
+    }
+
+    private fun ownedShipsSnapshot() = source?.ownedShips(m80Image, fallbackImage).orEmpty()
 
     private fun inventorySnapshot() = source?.hangarItems(m80Image, fallbackImage) ?: emptyList()
 }
@@ -82,10 +123,18 @@ data class BuybackItem(
     val isUpgrade: Boolean = false,
     val imageUrl: String? = null,
     val contains: List<String> = emptyList(),
+    val id: Long = 0,
+    val quantity: Int = 1,
+    val idList: List<Long> = if (id > 0) listOf(id) else emptyList(),
+    val fromShipId: Long = 0,
+    val toShipId: Long = 0,
+    val toSkuId: Long = 0,
 )
 
 interface BuybackRepository {
     suspend fun items(): List<BuybackItem>
+    fun cachedItems(): List<BuybackItem> = emptyList()
+    suspend fun awaitCachedItems(): List<BuybackItem> = cachedItems()
 }
 
 /** Read-only adapter for the bundled legacy buyback cache contract. */
@@ -94,24 +143,52 @@ class ProductionBuybackRepository(
     private val fallbackImage: Int,
     private val source: ProductionCacheDataSource? = null,
 ) : BuybackRepository {
-    override suspend fun items(): List<BuybackItem> = source?.buyback(m80Image, fallbackImage) ?: listOf(
-        BuybackItem("M50 - 公民新手包", "$60", "2026年07月18日", m80Image, "Origin M50 Starter Package"),
-        BuybackItem("装备包 - RSI", "$3.50", "2026年06月29日", fallbackImage, "RSI Equipment Pack"),
-        BuybackItem("极光 Mk I ES", "$20", "2026年05月12日", fallbackImage, "Aurora Mk I ES"),
-    )
+    override suspend fun items(): List<BuybackItem> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        source?.buyback(m80Image, fallbackImage).orEmpty()
+    }
+    override fun cachedItems(): List<BuybackItem> = source?.peekBuyback(m80Image, fallbackImage).orEmpty()
+    override suspend fun awaitCachedItems(): List<BuybackItem> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        source?.buyback(m80Image, fallbackImage).orEmpty()
+    }
 }
 
 interface HangarLogRepository {
-    suspend fun entries(): List<String>
+    fun cachedEntries(): List<HangarLogEntry> = emptyList()
+    suspend fun awaitCachedEntries(): List<HangarLogEntry> = cachedEntries()
+    suspend fun entries(): List<HangarLogEntry>
+}
+
+data class HangarLogEntry(
+    val id: String,
+    val timeMillis: Long = 0,
+    val type: String = "UNKNOWN",
+    val name: String,
+    val priceCents: Int? = null,
+    val source: String? = null,
+    val target: String? = null,
+    val operator: String = "CIG",
+    val reason: String? = null,
+    val order: String? = null,
+    val rawContent: String = "",
+) {
+    fun belongsTo(itemId: Long): Boolean = itemId > 0 && target?.toLongOrNull() == itemId
 }
 
 /** Read-only adapter for the imported legacy log records. */
 class ProductionHangarLogRepository(
     private val source: ProductionCacheDataSource? = null,
 ) : HangarLogRepository {
-    override suspend fun entries(): List<String> = source?.logs() ?: listOf(
-        "CREATED · M80 · 2026-08-02",
-        "GIFT · SteelTek 装备包 · 2026-08-16",
-        "APPLIED_UPGRADE · M80 · 2026-08-18",
-    )
+    override fun cachedEntries(): List<HangarLogEntry> = source?.peekLogs().orEmpty().mapIndexed { index, entry ->
+        HangarLogEntry(id = "legacy-$index", name = entry, rawContent = entry)
+    }
+    override suspend fun awaitCachedEntries(): List<HangarLogEntry> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        source?.logs().orEmpty().mapIndexed { index, entry ->
+            HangarLogEntry(id = "legacy-$index", name = entry, rawContent = entry)
+        }
+    }
+    override suspend fun entries(): List<HangarLogEntry> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        source?.logs().orEmpty().mapIndexed { index, entry ->
+            HangarLogEntry(id = "legacy-$index", name = entry, rawContent = entry)
+        }
+    }
 }

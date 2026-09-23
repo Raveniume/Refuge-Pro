@@ -48,6 +48,12 @@ interface RsiAuthRepository {
  */
 class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     private val prefs = context.getSharedPreferences("refuge_rsi_session", Context.MODE_PRIVATE)
+
+    fun loginEmailDraft(): String = prefs.getString(KEY_LOGIN_EMAIL_DRAFT, "").orEmpty()
+
+    fun saveLoginEmailDraft(email: String) {
+        prefs.edit().putString(KEY_LOGIN_EMAIL_DRAFT, email.trim()).apply()
+    }
     /**
      * RSI's image-CAPTCHA flow is stateful: the CAPTCHA response establishes a
      * short-lived challenge cookie that must be sent with the following sign-in
@@ -58,6 +64,7 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         .cookieJar(object : CookieJar {
             private val jar = linkedMapOf<String, Cookie>()
 
+            @Synchronized
             override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
                 cookies.forEach { cookie ->
                     val key = "${cookie.domain};${cookie.path};${cookie.name}"
@@ -66,8 +73,9 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
                 }
             }
 
+            @Synchronized
             override fun loadForRequest(url: HttpUrl): List<Cookie> =
-                jar.values.filter { it.matches(url) }
+                rsiRequestCookies(url, session(), jar.values.toList())
         })
         .build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
@@ -75,6 +83,13 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     private var pendingDevice: String = prefs.getString(KEY_PENDING_DEVICE, "") ?: ""
     private var pendingToken: String = prefs.getString(KEY_PENDING_TOKEN, "") ?: ""
     private var pendingAuth: String = prefs.getString(KEY_PENDING_AUTH, "") ?: ""
+    /**
+     * The hangar, local CCU planner and purchase selector all consume the
+     * same read-only ship catalogue. Keep one in-flight/result window per
+     * account so opening those surfaces together does not issue duplicate
+     * initShipUpgrade requests (and re-run the context-token handshake).
+     */
+    private val shipUpgradeCatalogRefresh = RepositoryRefresh<JSONObject>(minimumIntervalMillis = 1_000L)
 
     override fun session(): RsiSession? {
         val email = prefs.getString(KEY_EMAIL, "") ?: ""
@@ -185,18 +200,21 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     }
 
     suspend fun accountGraphql(): JSONObject = withContext(Dispatchers.IO) {
-        val session = session() ?: error("需要先登录 RSI")
+        val session = refreshCsrfToken()
         val query = """
             query account { account { isAnonymous ... on RsiAuthenticatedAccount {
               avatar displayname email hasGamePackage nickname profileUrl referral_code
-              createdAt username status
+              createdAt username status hasReferred referrerReferralCode
+              badgeIcons {
+                organization { icon name url }
+              }
             } } }
         """.trimIndent()
         graphql(session, query)
     }
 
     suspend fun creditGraphql(): JSONObject = withContext(Dispatchers.IO) {
-        val session = session() ?: error("需要先登录 RSI")
+        val session = refreshCsrfToken()
         val query = """
             query credit { customer {
               ledgerCredit: ledger(ledgerCode: "credit") { amount { value currency { code symbol } } }
@@ -207,7 +225,67 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         graphql(session, query)
     }
 
-    suspend fun storeCatalogPage(page: Int): JSONObject = withContext(Dispatchers.IO) {
+    /** Read-only referral list query ported from the original Flutter app. */
+    suspend fun referralRecruits(
+        converted: Boolean,
+        campaignId: String,
+        page: Int = 1,
+        limit: Int = 25,
+    ): JSONObject = withContext(Dispatchers.IO) {
+        val session = refreshCsrfToken()
+        val query = """
+            query GetReferralRecruitsList(${ '$' }converted: Boolean!, ${ '$' }limit: Int!, ${ '$' }page: Int!, ${ '$' }campaignId: ID!) {
+              referralRecruitsList(query: {converted: ${ '$' }converted, limit: ${ '$' }limit, page: ${ '$' }page, campaignId: ${ '$' }campaignId}) {
+                recruitsCount prospectsCount data { id displayName nickname avatar enlistedOn convertedOn }
+              }
+              referralCountByCampaign(campaignId: ${ '$' }campaignId)
+            }
+        """.trimIndent()
+        executeGraphql(
+            query,
+            JSONObject()
+                .put("converted", converted)
+                .put("limit", limit)
+                .put("page", page)
+                .put("campaignId", campaignId),
+            session,
+        )
+    }
+
+    /** Initial Spectrum friend state. This endpoint is read-only despite using POST. */
+    suspend fun spectrumIdentify(): JSONObject = withContext(Dispatchers.IO) {
+        val session = refreshCsrfToken()
+        authenticatedPost("api/spectrum/auth/identify", JSONObject(), session)
+    }
+
+    /**
+     * Writes the same presence value used by the official Spectrum client.
+     * The app updates its local indicator first, then retries this boundary
+     * from the shared status source when RSI is temporarily unavailable.
+     */
+    suspend fun setSpectrumPresenceStatus(status: String): Boolean = withContext(Dispatchers.IO) {
+        val normalized = status.trim().lowercase()
+        require(normalized in setOf("online", "away", "do_not_disturb", "playing", "invisible")) {
+            "无效的 RSI Spectrum 状态"
+        }
+        val session = refreshCsrfToken()
+        val response = authenticatedPost(
+            "api/spectrum/member/presence/setStatus",
+            JSONObject().put("status", normalized),
+            session,
+        )
+        val success = response.optInt("success", 0) == 1 ||
+            response.optBoolean("success", false) ||
+            response.optString("success").equals("1", ignoreCase = true) ||
+            response.optString("success").equals("true", ignoreCase = true)
+        android.util.Log.i(
+            "RefugePresence",
+            "Spectrum setStatus response success=$success value=${response.opt("success")}",
+        )
+        success
+    }
+
+    suspend fun storeCatalogPage(page: Int, productIds: List<String>): JSONObject = withContext(Dispatchers.IO) {
         val query = """
             mutation UpdateCatalogQueryMutation(${ '$' }storeFront: String, ${ '$' }query: SearchQuery!) {
               store(name: ${ '$' }storeFront, browse: true) { listing: search(query: ${ '$' }query) {
@@ -226,12 +304,146 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
             .put("query", JSONObject()
                 .put("page", page)
                 .put("sort", JSONObject().put("field", "weight").put("direction", "desc"))
-                .put("skus", JSONObject().put("products", org.json.JSONArray())))
+                .put("skus", JSONObject().put("products", org.json.JSONArray(productIds))))
         publicGraphql(query, variables)
+    }
+
+    /** Read-only ship-upgrade catalogue used for MSRP and selector parity. */
+    suspend fun shipUpgradeCatalog(): JSONObject {
+        // currentAccountSnapshotKey is account-scoped and therefore prevents
+        // a prior user's catalogue from being reused after logout/login.
+        val key = currentAccountSnapshotKey()
+            ?: session()?.email?.let(::accountSnapshotKey)
+            ?: "anonymous"
+        return shipUpgradeCatalogRefresh.await(key) {
+            withContext(Dispatchers.IO) {
+                prepareUpgradeContext()
+                val query = """
+                    query initShipUpgrade { ships {
+                      id name focus type flyableStatus owned msrp link
+                      medias { productThumbMediumAndSmall slideShow }
+                      manufacturer { id name }
+                      skus { id title available price body unlimitedStock availableStock }
+                    } }
+                """.trimIndent()
+                upgradeGraphql(query, JSONObject())
+            }
+        }
+    }
+
+    suspend fun filterShipUpgrades(fromId: Int? = null, toId: Int? = null): JSONObject = withContext(Dispatchers.IO) {
+        prepareUpgradeContext()
+        val query = """
+            query filterShips(${ '$' }fromId: Int, ${ '$' }toId: Int) {
+              from(to: ${ '$' }toId) { ships { id } }
+              to(from: ${ '$' }fromId) { ships { id skus {
+                id price title upgradePrice unlimitedStock showStock available availableStock
+              } } }
+            }
+        """.trimIndent()
+        val variables = JSONObject().put("fromId", fromId).put("toId", toId)
+        upgradeGraphql(query, variables)
+    }
+
+    /** Authenticated, read-only account API boundary used by cache refreshers. */
+    internal suspend fun reclaimPledge(body: Map<String, String>, expectedAccount: String): JSONObject = withContext(Dispatchers.IO) {
+        check(currentAccountSnapshotKey() == expectedAccount) { "账户已变更，请重新确认" }
+        val active = refreshCsrfToken()
+        check(currentAccountSnapshotKey() == expectedAccount) { "账户已变更，请重新确认" }
+        val request = Request.Builder()
+            .url(BASE_URL + "api/account/reclaimPledge")
+            .post(JSONObject(body).toString().toRequestBody(jsonType))
+            .header("Cookie", cookie(active))
+            .header("User-Agent", USER_AGENT)
+            .header("Referer", BASE_URL + "account/pledges")
+            .header("x-rsi-token", active.token)
+            .header("x-rsi-device", active.device)
+            .header("x-csrf-token", active.csrf)
+            .build()
+        // A non-idempotent pledge action must never be replayed after a lost response.
+        client.newBuilder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false)
+            .build().newCall(request).execute().use { response ->
+                check(response.isSuccessful) { "RSI 回收响应未确认（HTTP ${response.code}）" }
+                JSONObject(response.body?.string().orEmpty()).also {
+                    check(it.opt("success") is Number) { "RSI 未返回回收结果" }
+                }
+            }
+    }
+
+    /** Authenticated, read-only account API boundary used by cache refreshers. */
+    suspend fun accountPost(endpoint: String, body: JSONObject): JSONObject = withContext(Dispatchers.IO) {
+        val active = refreshCsrfToken()
+        authenticatedPost(endpoint, body, active)
+    }
+
+    private fun prepareUpgradeContext() {
+        val session = refreshCsrfToken()
+        authenticatedPost("api/account/v2/setAuthToken", JSONObject(), session)
+        authenticatedPost("api/ship-upgrades/setContextToken", JSONObject(), session)
+    }
+
+    private fun authenticatedPost(endpoint: String, body: JSONObject, session: RsiSession): JSONObject {
+        val request = Request.Builder()
+            .url(BASE_URL + endpoint)
+            .post(body.toString().toRequestBody(jsonType))
+            .header("Content-Type", jsonType.toString())
+            .header("Cookie", cookie(session))
+            .header("User-Agent", USER_AGENT)
+            .header("Referer", BASE_URL)
+            .header("x-rsi-token", session.token)
+            .header("x-rsi-device", session.device)
+            .header("x-csrf-token", session.csrf)
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("RSI 上下文请求失败：${response.code}")
+            return JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
+        }
+    }
+
+    private fun upgradeGraphql(query: String, variables: JSONObject): JSONObject {
+        val session = session() ?: error("需要先登录 RSI")
+        val request = Request.Builder()
+            .url("https://robertsspaceindustries.com/pledge-store/api/upgrade/graphql")
+            .post(JSONObject().put("query", query).put("variables", variables).toString().toRequestBody(jsonType))
+            .header("Content-Type", jsonType.toString())
+            .header("Cookie", cookie(session))
+            .header("User-Agent", USER_AGENT)
+            .header("Referer", "https://robertsspaceindustries.com/pledge-store/ship-upgrades")
+            .header("x-rsi-token", session.token)
+            .header("x-rsi-device", session.device)
+            .header("x-csrf-token", session.csrf)
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("RSI 升级目录请求失败：${response.code}")
+            return JSONObject(response.body?.string().orEmpty())
+        }
     }
 
     private fun graphql(session: RsiSession, query: String): JSONObject {
         return executeGraphql(query, JSONObject(), session)
+    }
+
+    /** RSI's authenticated GraphQL endpoint requires a token embedded in the home page. */
+    private fun refreshCsrfToken(): RsiSession {
+        val active = session() ?: error("需要先登录 RSI")
+        val request = Request.Builder()
+            .url(BASE_URL)
+            .get()
+            .header("Cookie", cookie(active))
+            .header("User-Agent", USER_AGENT)
+            .header("Referer", BASE_URL)
+            .header("x-rsi-token", active.token)
+            .header("x-rsi-device", active.device)
+            .header("x-csrf-token", active.csrf)
+            .build()
+        val html = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("RSI CSRF 刷新失败：${response.code}")
+            response.headers.values("Set-Cookie").forEach(::captureCookie)
+            response.body?.string().orEmpty()
+        }
+        val csrf = parseRsiCsrfToken(html) ?: error("RSI 未返回 CSRF 令牌")
+        prefs.edit().putString(KEY_CSRF, csrf).apply()
+        return active.copy(csrf = csrf)
     }
 
     private fun publicGraphql(query: String, variables: JSONObject): JSONObject = executeGraphql(query, variables, null)
@@ -367,6 +579,7 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         private const val BASE_URL = "https://robertsspaceindustries.com/"
         private const val USER_AGENT = "Mozilla/5.0 (Android) AppleWebKit/537.36 Chrome/122 Safari/537.36"
         private const val KEY_EMAIL = "email"
+        private const val KEY_LOGIN_EMAIL_DRAFT = "login_email_draft"
         private const val KEY_DEVICE = "device"
         private const val KEY_TOKEN = "token"
         private const val KEY_AUTH = "account_auth"
@@ -377,3 +590,39 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         private const val KEY_PENDING_AUTH = "pending_auth"
     }
 }
+
+/** OkHttp replaces an explicit Cookie header when CookieJar returns any cookies.
+ * Include persisted authentication here so a CSRF/challenge cookie cannot hide it. */
+internal fun rsiRequestCookies(url: HttpUrl, session: RsiSession?, received: List<Cookie>): List<Cookie> {
+    val cookies = received.filter { it.matches(url) && it.expiresAt > System.currentTimeMillis() }.associateBy { it.name }.toMutableMap()
+    if (url.host == "robertsspaceindustries.com" || url.host.endsWith(".robertsspaceindustries.com")) {
+        session?.let { value ->
+            mapOf("_rsi_device" to value.device, "Rsi-Token" to value.token, "Rsi-Account-Auth" to value.accountAuth)
+                .filterValues { it.isNotBlank() }.forEach { (name, token) ->
+                    Cookie.parse(url, "$name=$token; Path=/; Secure")?.let { cookies[name] = it }
+                }
+        }
+    }
+    return cookies.values.toList()
+}
+
+internal fun parseRsiCsrfToken(html: String): String? {
+    val metaTags = Regex("(?is)<meta\\b[^>]*>").findAll(html)
+    for (tag in metaTags) {
+        val attributes = Regex(
+            """(?is)([a-z_:][-a-z0-9_:.]*)\s*=\s*(["'])(.*?)\2""",
+        ).findAll(tag.value).associate { match ->
+            match.groupValues[1].lowercase() to decodeRsiHtmlAttribute(match.groupValues[3])
+        }
+        if (attributes["name"]?.equals("csrf-token", ignoreCase = true) == true) {
+            return attributes["content"]?.trim()?.takeIf(String::isNotBlank)
+        }
+    }
+    return null
+}
+
+private fun decodeRsiHtmlAttribute(value: String): String = value
+    .replace("&quot;", "\"", ignoreCase = true)
+    .replace("&#39;", "'", ignoreCase = true)
+    .replace("&apos;", "'", ignoreCase = true)
+    .replace("&amp;", "&", ignoreCase = true)

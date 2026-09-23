@@ -1,6 +1,8 @@
 package com.refuge.next.material
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -11,9 +13,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -21,16 +25,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.VisualTransformation
@@ -45,6 +54,7 @@ import com.kyant.backdrop.shadow.Shadow
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeTypography
+import com.refuge.next.design.refugeContinuousShape
 
 /** Shared optical material used by every functional glass component and the optical test. */
 @Composable
@@ -61,13 +71,52 @@ fun RefugeLiquidGlass(
     surfaceAlpha: Float = .035f,
     interactionProgress: Float = 0f,
     chromaticAberration: Boolean = false,
+    edgeAlpha: Float = 0f,
+    edgeColor: androidx.compose.ui.graphics.Color = palette.text,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(radius)
+    val shape = refugeContinuousShape(radius)
     val progress = interactionProgress.coerceIn(0f, 1f)
+    if (!LocalOpticalGlassEnabled.current) {
+        // Keep the cached first frame usable while the GPU pipeline warms.
+        // This branch intentionally avoids drawBackdrop/lens allocation.
+        Box(
+            modifier
+                .shadow(12.dp, shape)
+                .clip(shape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = .18f + progress * .08f),
+                            surface.copy(alpha = (surfaceAlpha + .18f).coerceAtMost(.55f)),
+                            surface.copy(alpha = (surfaceAlpha + .12f).coerceAtMost(.48f)),
+                        ),
+                    ),
+                )
+                .then(
+                    if (edgeAlpha > 0f) Modifier.border(
+                        BorderStroke(
+                            1.dp,
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = (edgeAlpha + .22f).coerceAtMost(.72f)),
+                                    edgeColor.copy(alpha = edgeAlpha * .45f),
+                                    Color.White.copy(alpha = edgeAlpha * .8f),
+                                ),
+                            ),
+                        ),
+                        shape,
+                    )
+                    else Modifier
+                )
+                .padding(padding),
+            contentAlignment = Alignment.Center,
+            content = content,
+        )
+        return
+    }
     Box(
         modifier
-            .clip(shape)
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { shape },
@@ -82,16 +131,24 @@ fun RefugeLiquidGlass(
                     )
                 },
                 highlight = {
-                    Highlight.Default.copy(alpha = progress * .32f)
+                    RefugeGlassStyle.controlHighlight.copy(alpha = .26f + progress * .18f)
                 },
                 shadow = {
-                    Shadow(alpha = .10f + progress * .08f)
+                    RefugeGlassStyle.controlShadow
                 },
                 innerShadow = {
                     InnerShadow(radius = 5.dp + 4.dp * progress, alpha = .10f + progress * .08f)
                 },
                 onDrawSurface = {
                     drawRect(surface.copy(alpha = surfaceAlpha + progress * .018f))
+                },
+            )
+            .clip(shape)
+            .then(
+                if (edgeAlpha > 0f) {
+                    Modifier.border(1.dp, edgeColor.copy(alpha = edgeAlpha), shape)
+                } else {
+                    Modifier
                 },
             )
             .padding(padding),
@@ -109,6 +166,10 @@ fun RefugeLiquidGlassButton(
     contentDescription: String? = null,
     radius: Dp = RefugeRadius.control,
     padding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+    edgeAlpha: Float = .16f,
+    enabled: Boolean = true,
+    surface: androidx.compose.ui.graphics.Color = palette.glassStrong,
+    surfaceAlpha: Float = .065f,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -118,21 +179,30 @@ fun RefugeLiquidGlassButton(
         backdrop = backdrop,
         palette = palette,
         modifier = modifier
-            .semantics {
-                role = Role.Button
-                if (contentDescription != null) this.contentDescription = contentDescription
-            }
             .clickable(
+                enabled = enabled,
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
-            ),
+            )
+            // Put semantics after clickable so accessibility services and
+            // UIAutomator observe one actionable button node instead of a
+            // non-clickable semantics wrapper around a clickable child.
+            .semantics {
+                role = Role.Button
+                if (contentDescription != null) this.contentDescription = contentDescription
+            },
         radius = radius,
         padding = padding,
         refractionHeight = 12.dp,
         refractionAmount = 18.dp,
         blurRadius = 3.dp,
-        surfaceAlpha = .028f,
+        // Keep controls visibly glassy on both wallpaper and image-backed
+        // pages. The previous near-zero fill made upgrade selectors and
+        // modal actions read as flat transparent text.
+        surface = surface,
+        surfaceAlpha = surfaceAlpha,
+        edgeAlpha = edgeAlpha,
         interactionProgress = progress,
         content = content,
     )
@@ -154,6 +224,9 @@ fun RefugeLiquidGlassField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     singleLine: Boolean = true,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    leadingIconContentDescription: String? = null,
+    onLeadingIconClick: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val progress by animateFloatAsState(if (focused) 1f else 0f, label = "liquid-glass-field-focus")
@@ -167,34 +240,65 @@ fun RefugeLiquidGlassField(
         cursorBrush = SolidColor(palette.accent),
         modifier = modifier.onFocusChanged { focused = it.isFocused },
         decorationBox = { innerTextField ->
-            RefugeLiquidGlass(
-                backdrop = backdrop,
-                palette = palette,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(
-                        width = 1.dp,
-                        color = palette.accent.copy(alpha = if (focused) .72f else .26f),
-                        shape = RoundedCornerShape(18.dp),
+            Column(Modifier.fillMaxWidth()) {
+                // Keep the field name outside the editable surface. This gives
+                // the text a predictable start position and avoids a floating
+                // label competing with the cursor inside a narrow glass field.
+                androidx.compose.material.Text(
+                    text = label,
+                    style = RefugeTypography.caption(palette).copy(
+                        color = if (focused) palette.accent else palette.textSecondary,
                     ),
-                radius = 18.dp,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 11.dp),
-                refractionHeight = 11.dp,
-                refractionAmount = 16.dp,
-                blurRadius = 3.dp,
-                surface = palette.glassStrong,
-                surfaceAlpha = if (focused) .14f else .085f,
-                interactionProgress = progress,
-            ) {
-                Column {
-                    androidx.compose.material.Text(
-                        text = label,
-                        style = RefugeTypography.caption(palette).copy(
-                            color = if (focused) palette.accent else palette.textSecondary,
+                )
+                Spacer(Modifier.height(5.dp))
+                RefugeLiquidGlass(
+                    backdrop = backdrop,
+                    palette = palette,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .border(
+                            width = 1.dp,
+                            color = palette.accent.copy(alpha = if (focused) .72f else .26f),
+                            shape = refugeContinuousShape(18.dp),
                         ),
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Box {
+                    radius = 18.dp,
+                    padding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    refractionHeight = 11.dp,
+                    refractionAmount = 16.dp,
+                    blurRadius = 3.dp,
+                    surface = palette.glassStrong,
+                    surfaceAlpha = if (focused) .14f else .085f,
+                    edgeAlpha = if (focused) .42f else .22f,
+                    interactionProgress = progress,
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (leadingIcon != null && onLeadingIconClick != null) {
+                            IconButton(
+                                onClick = onLeadingIconClick,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .semantics {
+                                        role = Role.Button
+                                        if (leadingIconContentDescription != null) {
+                                            contentDescription = leadingIconContentDescription
+                                        }
+                                    },
+                            ) {
+                                Icon(
+                                    imageVector = leadingIcon,
+                                    contentDescription = leadingIconContentDescription,
+                                    tint = if (focused) palette.accent else palette.textSecondary,
+                                )
+                            }
+                        }
+                        Box(
+                            Modifier.weight(1f),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
                         if (value.isEmpty() && placeholder != null) {
                             androidx.compose.material.Text(
                                 placeholder,
@@ -202,6 +306,7 @@ fun RefugeLiquidGlassField(
                             )
                         }
                         innerTextField()
+                        }
                     }
                 }
             }
@@ -210,9 +315,7 @@ fun RefugeLiquidGlassField(
 }
 
 /**
- * Quiet list material: still uses the shared Liquid Glass lens pipeline, but
- * with a shallow blur/refraction and no per-row press animation. This keeps
- * long Store/Terminal LazyColumns responsive while preserving optical depth.
+ * Compatibility entry for ordinary content rows, with no backdrop sampling.
  */
 @Composable
 fun RefugeQuietLiquidGlassSurface(
@@ -225,21 +328,9 @@ fun RefugeQuietLiquidGlassSurface(
     padding: PaddingValues = PaddingValues(0.dp),
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(radius)
+    val shape = refugeContinuousShape(radius)
     val base = modifier
-        .clip(shape)
-        .drawBackdrop(
-            backdrop = backdrop,
-            shape = { shape },
-            effects = {
-                vibrancy()
-                blur(1.5.dp.toPx())
-                lens(7.dp.toPx(), 9.dp.toPx(), depthEffect = false)
-            },
-            highlight = { Highlight.Default.copy(alpha = .06f) },
-            shadow = { Shadow(radius = 3.dp, alpha = .06f) },
-            onDrawSurface = { drawRect(palette.contentSurface.copy(alpha = .20f)) },
-        )
+        .refugeContentMaterial(palette, shape)
         .then(
             if (onClick != null) Modifier
                 .semantics {

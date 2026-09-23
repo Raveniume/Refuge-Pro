@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -43,6 +45,10 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
+import com.kyant.shapes.RoundedCornerStyle
+import com.kyant.shapes.RoundedRectangle
+import com.refuge.next.design.RefugeColors
+import com.refuge.next.design.RefugeTypography
 
 private val ReferenceAccent = Color(0xFF0088FF)
 
@@ -182,15 +188,15 @@ fun ReferenceSearchField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(color = textColor),
-        modifier = modifier.semantics { contentDescription = "Search" },
+        textStyle = RefugeTypography.body(if (isDark) RefugeColors.dark else RefugeColors.light).copy(color = textColor),
+        modifier = modifier.semantics { contentDescription = "搜索" },
         decorationBox = { inner ->
             Row(
                 Modifier
                     .fillMaxWidth()
                     .drawBackdrop(
                         backdrop = backdrop,
-                        shape = { RoundedCornerShape(16.dp) },
+                        shape = { RoundedRectangle(16.dp, RoundedCornerStyle.Continuous) },
                         effects = { vibrancy(); blur(2.dp.toPx()); lens(8.dp.toPx(), 12.dp.toPx()) },
                         onDrawSurface = {
                             drawRect(if (isDark) Color.White.copy(alpha = .12f) else Color.White.copy(alpha = .58f))
@@ -201,7 +207,7 @@ fun ReferenceSearchField(
             ) {
                 Icon(searchIcon, contentDescription = null, tint = if (isDark) Color.White.copy(alpha = .78f) else Color.Black.copy(alpha = .58f), modifier = Modifier.size(20.dp))
                 Box(Modifier.weight(1f).padding(start = 8.dp)) {
-                    if (value.isEmpty()) Text("Search", color = textColor.copy(alpha = .55f))
+                    if (value.isEmpty()) Text("搜索", color = textColor.copy(alpha = .55f))
                     inner()
                 }
             }
@@ -247,17 +253,40 @@ fun RowScope.ReferenceSelectionItem(
     isDark: Boolean,
     onClick: () -> Unit,
 ) {
+    val scale = LocalLiquidBottomTabScale.current
     Column(
-        Modifier.weight(1f).height(48.dp)
-            .semantics { this.selected = selected; contentDescription = label }
-            .clickable(interactionSource = null, indication = null, role = Role.Tab, onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
+        Modifier
+            .clip(Capsule(RoundedCornerStyle.Continuous))
+            .clickable(interactionSource = null, indication = null, role = Role.Tab, onClick = onClick)
+            .fillMaxHeight()
+            .weight(1f)
+            .graphicsLayer {
+                val currentScale = scale()
+                scaleX = currentScale
+                scaleY = currentScale
+            }
+            .semantics { this.selected = selected; contentDescription = label },
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val tint = if (selected) ReferenceAccent else if (isDark) Color.White.copy(alpha = .78f) else Color.Black.copy(alpha = .72f)
-        // Keep the idle glyph optically smaller than the selected lens glyph;
-        // custom hollow terminal paths otherwise read larger than GridView.
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(if (selected) 21.dp else 17.dp))
-        Text(label, color = tint, style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp))
+        // Correct the visible path area, which differs from each vector's viewport.
+        val iconSize = when (label) {
+            "终端" -> if (selected) 16.5.dp else 13.5.dp
+            "商店" -> if (selected) 19.dp else 16.5.dp
+            "我的" -> if (selected) 21.5.dp else 18.5.dp
+            else -> if (selected) 19.5.dp else 17.dp
+        }
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
+        }
+        Text(
+            label,
+            style = RefugeTypography.caption(if (isDark) RefugeColors.dark else RefugeColors.light).copy(
+                color = tint,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+            ),
+        )
     }
 }

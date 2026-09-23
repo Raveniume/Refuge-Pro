@@ -47,3 +47,7 @@ Thumbs.db
 
 # Read-only upstream checkout; never import its nested Git history.
 /third_party/AndroidLiquidGlass/
+
+# Local visual-QA dumps and generated helper artifacts are not release source.
+/qa/
+/classes.jar

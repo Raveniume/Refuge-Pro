@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +18,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeTypography
+import com.refuge.next.design.refugeContinuousShape
 
 @Composable
 fun RefugeDialog(
@@ -30,6 +30,7 @@ fun RefugeDialog(
     onDismiss: () -> Unit,
     onPrimary: () -> Unit,
 ) {
+    val pageBackdrop = LocalPageOverlayBackdrop.current ?: backdrop
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -39,12 +40,17 @@ fun RefugeDialog(
                 modifier = Modifier
                     .fillMaxWidth(.88f)
                     .padding(20.dp),
+                underlay = pageBackdrop,
                 base = {
-                    Box(
-                        Modifier
-                            .matchParentSize()
-                            .background(palette.contentSurfaceStrong, RoundedCornerShape(24.dp)),
-                    )
+                    RefugeLiquidGlass(
+                        backdrop = pageBackdrop,
+                        palette = palette,
+                        modifier = Modifier.matchParentSize(),
+                        radius = 24.dp,
+                        surface = palette.contentSurfaceStrong,
+                        surfaceAlpha = .84f,
+                        blurRadius = 12.dp,
+                    ) {}
                 },
                 content = { modalBackdrop ->
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

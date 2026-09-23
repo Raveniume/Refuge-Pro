@@ -2,12 +2,16 @@ package com.refuge.next.design
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kyant.shapes.RoundedCornerStyle
+import com.kyant.shapes.RoundedRectangle
+import com.kyant.shapes.UnevenRoundedRectangle
 import com.refuge.next.R
 
 @Immutable
@@ -35,11 +39,11 @@ data class RefugePalette(
 
 object RefugeColors {
     val dark = RefugePalette(
-        background = Color(0xFF080F1B),
-        backgroundEdge = Color(0xFF101D30),
-        backgroundLight = Color(0xFF1A2A41),
-        contentSurface = Color(0xFF132236).copy(alpha = .74f),
-        contentSurfaceStrong = Color(0xFF182A42).copy(alpha = .94f),
+        background = Color(0xFF101012),
+        backgroundEdge = Color(0xFF18181B),
+        backgroundLight = Color(0xFF232326),
+        contentSurface = Color(0xFF1C1C1E),
+        contentSurfaceStrong = Color(0xFF2C2C2E),
         glass = Color.White.copy(alpha = .055f),
         glassStrong = Color.White.copy(alpha = .10f),
         glassSelection = Color.White.copy(alpha = .12f),
@@ -60,8 +64,8 @@ object RefugeColors {
         background = Color(0xFFF2F2F7),
         backgroundEdge = Color(0xFFE5E5EA),
         backgroundLight = Color(0xFFFFFFFF),
-        contentSurface = Color(0xFFEAEAEE).copy(alpha = .88f),
-        contentSurfaceStrong = Color.White.copy(alpha = .96f),
+        contentSurface = Color.White,
+        contentSurfaceStrong = Color(0xFFFAFAFC),
         glass = Color.White.copy(alpha = .42f),
         glassStrong = Color.White.copy(alpha = .58f),
         glassSelection = Color.Black.copy(alpha = .075f),
@@ -105,6 +109,28 @@ object RefugeRadius {
         (outer - inset).coerceAtLeast(0.dp)
 }
 
+/**
+ * Shared continuous-curvature shapes for every rounded functional/content
+ * surface. AndroidLiquidGlass' shape implementation keeps the tangent
+ * continuous through the straight-to-corner transition (rather than using a
+ * circular arc), so nested surfaces retain the same optical silhouette.
+ */
+fun refugeContinuousShape(radius: androidx.compose.ui.unit.Dp): Shape =
+    RoundedRectangle(radius, RoundedCornerStyle.Continuous)
+
+fun refugeContinuousShape(
+    topStart: androidx.compose.ui.unit.Dp,
+    topEnd: androidx.compose.ui.unit.Dp,
+    bottomEnd: androidx.compose.ui.unit.Dp,
+    bottomStart: androidx.compose.ui.unit.Dp,
+): Shape = UnevenRoundedRectangle(
+    topStart,
+    topEnd,
+    bottomEnd,
+    bottomStart,
+    RoundedCornerStyle.Continuous,
+)
+
 object RefugeIconSize {
     val small = 18.dp
     val medium = 22.dp
@@ -112,7 +138,9 @@ object RefugeIconSize {
 }
 
 object RefugeTypography {
-    private val pingFang = FontFamily(Font(R.font.pingfang_bold, FontWeight.Medium))
+    // The product uses only PingFang's two strongest supplied cuts. Body and
+    // labels use the second-heaviest face; hierarchy uses the heavy face.
+    private val pingFang = FontFamily(Font(R.font.pingfang_bold, FontWeight.SemiBold))
     private val pingFangHeavy = FontFamily(Font(R.font.pingfang_heavy, FontWeight.Bold))
 
     fun largeTitle(palette: RefugePalette) = TextStyle(
@@ -120,7 +148,7 @@ object RefugeTypography {
         fontFamily = pingFangHeavy,
         fontSize = 22.sp,
         lineHeight = 28.sp,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Bold,
     )
 
     fun title(palette: RefugePalette) = TextStyle(
@@ -128,39 +156,39 @@ object RefugeTypography {
         fontFamily = pingFang,
         fontSize = 16.sp,
         lineHeight = 21.sp,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
     )
 
     fun headline(palette: RefugePalette) = TextStyle(
         color = palette.text,
         fontFamily = pingFang,
-        fontSize = 14.sp,
-        lineHeight = 19.sp,
-        fontWeight = FontWeight.Medium,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
+        fontWeight = FontWeight.SemiBold,
     )
 
     fun body(palette: RefugePalette) = TextStyle(
         color = palette.textSecondary,
         fontFamily = pingFang,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
-        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        fontWeight = FontWeight.SemiBold,
     )
 
     fun secondary(palette: RefugePalette) = TextStyle(
         color = palette.textMuted,
         fontFamily = pingFang,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 17.sp,
+        fontWeight = FontWeight.SemiBold,
     )
 
     fun caption(palette: RefugePalette) = TextStyle(
         color = palette.textMuted,
         fontFamily = pingFang,
-        fontSize = 10.sp,
-        lineHeight = 14.sp,
-        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 15.sp,
+        fontWeight = FontWeight.SemiBold,
     )
 
     fun value(palette: RefugePalette) = TextStyle(
@@ -169,5 +197,53 @@ object RefugeTypography {
         fontSize = 15.sp,
         lineHeight = 19.sp,
         fontWeight = FontWeight.Bold,
+    )
+
+    fun detailTitle(palette: RefugePalette) = TextStyle(
+        color = palette.text,
+        fontFamily = pingFangHeavy,
+        fontSize = 21.sp,
+        lineHeight = 27.sp,
+        fontWeight = FontWeight.Bold,
+    )
+
+    fun detailSubtitle(palette: RefugePalette) = TextStyle(
+        color = palette.textMuted,
+        fontFamily = pingFang,
+        fontSize = 14.sp,
+        lineHeight = 19.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+
+    fun detailValue(palette: RefugePalette) = TextStyle(
+        color = palette.text,
+        fontFamily = pingFangHeavy,
+        fontSize = 20.sp,
+        lineHeight = 25.sp,
+        fontWeight = FontWeight.Bold,
+    )
+
+    fun detailBody(palette: RefugePalette) = TextStyle(
+        color = palette.text,
+        fontFamily = pingFang,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+
+    fun detailCaption(palette: RefugePalette) = TextStyle(
+        color = palette.textMuted,
+        fontFamily = pingFang,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+
+    fun detailSection(palette: RefugePalette) = TextStyle(
+        color = palette.text,
+        fontFamily = pingFang,
+        fontSize = 18.sp,
+        lineHeight = 24.sp,
+        fontWeight = FontWeight.SemiBold,
     )
 }

@@ -3,6 +3,13 @@ package com.refuge.next.data
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Parses the versioned legacy-cache import used by production repositories.
@@ -10,20 +17,48 @@ import org.json.JSONObject
  * this source without changing page contracts.
  */
 class ProductionCacheDataSource(
-    private val context: Context,
+    context: Context,
     private val assetPath: String = "cache/production_cache.json",
 ) {
+    private val appContext = context.applicationContext
     private val document: JSONObject by lazy {
-        context.assets.open(assetPath).bufferedReader().use { JSONObject(it.readText()) }
+        appContext.assets.open(assetPath).bufferedReader().use { JSONObject(it.readText()) }
     }
 
-    fun manifest(): ProductionCacheManifest = ProductionCacheManifest(
-        version = document.optString("version", productionCacheManifest.version),
-        source = document.optString("source", productionCacheManifest.source),
-        refreshedAt = document.optString("refreshedAt", productionCacheManifest.refreshedAt),
-    )
+    /**
+     * Keep parsed immutable projections in memory. The bundled cache is small
+     * today, but every repository can ask for the same projection during the
+     * first composition; reparsing JSON there turns a cache hit into main
+     * thread work. `cached*` callers remain synchronous for the existing API,
+     * while refresh paths can explicitly warm the projections on IO.
+     */
+    private val cachedOwnedShips = ConcurrentHashMap<Long, List<OwnedShip>>()
+    private val cachedHangarItems = ConcurrentHashMap<Long, List<HangarItem>>()
+    private val cachedBuyback = ConcurrentHashMap<Long, List<BuybackItem>>()
+    @Volatile private var cachedLogs: List<String>? = null
+    @Volatile private var cachedStoreProducts: List<StoreProduct>? = null
+    @Volatile private var cachedTerminalItems: List<TerminalItem>? = null
+    @Volatile private var cachedProfile: ProfileData? = null
+    @Volatile private var cachedToolGroups: List<Pair<String, List<ToolItem>>>? = null
+    private val cachedCcuShips = ConcurrentHashMap<Long, List<CcuShip>>()
+    @Volatile private var cachedOwnedCcu: List<OwnedCcu>? = null
+    private val warmScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var warmJob: Job? = null
 
-    fun ownedShips(m80Image: Int, fallbackImage: Int): List<OwnedShip> = document
+    // These values version the bundled asset itself. Reading them from the same
+    // JSON during composition would parse the whole file before the cache warm
+    // job gets a chance to run. Preserve custom-asset behavior for diagnostics.
+    fun manifest(): ProductionCacheManifest = if (assetPath == DEFAULT_ASSET_PATH) {
+        productionCacheManifest
+    } else {
+        ProductionCacheManifest(
+            version = document.optString("version", productionCacheManifest.version),
+            source = document.optString("source", productionCacheManifest.source),
+            refreshedAt = document.optString("refreshedAt", productionCacheManifest.refreshedAt),
+        )
+    }
+
+    fun ownedShips(m80Image: Int, fallbackImage: Int): List<OwnedShip> = cachedOwnedShips[imageKey(m80Image, fallbackImage)] ?: document
         .getJSONObject("hangar")
         .getJSONArray("ownedShips")
         .mapObjects { entry ->
@@ -35,9 +70,17 @@ class ProductionCacheDataSource(
                 insurance = entry.getString("insurance"),
                 imageRes = entry.imageResource(m80Image, fallbackImage),
             )
-        }
+        }.also { cachedOwnedShips[imageKey(m80Image, fallbackImage)] = it }
 
-    fun hangarItems(m80Image: Int, fallbackImage: Int): List<HangarItem> = document
+    /**
+     * Non-blocking projection used by synchronous cache getters. A null value
+     * means the background warm-up has not completed yet; callers must not
+     * parse the bundled JSON on the Compose thread to fill that gap.
+     */
+    fun peekOwnedShips(m80Image: Int, fallbackImage: Int): List<OwnedShip>? =
+        cachedOwnedShips[imageKey(m80Image, fallbackImage)]
+
+    fun hangarItems(m80Image: Int, fallbackImage: Int): List<HangarItem> = cachedHangarItems[imageKey(m80Image, fallbackImage)] ?: document
         .getJSONObject("hangar")
         .getJSONArray("inventory")
         .mapObjects { entry ->
@@ -53,15 +96,22 @@ class ProductionCacheDataSource(
                 insurance = entry.optString("insurance", "—"),
                 currentValue = entry.optString("currentValue", entry.getString("price")),
                 savings = entry.optString("savings", "$0"),
+                quantity = entry.optInt("quantity", 1).coerceAtLeast(1),
+                idList = entry.optJSONArray("idList")?.let { ids ->
+                    buildList { for (index in 0 until ids.length()) ids.optLong(index).takeIf { it > 0 }?.let(::add) }
+                }?.takeIf { it.isNotEmpty() } ?: if (entry.optLong("id") > 0) listOf(entry.optLong("id")) else emptyList(),
                 includedItems = entry.optJSONArray("includedItems")?.toStringList().orEmpty(),
                 upgradeFrom = entry.optNullableString("upgradeFrom"),
                 upgradeTo = entry.optNullableString("upgradeTo"),
                 upgradeFromPrice = entry.optNullableString("upgradeFromPrice"),
                 upgradeToPrice = entry.optNullableString("upgradeToPrice"),
             )
-        }
+        }.also { cachedHangarItems[imageKey(m80Image, fallbackImage)] = it }
 
-    fun buyback(m80Image: Int, fallbackImage: Int): List<BuybackItem> = document
+    fun peekHangarItems(m80Image: Int, fallbackImage: Int): List<HangarItem>? =
+        cachedHangarItems[imageKey(m80Image, fallbackImage)]
+
+    fun buyback(m80Image: Int, fallbackImage: Int): List<BuybackItem> = cachedBuyback[imageKey(m80Image, fallbackImage)] ?: document
         .getJSONArray("buyback")
         .mapObjects { entry ->
             BuybackItem(
@@ -72,11 +122,16 @@ class ProductionCacheDataSource(
                 originalName = entry.optString("originalName", "—"),
                 isUpgrade = entry.optBoolean("isUpgrade", false),
             )
-        }
+        }.also { cachedBuyback[imageKey(m80Image, fallbackImage)] = it }
 
-    fun logs(): List<String> = document.getJSONArray("logs").toStringList()
+    fun peekBuyback(m80Image: Int, fallbackImage: Int): List<BuybackItem>? =
+        cachedBuyback[imageKey(m80Image, fallbackImage)]
 
-    fun storeProducts(): List<StoreProduct> = document
+    fun logs(): List<String> = cachedLogs ?: document.getJSONArray("logs").toStringList().also { cachedLogs = it }
+
+    fun peekLogs(): List<String>? = cachedLogs
+
+    fun storeProducts(): List<StoreProduct> = cachedStoreProducts ?: document
         .getJSONArray("store")
         .mapObjects { entry ->
             StoreProduct(
@@ -90,29 +145,52 @@ class ProductionCacheDataSource(
                 isWarbond = entry.optBoolean("isWarbond", false),
                 isPackage = entry.optBoolean("isPackage", false),
             )
-        }
+        }.also { cachedStoreProducts = it }
 
-    fun terminalItems(): List<TerminalItem> = document
+    fun peekStoreProducts(): List<StoreProduct>? = cachedStoreProducts
+
+    fun terminalItems(): List<TerminalItem> = cachedTerminalItems ?: document
         .getJSONArray("terminal")
         .mapObjects { entry ->
             TerminalItem(
                 id = entry.getString("id"),
                 name = entry.getString("name"),
                 manufacturer = entry.getString("manufacturer"),
+                className = entry.optNullableString("className") ?: entry.optNullableString("class_name"),
                 category = TerminalCategory.valueOf(entry.getString("category")),
                 tags = entry.getJSONArray("tags").toStringList(),
                 value = entry.getString("value"),
                 usd = entry.getString("usd"),
                 description = entry.getString("description"),
                 imageUrl = entry.optNullableString("imageUrl"),
+                details = entry.optJSONArray("details")?.let { values ->
+                    buildList {
+                        for (index in 0 until values.length()) {
+                            values.optJSONObject(index)?.let { row ->
+                                val label = row.optString("label").trim()
+                                val value = row.optString("value").trim()
+                                if (label.isNotBlank() && value.isNotBlank()) add(label to value)
+                            }
+                        }
+                    }
+                }.orEmpty(),
             )
-        }
+        }.also { cachedTerminalItems = it }
 
-    fun profile(): ProfileData = document.getJSONObject("profile").let { entry ->
-        ProfileData(
-            handle = entry.optString("handle", "Raveniume"),
-            city = entry.optString("city", "星环城"),
+    fun peekTerminalItems(): List<TerminalItem>? = cachedTerminalItems
+
+    fun profile(): ProfileData = cachedProfile ?: document.getJSONObject("profile").let { entry ->
+        sanitizeCachedProfile(ProfileData(
+            handle = entry.optString("handle", "RSI 账户"),
+            displayName = entry.optString("displayName").takeIf { it.isNotBlank() },
+            city = entry.optString("city", "—"),
             rank = entry.optString("rank", "—"),
+            organizationId = entry.optString("organizationId").takeIf { it.isNotBlank() },
+            organizationName = entry.optString("organizationName").takeIf { it.isNotBlank() },
+            organizationRank = entry.optString("organizationRank").takeIf { it.isNotBlank() },
+            organizationLevel = entry.optInt("organizationLevel", 0),
+            organizationImage = entry.optString("organizationImage").takeIf { it.isNotBlank() },
+            level = entry.optString("level", "—"),
             totalSpent = entry.optString("totalSpent", "—"),
             hangarValue = entry.optString("hangarValue", "—"),
             credit = entry.optString("credit", "—"),
@@ -121,16 +199,20 @@ class ProductionCacheDataSource(
             rec = entry.optString("rec", "—"),
             currentValue = entry.optString("currentValue", "—"),
             referralCode = entry.optString("referralCode", "—"),
-        )
+        )).also { cachedProfile = it }
     }
 
-    fun toolGroups(): List<Pair<String, List<ToolItem>>> = document
+    fun peekProfile(): ProfileData? = cachedProfile
+
+    fun toolGroups(): List<Pair<String, List<ToolItem>>> = cachedToolGroups ?: document
         .getJSONArray("toolGroups")
         .mapObjects { group ->
             group.getString("title") to group.getJSONArray("items").mapObjects { item ->
                 ToolItem(item.getString("id"), item.getString("title"), item.getString("subtitle"))
             }
-        }
+        }.also { cachedToolGroups = it }
+
+    fun peekToolGroups(): List<Pair<String, List<ToolItem>>>? = cachedToolGroups
 
     fun toolDetail(toolId: String): ToolDetail? = document
         .getJSONObject("toolDetails")
@@ -145,7 +227,7 @@ class ProductionCacheDataSource(
             )
         }
 
-    fun ccuShips(m80Image: Int, fallbackImage: Int): List<CcuShip> = document
+    fun ccuShips(m80Image: Int, fallbackImage: Int): List<CcuShip> = cachedCcuShips[imageKey(m80Image, fallbackImage)] ?: document
         .getJSONObject("ccu")
         .getJSONArray("ships")
         .mapObjects { entry ->
@@ -155,9 +237,12 @@ class ProductionCacheDataSource(
                 purchasePrice = entry.getInt("purchasePrice"),
                 imageRes = entry.imageResource(m80Image, fallbackImage),
             )
-        }
+        }.also { cachedCcuShips[imageKey(m80Image, fallbackImage)] = it }
 
-    fun ownedCcu(): List<OwnedCcu> = document
+    fun peekCcuShips(m80Image: Int, fallbackImage: Int): List<CcuShip>? =
+        cachedCcuShips[imageKey(m80Image, fallbackImage)]
+
+    fun ownedCcu(): List<OwnedCcu> = cachedOwnedCcu ?: document
         .getJSONObject("ccu")
         .getJSONArray("owned")
         .mapObjects { entry ->
@@ -166,9 +251,52 @@ class ProductionCacheDataSource(
                 title = entry.getString("title"),
                 purchasePrice = entry.getInt("purchasePrice"),
                 appliedTo = entry.getString("appliedTo"),
+                fromShip = entry.optString("fromShip").ifBlank {
+                    entry.getString("title").substringBefore(" → ").substringBefore(" to ").trim()
+                },
+                toShip = entry.optString("toShip").ifBlank { entry.getString("appliedTo") },
             )
+        }.also { cachedOwnedCcu = it }
+
+    fun peekOwnedCcu(): List<OwnedCcu>? = cachedOwnedCcu
+
+    /** Warm every bundled projection off the main thread before a route asks
+     * for a synchronous cached value. This never performs network work. */
+    suspend fun warmCaches(m80Image: Int, fallbackImage: Int) = withContext(Dispatchers.IO) {
+        ownedShips(m80Image, fallbackImage)
+        hangarItems(m80Image, fallbackImage)
+        buyback(m80Image, fallbackImage)
+        logs()
+        storeProducts()
+        terminalItems()
+        profile()
+        toolGroups()
+        ccuShips(m80Image, fallbackImage)
+        ownedCcu()
+    }
+
+    /**
+     * Start cache parsing without making the caller wait. Multiple fallback
+     * repositories share this data source, so only one warm-up job is needed.
+     */
+    fun warmCachesInBackground(m80Image: Int, fallbackImage: Int) {
+        synchronized(this) {
+            // Avoid a non-local return from the inline synchronized block;
+            // newer Kotlin compilers reject it when this function is called
+            // through an inline repository projection.
+            if (warmJob?.isActive != true) {
+                warmJob = warmScope.launch { runCatching { warmCaches(m80Image, fallbackImage) } }
+            }
         }
+    }
+
+    private companion object {
+        const val DEFAULT_ASSET_PATH = "cache/production_cache.json"
+    }
 }
+
+private fun imageKey(primary: Int, fallback: Int): Long =
+    (primary.toLong() shl 32) xor (fallback.toLong() and 0xffffffffL)
 
 private fun JSONObject.imageResource(m80Image: Int, fallbackImage: Int): Int =
     if (optString("image", "fallback") == "m80") m80Image else fallbackImage

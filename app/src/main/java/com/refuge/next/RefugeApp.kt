@@ -1,37 +1,48 @@
 package com.refuge.next
 
 import android.app.Activity
-import androidx.compose.animation.Crossfade
+import android.animation.ValueAnimator
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.refuge.next.data.ProductionHangarRepository
-import com.refuge.next.data.ProductionCatalogStoreRepository
-import com.refuge.next.data.ProductionTerminalRepository
-import com.refuge.next.data.ProductionBuybackRepository
 import com.refuge.next.data.ProductionHangarLogRepository
+import com.refuge.next.data.ProductionTerminalRepository
+import com.refuge.next.data.ProductionCatalogStoreRepository
+import com.refuge.next.data.ProductionBuybackRepository
+import com.refuge.next.data.RsiLiveHangarLogRepository
 import com.refuge.next.data.InMemoryCartRepository
 import com.refuge.next.data.ProductionProfileRepository
 import com.refuge.next.data.ProductionUtilityRepository
 import com.refuge.next.data.ProductionCcuRepository
-import com.refuge.next.data.AppSettings
 import com.refuge.next.data.PreferencesSettingsRepository
 import com.refuge.next.data.SettingsRepository
 import com.refuge.next.data.UserStatusSource
+import com.refuge.next.data.UserPresence
+import com.refuge.next.data.ProfileData
 import com.refuge.next.data.ProductionCacheDataSource
 import com.refuge.next.data.RsiAuthDataSource
 import com.refuge.next.data.RsiLiveHangarRepository
@@ -39,9 +50,19 @@ import com.refuge.next.data.RsiLiveProfileRepository
 import com.refuge.next.data.RsiLiveBuybackRepository
 import com.refuge.next.data.WikiTerminalRepository
 import com.refuge.next.data.RsiLiveStoreRepository
+import com.refuge.next.data.RsiLiveUtilityRepository
+import com.refuge.next.data.RsiLiveCcuRepository
+import com.refuge.next.data.RsiLiveCcuPurchaseRepository
+import com.refuge.next.data.CcuPurchaseRepository
+import com.refuge.next.data.ProductionTranslationRepository
 import com.refuge.next.design.RefugeColors
+import com.refuge.next.design.LocalRefugeTranslationEnabled
 import com.refuge.next.material.RefugeScene
+import com.refuge.next.material.PageGlassScope
+import com.refuge.next.material.LocalOpticalGlassEnabled
 import com.refuge.next.motion.RefugeRouteTransition
+import com.refuge.next.navigation.LocalRootScrollRegistry
+import com.refuge.next.navigation.RootScrollRegistry
 import com.refuge.next.screens.DesignLabScreen
 import com.refuge.next.screens.HangarScreen
 import com.refuge.next.screens.StoreScreen
@@ -51,21 +72,46 @@ import com.refuge.next.screens.ToolsScreen
 import com.refuge.next.screens.SettingsScreen
 import com.refuge.next.screens.CcuScreen
 import com.refuge.next.screens.RsiLoginScreen
+import com.refuge.next.screens.PresencePickerSheet
+import com.refuge.next.screens.RootBottomNav
+import com.refuge.next.screens.StoreUpgradePurchaseScreen
+import com.refuge.next.screens.HangarOwnedCcuApplyScreen
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
+// The root navigation mirrors the legacy five-item bar. Tools remain a full
+// root destination so the selected lens and back behavior match the old app.
+// The legacy root navigation has four destinations. Tools remains an
+// internal route, but it is not a root tab and secondary detail routes do not
+// inherit the root bar.
 private val productionRootRoutes = setOf(0, 1, 2, 4)
+
+private fun productionRouteOrder(route: Int): Int = when (route) {
+    0 -> 0
+    1 -> 1
+    2 -> 2
+    3 -> 3
+    4 -> 4
+    else -> 4 + route
+}
 
 @Composable
 fun RefugeApp() {
     val context = LocalContext.current
     val settingsRepository = remember(context) { PreferencesSettingsRepository(context) }
     var settings by remember(settingsRepository) { mutableStateOf(settingsRepository.load()) }
-    val userStatus = remember { UserStatusSource(true) }
+    val userStatus = remember(context) { UserStatusSource(context) }
     val auth = remember(context) { RsiAuthDataSource(context) }
     var authenticated by remember(auth) { mutableStateOf(auth.session()?.isAuthenticated == true) }
     val isDark = settings.darkTheme
-    val isOnline = userStatus.isOnline
+    val presence = userStatus.presence
+    val isOnline = presence != UserPresence.INVISIBLE
+    var showPresencePicker by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var rootTab by remember { mutableIntStateOf(0) }
+    var rootNavVisible by remember { mutableStateOf(true) }
+    var selectedOwnedCcuId by remember { mutableStateOf<Long?>(null) }
     val view = LocalView.current
     SideEffect {
         val window = (view.context as Activity).window
@@ -75,6 +121,7 @@ fun RefugeApp() {
         }
     }
     val cacheSource = remember(context) { ProductionCacheDataSource(context) }
+    val translationRepository = remember(context) { ProductionTranslationRepository(context) }
     val cacheManifest = remember(cacheSource) { cacheSource.manifest() }
     val fallbackRepository = remember(cacheSource) {
         ProductionHangarRepository(
@@ -83,35 +130,166 @@ fun RefugeApp() {
             source = cacheSource,
         )
     }
-    val repository = remember(auth, fallbackRepository) {
-        RsiLiveHangarRepository(auth, fallbackRepository, R.drawable.ship_placeholder, R.drawable.m80_hero)
+    val liveRepository = remember(auth, fallbackRepository) {
+        RsiLiveHangarRepository(context, auth, fallbackRepository, R.drawable.ship_placeholder, R.drawable.m80_hero, translationRepository)
     }
+    val repository: com.refuge.next.data.HangarRepository = liveRepository
     val fallbackStoreRepository = remember(cacheSource) { ProductionCatalogStoreRepository(cacheSource) }
-    val storeRepository = remember(auth, fallbackStoreRepository) { RsiLiveStoreRepository(auth, fallbackStoreRepository) }
-    val fallbackTerminalRepository = remember(cacheSource) { ProductionTerminalRepository(cacheSource) }
-    val terminalRepository = remember(fallbackTerminalRepository) { WikiTerminalRepository(fallbackTerminalRepository) }
+    val liveStoreRepository = remember(auth, fallbackStoreRepository, translationRepository) { RsiLiveStoreRepository(context, auth, fallbackStoreRepository, translationRepository) }
+    val storeRepository: com.refuge.next.data.StoreRepository = liveStoreRepository
+    val fallbackTerminalRepository = remember(cacheSource) {
+        ProductionTerminalRepository(source = cacheSource)
+    }
+    val liveTerminalRepository = remember(translationRepository, fallbackTerminalRepository) {
+        WikiTerminalRepository(context, translationRepository, fallbackTerminalRepository)
+    }
+    val terminalRepository: com.refuge.next.data.TerminalRepository = liveTerminalRepository
     val fallbackBuybackRepository = remember(cacheSource) { ProductionBuybackRepository(R.drawable.m80_hero, R.drawable.ship_placeholder, cacheSource) }
-    val buybackRepository = remember(auth, fallbackBuybackRepository) { RsiLiveBuybackRepository(auth, fallbackBuybackRepository, R.drawable.ship_placeholder) }
-    val hangarLogRepository = remember(cacheSource) { ProductionHangarLogRepository(cacheSource) }
+    val liveBuybackRepository = remember(context, auth, fallbackBuybackRepository, translationRepository) {
+        RsiLiveBuybackRepository(context, auth, fallbackBuybackRepository, R.drawable.ship_placeholder, translationRepository)
+    }
+    val buybackRepository: com.refuge.next.data.BuybackRepository = liveBuybackRepository
+    val fallbackHangarLogRepository = remember(cacheSource) {
+        ProductionHangarLogRepository(cacheSource)
+    }
+    val hangarLogRepository = remember(context, auth, translationRepository, fallbackHangarLogRepository) {
+        RsiLiveHangarLogRepository(
+            context,
+            auth,
+            translation = translationRepository,
+            fallback = fallbackHangarLogRepository,
+        )
+    }
     val cartRepository = remember { InMemoryCartRepository() }
     val fallbackProfileRepository = remember(cacheSource) { ProductionProfileRepository(cacheSource) }
-    val profileRepository = remember(auth, fallbackProfileRepository, repository) { RsiLiveProfileRepository(auth, fallbackProfileRepository, repository) }
-    val utilityRepository = remember(cacheSource) { ProductionUtilityRepository(cacheSource) }
-    val ccuRepository = remember(cacheSource) { ProductionCcuRepository(cacheSource, R.drawable.m80_hero, R.drawable.ship_placeholder) }
+    val liveProfileRepository = remember(auth, fallbackProfileRepository, liveRepository) { RsiLiveProfileRepository(context, auth, fallbackProfileRepository, liveRepository) }
+    val profileRepository: com.refuge.next.data.ProfileRepository = liveProfileRepository
+    var sharedProfile by remember(profileRepository) { mutableStateOf(profileRepository.cachedProfile()) }
+    LaunchedEffect(authenticated, profileRepository) {
+        if (authenticated) {
+            runCatching { profileRepository.awaitCachedProfile() }.onSuccess { cached ->
+                if (cached.isAuthenticated) sharedProfile = cached
+            }
+            // Let the first cached frame reach the compositor before the
+            // authenticated profile refresh starts competing for CPU/IO.
+            withFrameNanos { }
+            runCatching { profileRepository.profile() }.onSuccess { sharedProfile = it }
+        }
+    }
+    val fallbackUtilityRepository = remember(cacheSource) { ProductionUtilityRepository(cacheSource) }
+    val liveUtilityRepository = remember(auth, fallbackUtilityRepository) { RsiLiveUtilityRepository(auth, fallbackUtilityRepository) }
+    val utilityRepository: com.refuge.next.data.UtilityRepository = liveUtilityRepository
+    val fallbackCcuRepository = remember(cacheSource) { ProductionCcuRepository(cacheSource, R.drawable.m80_hero, R.drawable.ship_placeholder) }
+    val liveCcuRepository = remember(auth, liveRepository, fallbackCcuRepository) {
+        RsiLiveCcuRepository(context, auth, liveRepository, fallbackCcuRepository, R.drawable.ship_placeholder)
+    }
+    val ccuRepository: com.refuge.next.data.CcuRepository = liveCcuRepository
+    // The purchase selector is an online read-only catalogue. It owns a local
+    // first frame (including the planner's ship MSRP snapshot) and refreshes
+    // independently so opening the sheet never produces an empty first frame.
+    val ccuPurchaseRepository: CcuPurchaseRepository = remember(context, auth, liveCcuRepository) {
+        RsiLiveCcuPurchaseRepository(context, auth, liveCcuRepository)
+    }
+
+    LaunchedEffect(Unit) {
+        // Parse the bundled projections before any route is opened. Screens
+        // can therefore render a real local frame immediately when RSI is
+        // unavailable, while their repositories refresh in the background.
+        cacheSource.warmCachesInBackground(R.drawable.m80_hero, R.drawable.ship_placeholder)
+        launch { com.refuge.next.data.ShipReferenceCatalog.shared(context).prepare() }
+        val loadouts = com.refuge.next.data.ErkulLoadoutRepository.shared(context)
+        launch { runCatching { loadouts.preload("LIVE") } }
+        // Warm both Erkul branches while the root content is being composed;
+        // switching LIVE/PTU later then reads the complete local snapshot.
+        launch { runCatching { loadouts.preload("PTU") } }
+        launch { runCatching { terminalRepository.items() } }
+    }
+    LaunchedEffect(authenticated) {
+        if (authenticated) {
+            // Keep the persisted avatar choice aligned with Spectrum after a
+            // process restart. A failed request remains queued in
+            // UserStatusSource and is retried on the next authenticated start.
+            launch { runCatching { userStatus.syncToRsi(auth) } }
+            launch { runCatching { repository.inventory() } }
+            launch { runCatching { storeRepository.products() } }
+            launch { runCatching { buybackRepository.items() } }
+            launch { runCatching { hangarLogRepository.entries() } }
+            launch { runCatching { utilityRepository.groups() } }
+        }
+    }
+
+    // Upgrade data participates in the same background refresh lifecycle as
+    // Hangar/Store. Its cached snapshot is immediately available, while this
+    // replaces it with the latest catalog and owned CCUs after authentication.
+    LaunchedEffect(authenticated, ccuRepository) {
+        if (authenticated) {
+            // The catalogue is background-only at startup. Waiting for one
+            // frame keeps shader/image compilation from sharing the first
+            // traversal with the upgrade refresh.
+            withFrameNanos { }
+            runCatching { ccuRepository.ships() }
+            runCatching { ccuRepository.owned() }
+        }
+    }
+    LaunchedEffect(authenticated, ccuPurchaseRepository) {
+        if (authenticated) {
+            // Prime the purchase sheet while the user is browsing the root
+            // pages; opening it renders the last snapshot first and then
+            // replaces it with the latest read-only catalogue.
+            withFrameNanos { }
+            runCatching { ccuPurchaseRepository.catalog() }
+        }
+    }
 
     // Secondary production routes share the root tab bar, but system Back must return
     // to the originating root screen instead of finishing the activity.
     BackHandler(enabled = selectedTab !in productionRootRoutes) {
         selectedTab = rootTab
     }
+    LaunchedEffect(selectedTab) { rootNavVisible = true }
 
-    Crossfade(
-        targetState = isDark,
-        animationSpec = tween(durationMillis = 420),
-        label = "theme-transition",
-    ) { animatedDark ->
-        val palette = if (animatedDark) RefugeColors.dark else RefugeColors.light
-        RefugeScene(palette) { backdrop ->
+    val themeReveal = remember { Animatable(0f) }
+    val appScope = rememberCoroutineScope()
+    var themeTransitionJob by remember { mutableStateOf<Job?>(null) }
+    var themeVeilColor by remember { mutableStateOf(if (isDark) Color.Black else Color.White) }
+    val animationsEnabled = ValueAnimator.areAnimatorsEnabled()
+    val requestThemeToggle: () -> Unit = {
+        val targetDark = !settings.darkTheme
+        themeTransitionJob?.cancel()
+        themeTransitionJob = appScope.launch {
+            themeVeilColor = if (targetDark) Color.Black else Color.White
+            if (animationsEnabled) {
+                themeReveal.animateTo(
+                    1f,
+                    tween(durationMillis = 90, easing = FastOutLinearInEasing),
+                )
+            }
+            val updated = settings.copy(darkTheme = targetDark)
+            settings = updated
+            settingsRepository.save(updated)
+            if (animationsEnabled) {
+                themeReveal.animateTo(
+                    0f,
+                    tween(durationMillis = 190, easing = LinearOutSlowInEasing),
+                )
+            } else {
+                themeReveal.snapTo(0f)
+            }
+        }
+    }
+    val palette = if (isDark) RefugeColors.dark else RefugeColors.light
+    val routeStateHolder = rememberSaveableStateHolder()
+    val rootScrollRegistry = remember { RootScrollRegistry() }
+    val opticalGlassReady = true
+    CompositionLocalProvider(
+        LocalOpticalGlassEnabled provides opticalGlassReady,
+        LocalRootScrollRegistry provides rootScrollRegistry,
+        com.refuge.next.design.LocalRefugeTranslation provides translationRepository,
+        LocalRefugeTranslationEnabled provides settings.translationEnabled,
+    ) {
+      RefugeScene(
+        palette = palette,
+      ) { backdrop ->
             if (!authenticated) {
                 RsiLoginScreen(
                     backdrop = backdrop,
@@ -122,55 +300,114 @@ fun RefugeApp() {
                     onClose = {},
                 )
             } else {
-                RefugeRouteTransition(targetState = selectedTab, modifier = Modifier.fillMaxSize()) { route ->
-                RefugeContent(
-                selectedTab = route,
-                onNavigate = {
-                    if (it in productionRootRoutes) {
-                        rootTab = it
+                val navigate: (Int) -> Unit = { route ->
+                    if (route == selectedTab) {
+                        appScope.launch { rootScrollRegistry.scrollToTop(route) }
+                    } else {
+                        if (route in productionRootRoutes) rootTab = route
+                        selectedTab = route
                     }
-                    selectedTab = it
-                },
-                onOpenDesignLab = { /* Hangar overflow is intentionally handled in-page. */ },
-                backdrop = backdrop,
-                palette = palette,
-                repository = repository,
-                buybackRepository = buybackRepository,
-                hangarLogRepository = hangarLogRepository,
-                storeRepository = storeRepository,
-                cartRepository = cartRepository,
-                profileRepository = profileRepository,
-                utilityRepository = utilityRepository,
-                ccuRepository = ccuRepository,
-                terminalRepository = terminalRepository,
-                isDark = animatedDark,
-                onToggleTheme = {
-                    settings = settings.copy(darkTheme = !settings.darkTheme)
-                    settingsRepository.save(settings)
-                },
-                isOnline = isOnline,
-                onToggleOnline = { userStatus.toggle() },
-                auth = auth,
-                onAuthChanged = { authenticated = true },
-                rootTab = rootTab,
-                settings = settings,
-                settingsRepository = settingsRepository,
-                cacheManifest = cacheManifest,
-                onToggleSyncLogs = {
-                    settings = settings.copy(syncLogs = !settings.syncLogs)
-                    settingsRepository.save(settings)
-                },
-                onToggleLocalOnly = {
-                    settings = settings.copy(localOnly = !settings.localOnly)
-                    settingsRepository.save(settings)
-                },
+                }
+                // The official LiquidBottomTabs port must survive route changes.
+                // Keeping it above the route tree preserves the moving lens,
+                // drag velocity and fast-tap continuity instead of rebuilding
+                // the navbar on every destination.
+                PageGlassScope(
+                    backdrop = backdrop,
+                    content = {
+                        // Keep route switches in one Compose tree. The
+                        // transition owns only the incoming page and uses a
+                        // clipped layout offset, so the backdrop graph is not
+                        // duplicated while the page slides into place.
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                          val route = selectedTab
+                          RefugeRouteTransition(
+                              targetState = route,
+                              order = ::productionRouteOrder,
+                              modifier = Modifier.fillMaxSize(),
+                          ) { animatedRoute ->
+                            routeStateHolder.SaveableStateProvider(animatedRoute) {
+                              RefugeContent(
+                                selectedTab = animatedRoute,
+                                onNavigate = navigate,
+                                onOpenDesignLab = { /* Hangar overflow is intentionally handled in-page. */ },
+                                backdrop = backdrop,
+                                palette = palette,
+                                repository = repository,
+                                buybackRepository = buybackRepository,
+                                hangarLogRepository = hangarLogRepository,
+                                storeRepository = storeRepository,
+                                cartRepository = cartRepository,
+                                profileRepository = profileRepository,
+                                utilityRepository = utilityRepository,
+                                ccuRepository = ccuRepository,
+                                ccuPurchaseRepository = ccuPurchaseRepository,
+                                terminalRepository = terminalRepository,
+                                translationRepository = translationRepository,
+                                isDark = isDark,
+                                translationEnabled = settings.translationEnabled,
+                                onToggleTranslation = {
+                                    val updated = settings.copy(translationEnabled = !settings.translationEnabled)
+                                    settings = updated
+                                    settingsRepository.save(updated)
+                                },
+                                onToggleTheme = requestThemeToggle,
+                                isOnline = isOnline,
+                                presence = presence,
+                                avatarUrl = sharedProfile.avatarUrl,
+                                initialProfile = sharedProfile,
+                                selectedOwnedCcuId = selectedOwnedCcuId,
+                                onSelectOwnedCcu = { id -> selectedOwnedCcuId = id },
+                                onToggleOnline = { showPresencePicker = true },
+                                auth = auth,
+                                onAuthChanged = { authenticated = true },
+                                rootTab = rootTab,
+                                settingsRepository = settingsRepository,
+                                cacheManifest = cacheManifest,
+                                onTerminalOverlayVisibilityChanged = { rootNavVisible = it },
+                              )
+                            }
+                          }
+                        }
+                        if (showPresencePicker) {
+                            PresencePickerSheet(
+                                backdrop = backdrop,
+                                palette = palette,
+                                selected = presence,
+                                onSelected = {
+                                    userStatus.set(it)
+                                    showPresencePicker = false
+                                    // The local indicator is immediate; the
+                                    // official Spectrum update continues in
+                                    // the background and is retried if needed.
+                                    appScope.launch { runCatching { userStatus.syncToRsi(auth) } }
+                                },
+                                onDismiss = { showPresencePicker = false },
+                            )
+                        }
+                    },
+                    overlay = { pageBackdrop ->
+                        if (selectedTab in productionRootRoutes && rootNavVisible && !showPresencePicker) {
+                            RootBottomNav(
+                                pageBackdrop,
+                                isDark,
+                                if (selectedTab in productionRootRoutes) selectedTab else rootTab,
+                                navigate,
+                            )
+                        }
+                    },
                 )
+            }
+            if (themeReveal.value > 0f) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawRect(
+                        themeVeilColor.copy(alpha = themeReveal.value * .34f),
+                    )
                 }
             }
-        }
+      }
     }
 }
-
 @Composable
 private fun RefugeContent(
     selectedTab: Int,
@@ -186,22 +423,27 @@ private fun RefugeContent(
     profileRepository: com.refuge.next.data.ProfileRepository,
     utilityRepository: com.refuge.next.data.UtilityRepository,
     ccuRepository: com.refuge.next.data.CcuRepository,
+    ccuPurchaseRepository: CcuPurchaseRepository,
     terminalRepository: com.refuge.next.data.TerminalRepository,
+    translationRepository: com.refuge.next.data.TranslationRepository,
     auth: RsiAuthDataSource,
     onAuthChanged: () -> Unit,
     isDark: Boolean,
+    translationEnabled: Boolean,
+    onToggleTranslation: () -> Unit,
     onToggleTheme: () -> Unit,
     isOnline: Boolean,
+    presence: UserPresence,
+    avatarUrl: String?,
+    initialProfile: ProfileData,
+    selectedOwnedCcuId: Long?,
+    onSelectOwnedCcu: (Long) -> Unit,
     onToggleOnline: () -> Unit,
     rootTab: Int,
-    settings: AppSettings,
     settingsRepository: SettingsRepository,
     cacheManifest: com.refuge.next.data.ProductionCacheManifest,
-    onToggleSyncLogs: () -> Unit,
-    onToggleLocalOnly: () -> Unit,
+    onTerminalOverlayVisibilityChanged: (Boolean) -> Unit,
 ) {
-    val stateHolder = rememberSaveableStateHolder()
-    stateHolder.SaveableStateProvider(selectedTab) {
       when (selectedTab) {
         0 -> HangarScreen(
             backdrop = backdrop,
@@ -213,10 +455,11 @@ private fun RefugeContent(
             isDark = isDark,
             selectedBottomTab = selectedTab,
             onNavigate = onNavigate,
-            onToggleTheme = onToggleTheme,
             onOpenDesignLab = onOpenDesignLab,
-            onOpenCcu = { onNavigate(6) },
+            onOpenOwnedCcu = { id -> onSelectOwnedCcu(id); onNavigate(10) },
             isOnline = isOnline,
+            presence = presence,
+            avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
         )
 
@@ -225,11 +468,14 @@ private fun RefugeContent(
             palette = palette,
             repository = storeRepository,
             cartRepository = cartRepository,
+            ccuPurchaseRepository = ccuPurchaseRepository,
             isDark = isDark,
             selectedBottomTab = selectedTab,
             onNavigate = onNavigate,
-            onOpenCcu = { onNavigate(6) },
+            onOpenCcu = { onNavigate(9) },
             isOnline = isOnline,
+            presence = presence,
+            avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
         )
 
@@ -241,7 +487,10 @@ private fun RefugeContent(
             onNavigate = onNavigate,
             repository = terminalRepository,
             isOnline = isOnline,
+            presence = presence,
+            avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
+            onOverlayVisibilityChanged = onTerminalOverlayVisibilityChanged,
         )
 
         3 -> ToolsScreen(
@@ -252,6 +501,8 @@ private fun RefugeContent(
             onNavigate = onNavigate,
             utilityRepository = utilityRepository,
             isOnline = isOnline,
+            presence = presence,
+            avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
         )
 
@@ -266,6 +517,9 @@ private fun RefugeContent(
             onToggleTheme = onToggleTheme,
             onOpenLogin = { onNavigate(8) },
             isOnline = isOnline,
+            presence = presence,
+            initialProfile = initialProfile,
+            fleetSummary = "舰队资料",
             onToggleOnline = onToggleOnline,
         )
 
@@ -273,16 +527,16 @@ private fun RefugeContent(
             backdrop = backdrop,
             palette = palette,
             isDark = isDark,
+            translationEnabled = translationEnabled,
+            onToggleTranslation = onToggleTranslation,
             selectedBottomTab = rootTab,
             onNavigate = onNavigate,
             onToggleTheme = onToggleTheme,
-            syncLogs = settings.syncLogs,
-            localOnly = settings.localOnly,
-            onToggleSyncLogs = onToggleSyncLogs,
-            onToggleLocalOnly = onToggleLocalOnly,
             onClearCache = { settingsRepository.clearLocalCache() },
             cacheInfo = cacheManifest,
             isOnline = isOnline,
+            presence = presence,
+            avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
         )
 
@@ -290,11 +544,14 @@ private fun RefugeContent(
             backdrop = backdrop,
             palette = palette,
             isDark = isDark,
-            selectedBottomTab = rootTab,
+            selectedBottomTab = selectedTab,
             onNavigate = onNavigate,
             rootTab = rootTab,
             ccuRepository = ccuRepository,
+            ownedShips = repository.cachedOwnedShips(),
             isOnline = isOnline,
+            presence = presence,
+            avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
         )
 
@@ -313,6 +570,54 @@ private fun RefugeContent(
             onClose = { onNavigate(rootTab) },
         )
 
+        9 -> androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+            // Keep the originating store rendered below the purchase sheet.
+            // The sheet owns the interaction layer, while the store remains
+            // visible through the HIG scrim during the complete transition.
+            StoreScreen(
+                backdrop = backdrop,
+                palette = palette,
+                repository = storeRepository,
+                cartRepository = cartRepository,
+                ccuPurchaseRepository = ccuPurchaseRepository,
+                isDark = isDark,
+                selectedBottomTab = rootTab,
+                onNavigate = onNavigate,
+                onOpenCcu = {},
+                isOnline = isOnline,
+                presence = presence,
+                avatarUrl = avatarUrl,
+                onToggleOnline = onToggleOnline,
+            )
+            StoreUpgradePurchaseScreen(
+                backdrop = backdrop,
+                palette = palette,
+                isDark = isDark,
+                rootTab = rootTab,
+                onNavigate = onNavigate,
+                auth = auth,
+                purchaseRepository = ccuPurchaseRepository,
+                hangarRepository = repository,
+                translationRepository = translationRepository,
+                presence = presence,
+                avatarUrl = avatarUrl,
+                onAvatarClick = onToggleOnline,
+            )
+        }
+
+        10 -> HangarOwnedCcuApplyScreen(
+            backdrop = backdrop,
+            palette = palette,
+            isDark = isDark,
+            rootTab = rootTab,
+            onNavigate = onNavigate,
+            repository = repository,
+            ownedCcuId = selectedOwnedCcuId ?: 0L,
+            presence = presence,
+            avatarUrl = avatarUrl,
+            onAvatarClick = onToggleOnline,
+        )
+
         else -> DesignLabScreen(
             backdrop = backdrop,
             palette = palette,
@@ -320,5 +625,4 @@ private fun RefugeContent(
             onToggleTheme = onToggleTheme,
         )
       }
-    }
 }

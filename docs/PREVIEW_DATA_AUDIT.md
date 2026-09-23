@@ -1,21 +1,21 @@
 # Production Data Audit
 
 Production routes no longer depend on Reference Lab fixtures or UI-local
-preview rows. The current offline-first build consumes versioned repository
-adapters backed by the bundled legacy cache import (`legacy-cache-v1`, refreshed
-2026-08-20). A future network refresh can replace the adapter implementation
-without changing the Compose contracts or the approved Hangar geometry.
+preview rows. User/account surfaces consume RSI-backed repositories and retain
+their last successful private snapshot in app storage. Public Store, Terminal
+and CCU catalogues use the same cache-then-refresh rule. The bundled manifest
+contains no fabricated production rows.
 
 | Former preview source | Production consumer | Current adapter | Status |
 | --- | --- | --- | --- |
-| Hangar local snapshot | Hangar main, hero, inventory, detail | `ProductionHangarRepository` | CLOSED |
-| Buyback sample rows | Hangar buyback | `ProductionBuybackRepository` | CLOSED |
-| Catalog snapshot | Store categories, product detail, cart | `ProductionCatalogStoreRepository` | CLOSED |
-| Terminal snapshot | Terminal categories and detail | `ProductionTerminalRepository` | CLOSED |
-| Profile local values | Profile/account panels | `ProductionProfileRepository` | CLOSED |
+| Hangar local snapshot | Hangar main, hero, inventory, detail | `RsiLiveHangarRepository` persistent snapshot | CLOSED |
+| Buyback sample rows | Hangar buyback | `RsiLiveBuybackRepository` persistent snapshot | CLOSED |
+| Catalog snapshot | Store categories, product detail, cart | `RsiLiveStoreRepository` persistent snapshot | CLOSED |
+| Terminal snapshot | Terminal categories and detail | `WikiTerminalRepository` persistent snapshot | CLOSED |
+| Profile local values | Profile/account panels | `RsiLiveProfileRepository` persistent snapshot | CLOSED |
 | Utility rows and tool details | Tools/Profile utility sheets and external links | `ProductionUtilityRepository` | CLOSED |
-| CCU ship and owned list | Seed/target selectors, owned editor, chain detail | `ProductionCcuRepository` plus local planner | CLOSED |
-| Hangar log strings | Hangar log sheet | `ProductionHangarLogRepository` | CLOSED |
+| CCU ship and owned list | Seed/target selectors, owned editor, chain detail | `RsiLiveCcuRepository` persistent catalogue + cached hangar | CLOSED |
+| Hangar log strings | Hangar log sheet | `RsiLiveHangarLogRepository` persistent snapshot | CLOSED |
 | Loading/error placeholders | All production repositories | Shared loading/error/empty states with retry | CLOSED |
 | ReferenceLab samples | Reference Lab only | Lab fixture | EXEMPT |
 | DesignLab samples | Design Lab only | Lab fixture | EXEMPT |
@@ -23,7 +23,7 @@ without changing the Compose contracts or the approved Hangar geometry.
 
 ## Boundary rules
 
-- Production composition uses the explicit `Production*Repository` classes.
+- Production composition uses explicit live repositories with read-only cached fallbacks.
 - Reference Lab and Design Lab may keep sample data; neither is reachable from
   a production root tab.
 - Empty, loading, and error states are explicit UI states. A repository failure

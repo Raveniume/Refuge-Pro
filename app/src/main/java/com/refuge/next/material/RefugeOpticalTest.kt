@@ -30,7 +30,7 @@ fun RefugeOpticalTest(
         modifier
             .fillMaxWidth()
             .height(164.dp)
-            .background(palette.contentSurface.copy(alpha = .34f), androidx.compose.foundation.shape.RoundedCornerShape(RefugeRadius.panel))
+            .background(palette.contentSurface.copy(alpha = .34f), com.refuge.next.design.refugeContinuousShape(RefugeRadius.panel))
             .padding(1.dp),
     ) {
         Canvas(

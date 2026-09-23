@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +25,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
@@ -63,9 +64,11 @@ import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
+import com.kyant.shapes.RoundedCornerStyle
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeTypography
+import com.refuge.next.design.refugeContinuousShape
 import com.refuge.next.motion.DampedDragAnimation
 import com.refuge.next.reference.ReferenceInteractiveHighlight
 import kotlinx.coroutines.flow.collectLatest
@@ -89,31 +92,26 @@ fun RefugeGlassSurface(
         padding = padding,
         surface = fill,
         surfaceAlpha = fill.alpha,
+        edgeAlpha = if (palette.background.luminance() < .5f) .16f else .24f,
         content = content,
     )
 }
 
-/** Moderate-weight liquid surface for major Store panels and transient sheets. */
+/** Compatibility entry for content panels; refraction belongs to overlays. */
 @Composable
 fun RefugeStandardGlassSurface(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     modifier: Modifier = Modifier,
     radius: Dp = RefugeRadius.floating,
+    edgeAlpha: Float? = null,
     padding: PaddingValues = PaddingValues(0.dp),
     content: @Composable BoxScope.() -> Unit,
 ) {
-    RefugeLiquidGlass(
-        backdrop = backdrop,
+    RefugeContentSurface(
         palette = palette,
         modifier = modifier,
         radius = radius,
-        refractionHeight = 18.dp,
-        refractionAmount = 24.dp,
-        blurRadius = 7.dp,
-        surface = palette.glassStrong,
-        surfaceAlpha = .10f,
-        chromaticAberration = true,
         padding = padding,
         content = content,
     )
@@ -127,6 +125,7 @@ fun RefugeGlassControl(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
     padding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+    edgeAlpha: Float = .16f,
     content: @Composable BoxScope.() -> Unit,
 ) {
     RefugeLiquidGlassButton(
@@ -136,6 +135,7 @@ fun RefugeGlassControl(
         modifier = modifier,
         contentDescription = contentDescription,
         padding = padding,
+        edgeAlpha = edgeAlpha,
         content = content,
     )
 }
@@ -152,7 +152,28 @@ fun RefugeQuietControl(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val shape = RoundedCornerShape(50)
+    val shape = Capsule(RoundedCornerStyle.Continuous)
+    if (!LocalOpticalGlassEnabled.current) {
+        Box(
+            modifier
+                .clip(shape)
+                .background(palette.glass.copy(alpha = if (pressed) .18f else .12f))
+                .border(1.dp, palette.outline.copy(alpha = .24f), shape)
+                .semantics {
+                    role = Role.Button
+                    if (contentDescription != null) this.contentDescription = contentDescription
+                }
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick,
+                )
+                .padding(padding),
+            contentAlignment = Alignment.Center,
+            content = content,
+        )
+        return
+    }
     Box(
         modifier
             .clip(shape)
@@ -212,6 +233,7 @@ fun RefugeLiquidToggle(
     val density = LocalDensity.current
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     val scope = rememberCoroutineScope()
+    val latestChecked = rememberUpdatedState(checked)
     val trackWidth = 64.dp
     val thumbWidth = 40.dp
     val dragWidth = with(density) { (trackWidth - thumbWidth - 4.dp).toPx() }
@@ -225,11 +247,20 @@ fun RefugeLiquidToggle(
             visibilityThreshold = .001f,
             initialScale = 1f,
             pressedScale = 1.5f,
-            onDragStarted = { didDrag = false },
+            onDragStarted = {},
             onDragStopped = {
-                val nextChecked = if (didDrag) targetValue >= .5f else !checked
-                fraction = if (nextChecked) 1f else 0f
-                if (nextChecked != checked) onClick()
+                // AndroidLiquidGlass treats a tap and a drag as one gesture:
+                // the release settles the thumb and emits exactly one state
+                // change. Reading checked through the lambda avoids a stale
+                // value after the settings row recomposes.
+                if (didDrag) {
+                    val nextChecked = targetValue >= .5f
+                    fraction = if (nextChecked) 1f else 0f
+                    if (nextChecked != latestChecked.value) onClick()
+                } else {
+                    fraction = if (latestChecked.value) 0f else 1f
+                    onClick()
+                }
                 didDrag = false
                 animateToValue(fraction)
             },
@@ -265,11 +296,10 @@ fun RefugeLiquidToggle(
                 role = Role.Switch
                 this.contentDescription = contentDescription
             }
-            .clickable(
-                interactionSource = null,
-                indication = null,
-                onClick = onClick,
-            ),
+            // The whole switch is the drag target, matching the reference
+            // control. DampedDragAnimation also handles a tap on the track;
+            // adding a second clickable here would toggle twice.
+            .then(drag.modifier),
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(
@@ -277,10 +307,10 @@ fun RefugeLiquidToggle(
         ) {
             Box(
                 Modifier
-                    .clip(Capsule())
+                    .clip(Capsule(RoundedCornerStyle.Continuous))
                     .drawBackdrop(
                         backdrop = backdrop,
-                        shape = { Capsule() },
+                        shape = { Capsule(RoundedCornerStyle.Continuous) },
                         effects = {
                             vibrancy()
                             blur(4.dp.toPx())
@@ -303,7 +333,6 @@ fun RefugeLiquidToggle(
                     val padding = 2.dp.toPx()
                     translationX = if (isLtr) lerp(padding, padding + dragWidth, drag.value) else lerp(-padding, -(padding + dragWidth), drag.value)
                 }
-                .then(drag.modifier)
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(
                         backdrop,
@@ -315,7 +344,7 @@ fun RefugeLiquidToggle(
                             ) { drawBackdrop() }
                         },
                     ),
-                    shape = { Capsule() },
+                    shape = { Capsule(RoundedCornerStyle.Continuous) },
                     effects = {
                         val progress = drag.pressProgress
                         vibrancy()
@@ -345,43 +374,36 @@ fun RefugeLightweightGlassSurface(
     modifier: Modifier = Modifier,
     radius: Dp = RefugeRadius.panel,
     onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
     contentDescription: String? = null,
     padding: PaddingValues = PaddingValues(0.dp),
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(radius)
-    val scope = rememberCoroutineScope()
-    val highlight = remember(scope) { ReferenceInteractiveHighlight(scope) }
-    val interactionSource = remember { MutableInteractionSource() }
+    val shape = refugeContinuousShape(radius)
+    val interactionModifier = if (onClick != null) {
+        val scope = rememberCoroutineScope()
+        val highlight = remember(scope) { ReferenceInteractiveHighlight(scope) }
+        val interactionSource = remember { MutableInteractionSource() }
+        Modifier
+            .then(highlight.modifier)
+            .then(highlight.gestureModifier)
+            .semantics {
+                role = Role.Button
+                if (contentDescription != null) this.contentDescription = contentDescription
+                if (!enabled) disabled()
+            }
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+    } else {
+        Modifier
+    }
     val baseModifier = modifier
-        .clip(shape)
-        .background(
-            Brush.linearGradient(
-                listOf(
-                    palette.glassStrong.copy(alpha = if (palette.background.luminance() < .5f) .14f else .24f),
-                    palette.contentSurface.copy(alpha = if (palette.background.luminance() < .5f) .34f else .42f),
-                    palette.glass.copy(alpha = if (palette.background.luminance() < .5f) .08f else .18f),
-                ),
-            ),
-        )
-        .then(highlight.modifier)
-        .then(highlight.gestureModifier)
-        .then(
-            if (onClick != null) {
-                Modifier
-                    .semantics {
-                        role = Role.Button
-                        if (contentDescription != null) this.contentDescription = contentDescription
-                    }
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null,
-                        onClick = onClick,
-                    )
-            } else {
-                Modifier
-            },
-        )
+        .refugeContentMaterial(palette, shape)
+        .then(interactionModifier)
         .padding(padding)
 
     Box(baseModifier, contentAlignment = Alignment.Center, content = content)
@@ -396,19 +418,10 @@ fun RefugeContentSurface(
     padding: PaddingValues = PaddingValues(0.dp),
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(radius)
+    val shape = refugeContinuousShape(radius)
     Box(
         modifier
-            .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        palette.glassStrong.copy(alpha = if (palette.background.luminance() < .5f) .10f else .18f),
-                        fill.copy(alpha = if (palette.background.luminance() < .5f) .34f else .46f),
-                        palette.glass.copy(alpha = if (palette.background.luminance() < .5f) .07f else .14f),
-                    ),
-                ),
-            )
+            .refugeContentMaterial(palette, shape, fill = fill, elevated = true)
             .padding(padding),
         contentAlignment = Alignment.Center,
         content = content,
@@ -426,7 +439,7 @@ fun RefugeModalSurface(
 ) {
     RefugeContentSurface(
         palette = palette,
-        modifier = modifier.shadow(20.dp, RoundedCornerShape(radius), clip = false),
+        modifier = modifier.shadow(20.dp, refugeContinuousShape(radius), clip = false),
         radius = radius,
         fill = fill,
         padding = padding,

@@ -28,6 +28,12 @@ class DampedDragAnimation(
     val onDragStarted: DampedDragAnimation.(position: Offset) -> Unit,
     val onDragStopped: DampedDragAnimation.() -> Unit,
     val onDrag: DampedDragAnimation.(size: IntSize, dragAmount: Offset) -> Unit,
+    /**
+     * The reference bottom tab bar follows each pointer update with a spring,
+     * while compact controls use an immediate snap to avoid dragging their
+     * surrounding chrome. Keep the latter as the default for existing callers.
+     */
+    val springDuringDrag: Boolean = false,
 ) {
 
     private val valueAnimationSpec =
@@ -54,7 +60,6 @@ class DampedDragAnimation(
 
     private val mutatorMutex = MutatorMutex()
     private var valueUpdateJob: Job? = null
-
     private val velocityTracker = VelocityTracker()
 
     val value: Float get() = valueAnimation.value
@@ -110,12 +115,21 @@ class DampedDragAnimation(
 
     fun updateValue(value: Float) {
         val targetValue = value.coerceIn(valueRange)
-        // Pointer move events can arrive faster than a spring frame. Cancel the
-        // previous update instead of queueing one coroutine per pixel; this is
-        // the difference between the reference lens feeling fluid and lagging.
-        valueUpdateJob?.cancel()
-        valueUpdateJob = animationScope.launch {
-            valueAnimation.snapTo(targetValue)
+        if (springDuringDrag) {
+            // AndroidLiquidGlass's LiquidBottomTabs intentionally feeds every
+            // pointer update into an Animatable spring. Animatable cancels the
+            // previous mutation and carries its velocity into the new target.
+            animationScope.launch {
+                valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() }
+            }
+        } else {
+            // Pointer events can arrive faster than a frame. Existing compact
+            // controls retain their low-latency snap path instead of creating
+            // a spring job for every pixel.
+            valueUpdateJob?.cancel()
+            valueUpdateJob = animationScope.launch {
+                valueAnimation.snapTo(targetValue)
+            }
         }
     }
 

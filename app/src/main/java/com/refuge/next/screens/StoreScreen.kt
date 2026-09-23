@@ -1,8 +1,6 @@
 package com.refuge.next.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,18 +11,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,18 +33,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.R
@@ -54,27 +46,46 @@ import com.refuge.next.data.StoreCategory
 import com.refuge.next.data.StoreProduct
 import com.refuge.next.data.StoreRepository
 import com.refuge.next.data.CartRepository
+import com.refuge.next.data.CcuPurchaseRepository
+import com.refuge.next.data.countCurrentCcuDiscountShips
 import com.refuge.next.data.formatUsd
 import com.refuge.next.data.DestructiveAction
 import com.refuge.next.data.SafeNoOpDestructiveActionExecutor
+import com.refuge.next.data.UserPresence
 import com.refuge.next.design.RefugeIconSize
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
+import com.refuge.next.design.translatedShipName
+import com.refuge.next.design.refugeContinuousShape
 import com.refuge.next.material.RefugeCompactUtilityPill
 import com.refuge.next.material.PageGlassScope
 import com.refuge.next.material.RefugeIcons
+import com.refuge.next.material.RefugeFloatingAction
+import com.refuge.next.material.RefugeHeaderActionBar
 import com.refuge.next.material.RefugeLightweightGlassSurface
-import com.refuge.next.material.RefugeQuietLiquidGlassSurface
+import com.refuge.next.material.RefugeGlassListGroup
+import com.refuge.next.material.RefugeGlassListRow
 import com.refuge.next.material.RefugeLiquidSheet
-import com.refuge.next.material.RefugeLiquidSegmented
-import com.refuge.next.material.RefugeLiquidIconButton
-import com.refuge.next.material.RefugeModalSurface
-import com.refuge.next.material.RefugeStandardGlassSurface
+import com.refuge.next.material.RefugeLiquidModeSelector
+import com.refuge.next.material.RefugeAnimatedSearch
+import com.refuge.next.material.RefugeHeaderAvatar
+import com.refuge.next.material.RefugePullToRefresh
 import com.refuge.next.reference.ReferenceLiquidButton
 import com.refuge.next.reference.ReferenceSearchField
-import com.refuge.next.reference.ReferenceSegmentedControl
+
+private val StoreDiscountOrange = Color(0xFFFF8A00)
+private const val GAME_PACKAGE_NOTICE = "This is not a GAME PACKAGE. Please note a GAME PACKAGE is required to play the game and fly or access your ships."
+
+private fun displayStorefrontText(raw: String): String =
+    com.refuge.next.data.storefrontText(raw)
+        .replace(GAME_PACKAGE_NOTICE, "", ignoreCase = true)
+        .replace("此商品不含游戏资格，进入游戏需要另购游戏包。", "")
+        .trim()
+internal enum class StoreSortOrder(val label: String) {
+    DEFAULT("默认"), DESCENDING("价格从高到低"), ASCENDING("价格从低到高")
+}
 
 @Composable
 fun StoreScreen(
@@ -82,75 +93,110 @@ fun StoreScreen(
     palette: RefugePalette,
     repository: StoreRepository,
     cartRepository: CartRepository,
+    ccuPurchaseRepository: CcuPurchaseRepository,
     isDark: Boolean,
     selectedBottomTab: Int,
     onNavigate: (Int) -> Unit,
     onOpenCcu: () -> Unit,
     isOnline: Boolean,
+    presence: UserPresence,
+    avatarUrl: String?,
     onToggleOnline: () -> Unit,
 ) {
-    var products by remember { mutableStateOf(emptyList<StoreProduct>()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var selectedCategory by remember { mutableIntStateOf(0) }
-    var search by remember { mutableStateOf("") }
-    var showSearch by remember { mutableStateOf(false) }
+    var products by remember(repository) { mutableStateOf(repository.cachedProducts()) }
+    var isLoading by remember(repository) { mutableStateOf(products.isEmpty()) }
+    var selectedCategory by rememberSaveable { mutableIntStateOf(0) }
+    var search by rememberSaveable { mutableStateOf("") }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     var showFilter by remember { mutableStateOf(false) }
     var showSort by remember { mutableStateOf(false) }
     var showCart by remember { mutableStateOf(false) }
     var selectedProduct by remember { mutableStateOf<StoreProduct?>(null) }
-    var priceBand by remember { mutableStateOf("全部") }
-    var warbondOnly by remember { mutableStateOf(false) }
-    var sortDescending by remember { mutableStateOf(false) }
+    var priceBand by rememberSaveable { mutableStateOf("全部") }
+    var warbondOnly by rememberSaveable { mutableStateOf(false) }
+    var sortOrder by rememberSaveable { mutableStateOf(StoreSortOrder.DEFAULT) }
     var cartRevision by remember { mutableIntStateOf(0) }
     var loadAttempt by remember { mutableIntStateOf(0) }
+    var isRefreshing by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var pendingNotice by remember { mutableStateOf<String?>(null) }
     val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
+    val listState = com.refuge.next.navigation.rememberRootListState(1)
 
     LaunchedEffect(repository, loadAttempt) {
-        isLoading = true
+        isLoading = products.isEmpty()
         loadError = null
+        runCatching { repository.awaitCachedProducts() }.onSuccess { cached ->
+            if (cached.isNotEmpty()) {
+                products = cached
+                isLoading = false
+            }
+        }
         runCatching { repository.products() }
             .onSuccess { products = it }
             .onFailure { loadError = it.message ?: "商店目录读取失败" }
         isLoading = false
+        isRefreshing = false
     }
 
     val category = StoreCategory.entries[selectedCategory]
+    var ccuDiscountCount by remember(ccuPurchaseRepository) { mutableIntStateOf(ccuPurchaseRepository.cachedCatalog()?.let(::countCurrentCcuDiscountShips) ?: 0) }
+    com.refuge.next.material.RefreshWhileVisible(ccuPurchaseRepository) {
+        runCatching { ccuPurchaseRepository.catalog() }
+            .onSuccess { current -> current?.let { ccuDiscountCount = countCurrentCcuDiscountShips(it) } }
+    }
     val cartLines = remember(cartRevision) { cartRepository.lines() }
-    val visibleProducts = remember(products, selectedCategory, search, priceBand, warbondOnly, sortDescending) {
+    val visibleProducts = remember(products, selectedCategory, search, priceBand, warbondOnly, sortOrder) {
+        val query = search.trim()
         products
             .asSequence()
             .filter { it.category == category }
-            .filter { search.isBlank() || it.title.contains(search, ignoreCase = true) || it.metadata.contains(search, ignoreCase = true) }
+            .filter {
+                query.isBlank() ||
+                    it.title.contains(query, ignoreCase = true) ||
+                    it.metadata.contains(query, ignoreCase = true) ||
+                    it.description.contains(query, ignoreCase = true)
+            }
             .filter {
                 when (priceBand) {
-                    "0-50" -> it.priceCents <= 5000
-                    "50-150" -> it.priceCents in 5000..15000
-                    "150+" -> it.priceCents >= 15000
+                    "0-100" -> it.priceCents <= 10000
+                    "100-500" -> it.priceCents > 10000 && it.priceCents <= 50000
+                    "500+" -> it.priceCents > 50000
                     else -> true
                 }
             }
             .filter { !warbondOnly || it.isWarbond }
-            .let { sequence -> if (sortDescending) sequence.sortedByDescending { it.priceCents } else sequence.sortedBy { it.priceCents } }
+            .let { sequence -> when (sortOrder) {
+                StoreSortOrder.DEFAULT -> sequence
+                StoreSortOrder.DESCENDING -> sequence.sortedByDescending { it.priceCents }
+                StoreSortOrder.ASCENDING -> sequence.sortedBy { it.priceCents }
+            } }
             .toList()
     }
 
     PageGlassScope(
         backdrop = backdrop,
         content = {
+        RefugePullToRefresh(
+            listState = listState,
+            isRefreshing = isRefreshing,
+            onRefresh = { isRefreshing = true; loadAttempt++ },
+            indicatorColor = palette.accent,
+            modifier = Modifier.fillMaxSize(),
+        ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().statusBarsPadding(),
+            state = listState,
             contentPadding = PaddingValues(
                 start = RefugeSpacing.page,
                 top = RefugeSpacing.lg,
                 end = RefugeSpacing.page,
                 bottom = 132.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
+            verticalArrangement = Arrangement.Top,
         ) {
             item {
-                StoreHeader(
+                Box(Modifier.fillMaxWidth().padding(bottom = 8.dp)) { StoreHeader(
                     backdrop = backdrop,
                     palette = palette,
                     showSearch = showSearch,
@@ -158,41 +204,51 @@ fun StoreScreen(
                     onCart = { showCart = true },
                     onSearch = { showSearch = !showSearch },
                     isOnline = isOnline,
+                    presence = presence,
+                    avatarUrl = avatarUrl,
                     onToggleOnline = onToggleOnline,
-                )
+                    ccuDiscountCount = ccuDiscountCount,
+                ) }
             }
-            if (showSearch) {
-                item {
-                    ReferenceSearchField(
+            item {
+                RefugeAnimatedSearch(showSearch, Modifier.fillMaxWidth()) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        ReferenceSearchField(
+                            backdrop = backdrop,
+                            isDark = isDark,
+                            value = search,
+                            onValueChange = { search = it },
+                            searchIcon = RefugeIcons.search,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+            item {
+                Box(
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    RefugeLiquidModeSelector(
                         backdrop = backdrop,
-                        isDark = isDark,
-                        value = search,
-                        onValueChange = { search = it },
-                        searchIcon = RefugeIcons.search,
-                        modifier = Modifier.fillMaxWidth(),
+                        palette = palette,
+                        labels = StoreCategory.entries.map { it.label },
+                        selectedIndex = selectedCategory,
+                        onSelected = { selectedCategory = it },
+                        modifier = Modifier.fillMaxWidth(.90f),
                     )
                 }
             }
             item {
-                RefugeLiquidSegmented(
-                    backdrop = backdrop,
-                    isDark = isDark,
-                    labels = StoreCategory.entries.map { it.label },
-                    initialIndex = selectedCategory,
-                    onSelected = { selectedCategory = it },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                )
-            }
-            item {
-                StoreToolbar(
+                Box(Modifier.fillMaxWidth().padding(bottom = RefugeSpacing.md)) { StoreToolbar(
                     backdrop = backdrop,
                     palette = palette,
                     count = if (isLoading) null else visibleProducts.size,
                     filterActive = priceBand != "全部" || warbondOnly,
-                    sortDescending = sortDescending,
+                    sortOrder = sortOrder,
                     onFilter = { showFilter = true },
                     onSort = { showSort = true },
-                )
+                ) }
             }
             if (isLoading && products.isEmpty()) {
                 item { ProductionLoadingState(backdrop, palette, "正在读取商店目录") }
@@ -201,21 +257,33 @@ fun StoreScreen(
             } else if (visibleProducts.isEmpty()) {
                 item { StoreEmptyState(palette, search, category.label) }
             } else {
-                items(visibleProducts, key = { it.id }) { product ->
-                    StoreProductGlassRow(
+                itemsIndexed(
+                    items = visibleProducts,
+                    key = { _, product -> "store:${product.id}" },
+                    contentType = { _, _ -> "store-product" },
+                ) { index, product ->
+                    RefugeGlassListGroup(
                         backdrop = backdrop,
                         palette = palette,
-                        product = product,
-                        onClick = { selectedProduct = product },
-                    )
+                        modifier = Modifier.fillMaxWidth(),
+                        padding = PaddingValues(horizontal = 10.dp),
+                        roundTop = index == 0,
+                        roundBottom = index == visibleProducts.lastIndex,
+                    ) {
+                        StoreProductRow(
+                            palette = palette,
+                            product = product,
+                            isLast = index == visibleProducts.lastIndex,
+                            onClick = { selectedProduct = product },
+                        )
+                    }
                 }
             }
         }
+        }
 
         },
-        overlay = { pageBackdrop ->
-            RootBottomNav(pageBackdrop, isDark, selectedBottomTab, onNavigate)
-        },
+        overlay = { _ -> },
     )
 
     if (showFilter) {
@@ -233,9 +301,9 @@ fun StoreScreen(
         StoreSortSheet(
             backdrop = backdrop,
             palette = palette,
-            descending = sortDescending,
+            order = sortOrder,
             onSelected = {
-                sortDescending = it
+                sortOrder = it
                 showSort = false
             },
             onDismiss = { showSort = false },
@@ -264,13 +332,47 @@ fun StoreScreen(
                 cartRepository.add(product)
                 cartRevision++
             },
-            onOpenUpgrade = if (product.category == StoreCategory.SHIPS) onOpenCcu else null,
+            onOpenUpgrade = if (product.category == StoreCategory.SHIPS) {
+                {
+                    selectedProduct = null
+                    onOpenCcu()
+                }
+            } else {
+                null
+            },
             onDismiss = { selectedProduct = null },
         )
     }
     pendingNotice?.let { notice ->
         StoreNoticeSheet(backdrop, palette, "安全结算预览", notice) { pendingNotice = null }
     }
+}
+
+@Composable
+fun StoreScreen(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    repository: StoreRepository,
+    cartRepository: CartRepository,
+    isDark: Boolean,
+    selectedBottomTab: Int,
+    onNavigate: (Int) -> Unit,
+    onOpenCcu: () -> Unit,
+    isOnline: Boolean,
+    presence: UserPresence,
+    avatarUrl: String?,
+    onToggleOnline: () -> Unit,
+) = StoreScreen(
+    backdrop = backdrop, palette = palette, repository = repository,
+    cartRepository = cartRepository, ccuPurchaseRepository = EmptyCcuPurchaseRepository,
+    isDark = isDark, selectedBottomTab = selectedBottomTab, onNavigate = onNavigate,
+    onOpenCcu = onOpenCcu, isOnline = isOnline, presence = presence,
+    avatarUrl = avatarUrl, onToggleOnline = onToggleOnline,
+)
+
+private object EmptyCcuPurchaseRepository : CcuPurchaseRepository {
+    override suspend fun catalog(): org.json.JSONObject? = null
+    override suspend fun sourceIds(toId: Int): Set<Int> = emptySet()
 }
 
 @Composable
@@ -282,52 +384,64 @@ private fun StoreHeader(
     onCart: () -> Unit,
     onSearch: () -> Unit,
     isOnline: Boolean,
+    presence: UserPresence,
+    avatarUrl: String?,
     onToggleOnline: () -> Unit,
+    ccuDiscountCount: Int,
 ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(46.dp),
-                contentAlignment = Alignment.BottomEnd,
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.user_profile_pic),
-                    contentDescription = "用户头像",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(CircleShape)
-                        .graphicsLayer { scaleX = 1.9f; scaleY = 1.9f }
-                        .semantics { contentDescription = "切换在线状态"; role = Role.Button }
-                        .clickable(onClick = onToggleOnline),
-                )
-                Box(
-                    Modifier
-                        .size(9.dp)
-                        .background(if (isOnline) palette.positive else palette.textMuted, CircleShape)
-                        .border(.5.dp, palette.background.copy(alpha = .72f), CircleShape),
-                )
-            }
-            Spacer(Modifier.width(RefugeSpacing.md))
-            Column(Modifier.weight(1f)) {
-                Text("商店", style = RefugeTypography.largeTitle(palette), maxLines = 1)
-            }
-            StoreHeaderAction(backdrop, palette, RefugeIcons.upgrade, "升级", onUpgrade)
-            Spacer(Modifier.width(RefugeSpacing.xs))
-            StoreHeaderAction(backdrop, palette, RefugeIcons.cart, "购物车", onCart)
-            Spacer(Modifier.width(RefugeSpacing.xs))
-            StoreHeaderAction(backdrop, palette, if (showSearch) RefugeIcons.more else RefugeIcons.search, "搜索商品", onSearch)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        RefugeHeaderAvatar(
+            avatarUrl = avatarUrl,
+            palette = palette,
+            presenceColor = storePresenceColor(palette, presence),
+            onClick = onToggleOnline,
+        )
+        Spacer(Modifier.width(RefugeSpacing.md))
+        Column(Modifier.weight(1f)) {
+            Text("商店", style = RefugeTypography.largeTitle(palette), maxLines = 1)
         }
+        StoreHeaderActions(
+            backdrop = backdrop,
+            palette = palette,
+            ccuDiscountCount = ccuDiscountCount,
+            onUpgrade = onUpgrade,
+            onCart = onCart,
+            onSearch = onSearch,
+        )
+    }
 }
 
 @Composable
-private fun StoreHeaderAction(
+private fun StoreHeaderActions(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
+    ccuDiscountCount: Int,
+    onUpgrade: () -> Unit,
+    onCart: () -> Unit,
+    onSearch: () -> Unit,
 ) {
-    RefugeLiquidIconButton(backdrop, icon, label, onClick, Modifier.size(44.dp), iconTint = palette.textSecondary)
+    RefugeHeaderActionBar(
+        backdrop = backdrop,
+        palette = palette,
+        actions = listOf(
+            RefugeFloatingAction(
+                icon = RefugeIcons.hangarUpgrade,
+                label = "升级",
+                onClick = onUpgrade,
+            ),
+            RefugeFloatingAction(RefugeIcons.cart, "购物车", onCart),
+            RefugeFloatingAction(RefugeIcons.search, "搜索商品", onSearch),
+        ),
+        badges = if (ccuDiscountCount > 0) mapOf(0 to ccuDiscountCount) else emptyMap(),
+    )
+}
+
+private fun storePresenceColor(palette: RefugePalette, presence: UserPresence): Color = when (presence) {
+    UserPresence.ONLINE -> palette.positive
+    UserPresence.AWAY -> Color(0xFFFFB020)
+    UserPresence.DO_NOT_DISTURB -> Color(0xFFFF5C5C)
+    UserPresence.PLAYING -> palette.accent
+    UserPresence.INVISIBLE -> palette.textMuted
 }
 
 @Composable
@@ -336,61 +450,75 @@ private fun StoreToolbar(
     palette: RefugePalette,
     count: Int?,
     filterActive: Boolean,
-    sortDescending: Boolean,
+    sortOrder: StoreSortOrder,
     onFilter: () -> Unit,
     onSort: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(count?.let { "$it 项" } ?: "同步中", style = RefugeTypography.caption(palette))
+        Spacer(Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
             RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.filter, if (filterActive) "筛选 · 已选" else "筛选", onFilter)
-            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.sort, if (sortDescending) "排序：高到低" else "排序：默认", onSort)
+            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.sort, when (sortOrder) {
+                StoreSortOrder.DEFAULT -> "排序：默认"
+                StoreSortOrder.DESCENDING -> "排序：高到低"
+                StoreSortOrder.ASCENDING -> "排序：低到高"
+            }, onSort)
         }
-        Spacer(Modifier.weight(1f))
-        Text(count?.let { "$it 项" } ?: "同步中", style = RefugeTypography.caption(palette))
     }
 }
 
 @Composable
-private fun StoreProductGlassRow(
-    backdrop: LayerBackdrop,
+private fun StoreProductRow(
     palette: RefugePalette,
     product: StoreProduct,
+    isLast: Boolean,
     onClick: () -> Unit,
 ) {
-    RefugeQuietLiquidGlassSurface(
-        backdrop = backdrop,
+    val shipReference = rememberShipReference(product.title)
+    RefugeGlassListRow(
         palette = palette,
-        modifier = Modifier.fillMaxWidth().height(108.dp),
-        radius = RefugeRadius.panel,
         onClick = onClick,
         contentDescription = product.title,
-        padding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        isLast = isLast,
+        dividerInset = 104.dp,
+        modifier = Modifier.fillMaxWidth().height(if (product.isWarbond) 132.dp else 108.dp),
     ) {
-        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxSize().padding(vertical = 8.dp), verticalAlignment = Alignment.Top) {
             AsyncImage(
                 model = product.imageUrl,
                 contentDescription = "${product.title} 图片",
                 contentScale = ContentScale.Crop,
                 placeholder = painterResource(R.drawable.ship_placeholder),
                 error = painterResource(R.drawable.ship_placeholder),
-                modifier = Modifier.size(92.dp).clip(RoundedCornerShape(RefugeRadius.image)),
+                modifier = Modifier.size(92.dp).clip(refugeContinuousShape(RefugeRadius.image)),
             )
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(Modifier.fillMaxSize()) {
-                Text(product.title, style = RefugeTypography.headline(palette), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(translatedShipName(product.title), style = RefugeTypography.headline(palette), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(RefugeSpacing.xxs))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(product.metadata, style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (product.isWarbond) {
-                        Spacer(Modifier.width(RefugeSpacing.xs))
-                        Text("战争债券", style = RefugeTypography.caption(palette).copy(color = palette.warning))
-                    }
+                Text(translatedShipName(shipReference?.manufacturer ?: product.metadata), style = RefugeTypography.secondary(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (product.isWarbond) {
+                    Spacer(Modifier.height(RefugeSpacing.xxs))
+                    Text(
+                        "Warbond",
+                        style = RefugeTypography.caption(palette).copy(color = palette.background),
+                        modifier = Modifier
+                            .clip(refugeContinuousShape(7.dp))
+                            .background(StoreDiscountOrange)
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                    )
                 }
                 Spacer(Modifier.weight(1f))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     Text(product.category.label, style = RefugeTypography.caption(palette))
                     Spacer(Modifier.weight(1f))
-                    Text(product.priceLabel, style = RefugeTypography.value(palette).copy(color = palette.accent))
+                    Text(
+                        product.priceLabel,
+                        style = RefugeTypography.value(palette).copy(
+                            color = if (product.isWarbond) StoreDiscountOrange else palette.accent,
+                        ),
+                    )
                 }
             }
         }
@@ -406,11 +534,11 @@ private fun StoreLoadingRow(palette: RefugePalette) {
         padding = PaddingValues(10.dp),
     ) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(92.dp).clip(RoundedCornerShape(RefugeRadius.image)).background(palette.glassStrong.copy(alpha = .20f)))
+            Box(Modifier.size(92.dp).clip(refugeContinuousShape(RefugeRadius.image)).background(palette.glassStrong.copy(alpha = .20f)))
             Spacer(Modifier.width(RefugeSpacing.md))
             Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
-                Box(Modifier.width(190.dp).height(14.dp).clip(RoundedCornerShape(8.dp)).background(palette.glassStrong.copy(alpha = .24f)))
-                Box(Modifier.width(130.dp).height(11.dp).clip(RoundedCornerShape(8.dp)).background(palette.glassStrong.copy(alpha = .18f)))
+                Box(Modifier.width(190.dp).height(14.dp).clip(refugeContinuousShape(8.dp)).background(palette.glassStrong.copy(alpha = .24f)))
+                Box(Modifier.width(130.dp).height(11.dp).clip(refugeContinuousShape(8.dp)).background(palette.glassStrong.copy(alpha = .18f)))
             }
             Spacer(Modifier.weight(1f))
             CircularProgressIndicator(Modifier.size(18.dp), color = palette.accent, strokeWidth = 2.dp)
@@ -446,7 +574,7 @@ private fun StoreFilterSheet(
     StoreSheetFrame(backdrop, palette, "筛选商品", onDismiss) {
         Text("价格区间", style = RefugeTypography.secondary(palette))
         Row(horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
-            listOf("全部", "0-50", "50-150", "150+").forEach { band ->
+            listOf("全部", "0-100", "100-500", "500+").forEach { band ->
                 StoreChoicePill(palette, band, band == selectedBand) { onBandSelected(band) }
             }
         }
@@ -465,13 +593,14 @@ private fun StoreFilterSheet(
 private fun StoreSortSheet(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
-    descending: Boolean,
-    onSelected: (Boolean) -> Unit,
+    order: StoreSortOrder,
+    onSelected: (StoreSortOrder) -> Unit,
     onDismiss: () -> Unit,
 ) {
     StoreSheetFrame(backdrop, palette, "排序商品", onDismiss) {
-        StoreChoiceRow(palette, "默认", !descending) { onSelected(false) }
-        StoreChoiceRow(palette, "价格从高到低", descending) { onSelected(true) }
+        StoreSortOrder.entries.forEach { choice ->
+            StoreChoiceRow(palette, choice.label, order == choice) { onSelected(choice) }
+        }
     }
 }
 
@@ -484,25 +613,115 @@ private fun StoreProductSheet(
     onOpenUpgrade: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
-    StoreSheetFrame(backdrop, palette, product.title, onDismiss) { modalBackdrop ->
+    val shipReference = rememberShipReference(product.title)
+    var addedCount by remember(product.id) { mutableIntStateOf(0) }
+    RefugeLiquidSheet(
+        backdrop = backdrop,
+        palette = palette,
+        title = translatedShipName(product.title),
+        onDismiss = onDismiss,
+        sheetHeight = 720.dp,
+        actionOverContent = false,
+        actionBottomPadding = 12.dp,
+        transparentActionArea = false,
+        surfaceRefraction = false,
+        action = { actionBackdrop ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ReferenceLiquidButton(
+                    backdrop = actionBackdrop,
+                    onClick = {
+                        onAddToCart()
+                        addedCount++
+                    },
+                    modifier = Modifier.weight(1f),
+                    minHeight = 56.dp,
+                ) {
+                    Icon(
+                        if (addedCount > 0) RefugeIcons.check else RefugeIcons.cart,
+                        contentDescription = null,
+                        tint = palette.text,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        if (addedCount > 0) "已加入 $addedCount 件" else "加入购物车",
+                        style = RefugeTypography.body(palette).copy(color = palette.text),
+                        maxLines = 1,
+                    )
+                }
+                if (onOpenUpgrade != null) {
+                    ReferenceLiquidButton(
+                        backdrop = actionBackdrop,
+                        onClick = onOpenUpgrade,
+                        modifier = Modifier.weight(1f),
+                        minHeight = 56.dp,
+                    ) {
+                        Icon(
+                            RefugeIcons.hangarUpgrade,
+                            contentDescription = null,
+                            tint = palette.text,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            "选择升级",
+                            style = RefugeTypography.body(palette).copy(color = palette.text),
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+        },
+    ) { _ ->
         AsyncImage(
             model = product.imageUrl,
             contentDescription = "${product.title} 大图",
             contentScale = ContentScale.Crop,
             placeholder = painterResource(R.drawable.ship_placeholder),
             error = painterResource(R.drawable.ship_placeholder),
-            modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(RefugeRadius.panel)),
+            modifier = Modifier.fillMaxWidth().height(196.dp).clip(refugeContinuousShape(RefugeRadius.panel)),
         )
-        Text(product.metadata, style = RefugeTypography.secondary(palette))
-        Text(product.description, style = RefugeTypography.body(palette))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(product.priceLabel, style = RefugeTypography.value(palette).copy(color = palette.accent))
-            Spacer(Modifier.weight(1f))
-            RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.cart, "加入购物车", onAddToCart)
-            if (onOpenUpgrade != null) {
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.upgrade, "升级", onOpenUpgrade)
+            Column(Modifier.weight(1f)) {
+                Text(product.category.label, style = RefugeTypography.caption(palette))
+                Text(translatedShipName(product.metadata), style = RefugeTypography.secondary(palette), maxLines = 2)
+            }
+            Text(
+                product.priceLabel,
+                style = RefugeTypography.value(palette).copy(
+                    color = if (product.isWarbond) StoreDiscountOrange else palette.accent,
+                ),
+            )
+        }
+        if (product.isWarbond) {
+            Text(
+                "战争债券",
+                style = RefugeTypography.caption(palette).copy(color = StoreDiscountOrange),
+                modifier = Modifier
+                    .clip(refugeContinuousShape(7.dp))
+                    .border(1.dp, StoreDiscountOrange.copy(alpha = .86f), refugeContinuousShape(7.dp))
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            )
+        }
+        shipReference?.let { reference ->
+            Text(translatedShipName(reference.manufacturer), style = RefugeTypography.headline(palette))
+            if (reference.description.isNotBlank()) Text(translatedShipName(reference.description), style = RefugeTypography.body(palette))
+            Column(Modifier.fillMaxWidth().clip(refugeContinuousShape(16.dp)).background(palette.contentSurfaceStrong).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                reference.details.forEach { (label, value) ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(label, style = RefugeTypography.caption(palette), modifier = Modifier.weight(1f))
+                        Text(translatedShipName(value), style = RefugeTypography.body(palette), modifier = Modifier.weight(1.5f))
+                    }
+                }
             }
         }
+        val plainDescription = remember(product.description) { displayStorefrontText(product.description) }
+        if (plainDescription.isNotBlank() && plainDescription != shipReference?.description) {
+            Text(translatedShipName(plainDescription), style = RefugeTypography.body(palette))
+        }
+        Spacer(Modifier.height(76.dp))
     }
 }
 
@@ -516,7 +735,35 @@ private fun StoreCartSheet(
     onCheckout: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    StoreSheetFrame(backdrop, palette, "购物车", onDismiss) { modalBackdrop ->
+    RefugeLiquidSheet(
+        backdrop = backdrop,
+        palette = palette,
+        title = "购物车",
+        onDismiss = onDismiss,
+        sheetHeight = 720.dp,
+        actionOverContent = false,
+        actionBottomPadding = 12.dp,
+        transparentActionArea = false,
+        action = { actionBackdrop ->
+            ReferenceLiquidButton(
+                backdrop = actionBackdrop,
+                onClick = if (lines.isEmpty()) onDismiss else onCheckout,
+                modifier = Modifier.fillMaxWidth(),
+                minHeight = 56.dp,
+            ) {
+                Icon(
+                    if (lines.isEmpty()) RefugeIcons.check else RefugeIcons.cart,
+                    contentDescription = null,
+                    tint = palette.text,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    if (lines.isEmpty()) "完成" else "安全结算预览",
+                    style = RefugeTypography.body(palette).copy(color = palette.text),
+                )
+            }
+        },
+    ) { modalBackdrop ->
         if (lines.isEmpty()) {
             Text("购物车为空", style = RefugeTypography.body(palette))
         } else {
@@ -524,7 +771,7 @@ private fun StoreCartSheet(
                 RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(11.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(line.product.title, style = RefugeTypography.body(palette))
+                            Text(translatedShipName(line.product.title), style = RefugeTypography.body(palette))
                             Text("${line.quantity} × ${line.product.priceLabel}", style = RefugeTypography.caption(palette))
                         }
                         RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.more, "移除", { onRemove(line.product.id) })
@@ -537,11 +784,9 @@ private fun StoreCartSheet(
                 Spacer(Modifier.weight(1f))
                 Text(formatUsd(total), style = RefugeTypography.value(palette).copy(color = palette.accent))
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "清空", onClear)
-                RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.check, "安全结算预览", onCheckout)
-            }
+            RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.reclaim, "清空", onClear)
         }
+        Spacer(Modifier.height(76.dp))
     }
 }
 
@@ -566,9 +811,26 @@ private fun StoreSheetFrame(
     onDismiss: () -> Unit,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.(LayerBackdrop) -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, title, onDismiss) { modalBackdrop ->
+    RefugeLiquidSheet(
+        backdrop = backdrop,
+        palette = palette,
+        title = title,
+        onDismiss = onDismiss,
+        actionOverContent = false,
+        transparentActionArea = false,
+        action = { actionBackdrop ->
+            ReferenceLiquidButton(
+                backdrop = actionBackdrop,
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                minHeight = 52.dp,
+            ) {
+                Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
+            }
+        },
+    ) { modalBackdrop ->
         content(modalBackdrop)
-        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, modifier = Modifier.align(Alignment.End))
+        Spacer(Modifier.height(68.dp))
     }
 }
 
@@ -576,10 +838,12 @@ private fun StoreSheetFrame(
 private fun StoreChoicePill(palette: RefugePalette, label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(50))
+            .clip(refugeContinuousShape(50.dp))
             .background(if (selected) palette.accentSoft else Color.Transparent)
             .clickable(onClick = onClick)
+            .heightIn(min = 44.dp)
             .padding(horizontal = 10.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Text(label, style = RefugeTypography.caption(palette).copy(color = if (selected) palette.accent else palette.textSecondary))
     }
@@ -588,7 +852,7 @@ private fun StoreChoicePill(palette: RefugePalette, label: String, selected: Boo
 @Composable
 private fun StoreChoiceRow(palette: RefugePalette, label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = RefugeTypography.body(palette))

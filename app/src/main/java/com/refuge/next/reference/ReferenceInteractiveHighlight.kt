@@ -34,7 +34,7 @@ class ReferenceInteractiveHighlight(
     val progress: Float get() = press.value
     val offset: Offset get() = pointer.value - start
 
-    private val shader = if (isRuntimeShaderSupported()) {
+    private val shader by lazy { if (isRuntimeShaderSupported()) {
         RuntimeShader(
             """
 uniform float2 size;
@@ -49,14 +49,15 @@ half4 main(float2 coord) {
 }
 """
         )
-    } else null
+    } else null }
 
     val modifier: Modifier = Modifier.drawWithContent {
         val value = press.value
         if (value > 0f) {
-            if (shader != null) {
+            val shaderValue = shader
+            if (shaderValue != null) {
                 drawRect(Color.White.copy(alpha = 0.08f * value), blendMode = BlendMode.Plus)
-                shader.apply {
+                shaderValue.apply {
                     val point = position(size, pointer.value)
                     setFloatUniform("size", size.width, size.height)
                     setColorUniform("color", Color.White.copy(alpha = 0.15f * value))
@@ -67,7 +68,7 @@ half4 main(float2 coord) {
                         point.y.fastCoerceIn(0f, size.height),
                     )
                 }
-                drawRect(ShaderBrush(shader.asComposeShader()), blendMode = BlendMode.Plus)
+                drawRect(ShaderBrush(shaderValue.asComposeShader()), blendMode = BlendMode.Plus)
             } else {
                 drawRect(Color.White.copy(alpha = 0.25f * value), blendMode = BlendMode.Plus)
             }
@@ -79,9 +80,9 @@ half4 main(float2 coord) {
         inspectDragGestures(
             onDragStart = { down ->
                 start = down.position
-                animationScope.launch {
-                    launch { press.animateTo(1f, pressSpec) }
-                    launch { pointer.snapTo(start) }
+                animationScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    pointer.snapTo(start)
+                    press.animateTo(1f, pressSpec)
                 }
             },
             onDragEnd = {
