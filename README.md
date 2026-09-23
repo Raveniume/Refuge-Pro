@@ -1,96 +1,157 @@
+<div align="right"><a href="#refuge-pro">简体中文</a> · <a href="#refuge-pro-en">English</a></div>
+
+<div align="center">
+
 # Refuge Pro
 
-Refuge Pro 是一个面向《Star Citizen》玩家的原生 Android 工具，用于查看 RSI 账户机库、回购与升级记录、商店目录、舰船与装备资料，并在改船页面进行本地化的配置规划。项目以现有 RefugeNext 的信息结构和数据边界为背景，使用 Kotlin 与 Jetpack Compose 重建交互层，保持数据可追踪、离线可用和页面操作连续。
+**《Star Citizen》账户、机库、商店与舰船配置工具**
 
-当前版本：**0.2.1**（`versionCode 3`）
+[![Latest release](https://img.shields.io/github/v/release/Raveniume/Refuge-Pro?display_name=tag&style=for-the-badge)](https://github.com/Raveniume/Refuge-Pro/releases/latest)
+[![Android](https://img.shields.io/badge/Android-10%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Raveniume/Refuge-Pro/releases/latest)
+[![Kotlin](https://img.shields.io/badge/Kotlin-Compose-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://github.com/Raveniume/Refuge-Pro)
 
-## 功能范围
+[下载最新 APK](https://github.com/Raveniume/Refuge-Pro/releases/latest) · [查看更新日志](CHANGELOG.md) · [报告问题](https://github.com/Raveniume/Refuge-Pro/issues)
 
-### 机库
+</div>
 
-- 读取 RSI 账户的舰船、礼包、装备和历史项目。
-- 展示舰船图片、制造商、价值、已付金额、保险、入库时间和项目详情。
-- 支持回购、赠送、回收和升级入口；需要账号确认的操作会在提交前再次要求密码。
-- 已拥有的 CCU 在升级页的二级页面中展示，避免主列表被操作项挤满。
+Refuge Pro 将 RSI 账户机库、商店和升级目录、舰船资料以及原生改船计算器放在一个 Android 应用中。界面提供中文体验，常用公开目录可离线浏览；登录后的账户内容会按账户保存在本机，并在网络可用时更新。
+
+## 功能一览
+
+### 机库与账户
+
+- 查看 RSI 账户中的舰船、礼包、装备、回购项目和历史记录。
+- 浏览舰船图片、制造商、价值、已付金额、保险、入库时间和条目详情。
+- 通过机库入口查看升级选项；已拥有的 CCU 收纳在独立的二级页面。
+- 登录状态和账户资料保存在应用私有空间，更新安装时保留现有数据。
 
 ### 商店与升级
 
-- 商店目录按本地缓存优先展示，后台同步 RSI 实时价格、折扣、制造商和图片。
-- 升级目录从 RSI 官方升级接口读取，并保留最近一次有效快照，网络不可用时仍可选择舰船和 CCU。
-- 折扣角标只统计当前目录中实际处于折扣状态的商品。
-- 页面切换不会清空已有内容；只有用户主动下拉刷新时才显示刷新反馈。
+- 浏览商店商品、舰船、制造商、图片、价格和折扣信息。
+- 优先显示本地可用目录，并在后台更新 RSI 数据；网络不可用时保留最近一次有效内容。
+- 折扣角标对应实际折扣商品数量。
+- 升级目录支持从舰船到舰船的 CCU 路径选择。
 
 ### 终端与 Wiki
 
-- 内置舰船、组件和装备资料，包含制造商、规格、用途和图片。
-- Wiki 信息按 Star Citizen Tools 的条目结构组织，支持从舰船、武器、护盾和组件进入详情。
-- 常用筛选项、排序和搜索保持与旧版 RefugeNext 的行为一致。
+- 搜索舰船、武器、护盾和其他装备资料。
+- 查看制造商、规格、图片以及按类别整理的条目详情。
+- 提供筛选、排序和快速搜索。
 
-### 原生改船
+### 舰船改装
 
-- 以 Erkul Games Calculator 的舰船选择、挂点换装和性能总览为参考，使用 Compose 原生控件实现。
-- 支持 LIVE/PTU 数据模式、舰船选择、组件选择、启用状态、电力分配、护盾、DPS、散热和性能汇总。
-- 计算页面优先使用本地目录与上次快照，打开后在后台刷新云端数据；刷新完成后原位替换结果。
-- 方案保存与调用放在右上角菜单中，状态总览和电源分配器保持独立模块，便于小屏滚动操作。
+- 选择舰船并更换可用挂点上的组件。
+- 切换 LIVE / PTU 数据，调整电力分配和组件启用状态。
+- 查看武器 DPS、护盾、电力、散热与性能汇总。
+- 保存和调用配置方案。
+- 使用本地目录快速打开规划器，并在后台刷新可用数据。
 
-### 账户与状态
+### 个性化
 
-- 登录会话和本地缓存保存在 Android 应用私有存储中，覆盖安装不会清除它们。
-- 头像状态先更新本地界面，再尝试同步 RSI Spectrum；网络失败时保留待同步标记并在下次认证后重试。
-- 浅色模式使用纯白基底，深色模式使用纯黑基底；文字、图标和边界在两种模式下都保持可读。
+- 深色和浅色显示模式。
+- 头像状态菜单与即时状态指示。
+- 个人头像只从账户数据加载；未登录或图片不可用时使用通用占位图。
 
-## 设计与交互约束
+## 隐私
 
-项目统一采用原生 Compose 组件，视觉基线遵循 Apple Human Interface Guidelines。液态玻璃控件参考 [compose-hig](https://github.com/ienground/compose-hig) 和 [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)，具体验收规则记录在 [`DESIGN_GUIDELINES.md`](DESIGN_GUIDELINES.md)。其中包括：
+账户密码、RSI 会话信息和运行时账户缓存存放在 Android 应用私有存储中，不属于公开舰船目录资源。应用不会将运行时登录信息写入项目文件。仓库中的测试账号和凭据字符串仅用于自动化测试，不可用于登录。
 
-- 根导航固定为“机库、商店、终端、我的”。
-- 顶部导航、底部导航和弹窗使用一致的高度、间距、连续圆角和触控区域。
-- BottomSheet 在当前页面上原地展开，底层内容在动画期间保持可见；按钮悬浮在内容上方，不绘制独立遮罩条。
-- 弹窗返回使用圆形图标按钮，按钮圆角与弹窗顶角保持同一连续圆角几何。
-- 页面先展示本地缓存，再进行后台更新；普通页面切换不显示全屏加载图标。
-- 图标、选择器、筛选器和状态反馈使用原生语义和可访问描述，避免无意义的自动生成说明文字。
+反馈问题或分享日志、截图前，请检查是否包含邮箱、账户头像地址、Cookie、令牌或个人资料。
 
-## 数据来源与隐私
+## 下载与安装
 
-应用只在用户主动登录后访问 RSI、Spectrum 和相关公开资料服务。账号令牌、密码、Cookie 和缓存写入 Android 应用私有存储，不写入仓库、不打包进 APK 资源，也不会在日志中输出。仓库中的测试邮箱、测试密码和示例令牌均为合成夹具，不能用于登录。
+从 [Releases](https://github.com/Raveniume/Refuge-Pro/releases/latest) 下载最新 APK，安装后使用 RSI 账户登录。后续安装较新版本时可直接覆盖安装，以保留登录状态和应用内缓存。
 
-本仓库包含用于离线首屏和视觉回归的公开舰船资料、翻译数据与示例图片。真实账户数据只在运行时从 RSI 获取，并按账户隔离缓存。提交问题或日志时，请先删除个人邮箱、头像地址、Cookie、令牌和账户截图。
+## 参考资料
 
-## 构建与安装
+- [RefugeNext](https://github.com/summerkirakira/RefugeNext)：既有页面结构、筛选项与资料组织参考。
+- [Erkul Games Calculator](https://erkul.games/calculator)：舰船配置与性能计算参考。
+- [Star Citizen Tools](https://starcitizen.tools/)：舰船和装备 Wiki 资料参考。
+- [compose-hig](https://github.com/ienground/compose-hig)：Android Compose 组件参考。
+- [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)：Android 液态玻璃效果参考。
 
-环境要求：JDK 17、Android SDK 37，以及可联网的 Gradle 构建环境。
+## 本地构建
 
-```powershell
-.\gradlew.bat testDebugUnitTest assembleDebug
-```
-
-生成文件：`app/build/outputs/apk/debug/app-debug.apk`
-
-覆盖安装并保留应用数据：
+项目使用 Kotlin、Jetpack Compose 和 Gradle，构建需要 JDK 17 与 Android SDK。
 
 ```powershell
-adb install -r app\build\outputs\apk\debug\app-debug.apk
-adb shell am start -n com.refuge.next.compose/com.refuge.next.MainActivity
+.\gradlew.bat assembleDebug
 ```
 
-## 版本与发布
+APK 输出位置：`app/build/outputs/apk/debug/app-debug.apk`
 
-版本号集中在 [`version.properties`](version.properties)：
+---
 
-```properties
-versionCode=3
-versionName=0.2.1
+<div id="refuge-pro-en"></div>
+
+# Refuge Pro (English)
+
+<div align="right"><a href="#refuge-pro">简体中文</a></div>
+
+**An Android companion for Star Citizen accounts, hangars, store listings, ship data, and loadout planning.**
+
+Refuge Pro brings RSI account hangar data, store and upgrade listings, ship references, and a native loadout planner into one Android app. Public reference data remains available offline. Account data is stored locally and refreshed when a connection is available.
+
+## Features
+
+### Account and Hangar
+
+- Browse ships, packages, equipment, buyback entries, and account history.
+- Review ship images, manufacturers, values, paid amounts, insurance, acquisition dates, and item details.
+- Open upgrade options from the hangar; owned CCUs live in a dedicated secondary view.
+- Keep sign-in state and account data in app-private storage across in-place updates.
+
+### Store and Upgrades
+
+- Browse store items, ships, manufacturers, images, prices, and discounts.
+- Show the local catalog first and refresh RSI data in the background, retaining the last usable copy when offline.
+- Count genuinely discounted items in the store badge.
+- Build CCU paths from a starting ship to a target ship.
+
+### Terminal and Wiki
+
+- Search ships, weapons, shields, and other equipment.
+- Read manufacturers, specifications, images, and categorized item details.
+- Filter, sort, and search reference entries.
+
+### Ship Loadout Planner
+
+- Select a ship and replace components in its available hardpoints.
+- Switch between LIVE and PTU data, adjust power distribution, and toggle component operation.
+- Review weapon DPS, shields, power, cooling, and performance summaries.
+- Save and restore loadout plans.
+- Open quickly from local data while available online data refreshes in the background.
+
+### Personalization
+
+- Light and dark appearance.
+- Avatar presence menu with an immediate visual indicator.
+- Account avatars are loaded from account data; a generic placeholder is used when unavailable.
+
+## Privacy
+
+Passwords, RSI session data, and runtime account caches stay in Android app-private storage and are not part of the public ship-reference assets. Runtime login data is not written into project files. Test account and credential strings in this repository are synthetic values used only by automated tests.
+
+Before sharing logs or screenshots, check for email addresses, avatar URLs, cookies, tokens, or profile details.
+
+## Download
+
+Download the latest APK from [GitHub Releases](https://github.com/Raveniume/Refuge-Pro/releases/latest), install it, and sign in with your RSI account. Newer versions can be installed over the existing app to retain sign-in state and local data.
+
+## References
+
+- [RefugeNext](https://github.com/summerkirakira/RefugeNext): existing page structure, filters, and data organization.
+- [Erkul Games Calculator](https://erkul.games/calculator): ship loadout and performance calculations.
+- [Star Citizen Tools](https://starcitizen.tools/): ship and equipment reference articles.
+- [compose-hig](https://github.com/ienground/compose-hig): Android Compose components.
+- [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass): Android Liquid Glass effects.
+
+## Build from source
+
+The project uses Kotlin, Jetpack Compose, and Gradle. A JDK 17 installation and Android SDK are required.
+
+```powershell
+.\gradlew.bat assembleDebug
 ```
 
-每次可交付更新都必须递增版本号，并在 [`CHANGELOG.md`](CHANGELOG.md) 添加同版本条目。发布前运行单元测试、APK 构建、`git diff --check` 和模拟器视觉回归；发布流程详见 [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md)。
-
-GitHub 仓库：[Raveniume/Refuge-Pro](https://github.com/Raveniume/Refuge-Pro)
-
-## 参考项目
-
-- [RefugeNext](https://github.com/summerkirakira/RefugeNext)：信息结构、旧版筛选项和资料展示参考。
-- [Erkul Games Calculator](https://erkul.games/calculator)：舰船改装和性能计算参考。
-- [compose-hig](https://github.com/ienground/compose-hig)：Compose HIG 组件和 BottomSheet 动画参考。
-- [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)：液态玻璃材质、控件反馈和光学层参考。
-- [Star Citizen Tools](https://starcitizen.tools/)：终端 Wiki 条目和公开规格参考。
-
+APK output: `app/build/outputs/apk/debug/app-debug.apk`

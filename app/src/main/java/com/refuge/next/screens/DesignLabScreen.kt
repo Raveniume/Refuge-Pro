@@ -207,7 +207,7 @@ private fun LabHeader(backdrop: LayerBackdrop, palette: RefugePalette, isDark: B
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(42.dp).clip(CircleShape).background(palette.contentSurfaceStrong), contentAlignment = Alignment.Center) {
             Image(
-                painter = painterResource(R.drawable.user_profile_pic),
+                painter = painterResource(R.drawable.refuge_avatar_placeholder),
                 contentDescription = "用户头像",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(42.dp).scale(2.14f).clip(CircleShape),

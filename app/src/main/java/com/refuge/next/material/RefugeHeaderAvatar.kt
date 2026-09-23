@@ -71,15 +71,15 @@ fun RefugeHeaderAvatar(
             if (!avatarUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = avatarUrl,
-                    placeholder = painterResource(R.drawable.user_profile_pic),
-                    error = painterResource(R.drawable.user_profile_pic),
+                    placeholder = painterResource(R.drawable.refuge_avatar_placeholder),
+                    error = painterResource(R.drawable.refuge_avatar_placeholder),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize().clip(CircleShape),
                 )
             } else {
                 Image(
-                    painter = painterResource(R.drawable.user_profile_pic),
+                    painter = painterResource(R.drawable.refuge_avatar_placeholder),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize().clip(CircleShape),

@@ -897,7 +897,7 @@ private fun ProfileHero(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (profile.avatarUrl.isNullOrBlank()) Image(
-                painter = painterResource(R.drawable.user_profile_pic),
+                painter = painterResource(R.drawable.refuge_avatar_placeholder),
                 contentDescription = "用户头像",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -905,8 +905,8 @@ private fun ProfileHero(
                     .clip(CircleShape),
             ) else AsyncImage(
                 model = profile.avatarUrl,
-                placeholder = painterResource(R.drawable.user_profile_pic),
-                error = painterResource(R.drawable.user_profile_pic),
+                placeholder = painterResource(R.drawable.refuge_avatar_placeholder),
+                error = painterResource(R.drawable.refuge_avatar_placeholder),
                 contentDescription = "用户头像",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(64.dp).clip(CircleShape),
