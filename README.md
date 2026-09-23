@@ -14,7 +14,7 @@
 
 </div>
 
-Refuge Pro 将 RSI 账户机库、商店和升级目录、舰船资料以及原生改船计算器放在一个 Android 应用中。界面提供中文体验，常用公开目录可离线浏览；登录后的账户内容会按账户保存在本机，并在网络可用时更新。
+Refuge Pro 是一款基于 Kotlin 与 Jetpack Compose 开发的《Star Citizen》第三方 Android 客户端，支持 Android 10 及以上平台，帮助玩家在移动端管理 RSI 账号、查看机库、浏览商店和使用舰船工具。界面提供中文体验，常用公开目录可离线浏览；登录后的账户内容会按账户保存在本机，并在网络可用时更新。
 
 ## 功能一览
 
@@ -88,7 +88,7 @@ APK 输出位置：`app/build/outputs/apk/debug/app-debug.apk`
 
 <div align="right"><a href="#refuge-pro">简体中文</a></div>
 
-**An Android companion for Star Citizen accounts, hangars, store listings, ship data, and loadout planning.**
+Refuge Pro is a third-party Android client for *Star Citizen*, built with Kotlin and Jetpack Compose for Android 10 and later. It helps players manage an RSI account, review a hangar, browse the store, and use ship tools from a mobile device.
 
 Refuge Pro brings RSI account hangar data, store and upgrade listings, ship references, and a native loadout planner into one Android app. Public reference data remains available offline. Account data is stored locally and refreshed when a connection is available.
 

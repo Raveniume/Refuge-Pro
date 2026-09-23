@@ -65,20 +65,22 @@ object RefugeColors {
         backgroundEdge = Color(0xFFE5E5EA),
         backgroundLight = Color(0xFFFFFFFF),
         contentSurface = Color.White,
-        contentSurfaceStrong = Color(0xFFFAFAFC),
-        glass = Color.White.copy(alpha = .42f),
-        glassStrong = Color.White.copy(alpha = .58f),
+        // Slightly tinted elevated surfaces stay distinct from the grouped
+        // canvas while preserving a neutral iOS light appearance.
+        contentSurfaceStrong = Color(0xFFFBFBFD),
+        glass = Color.White.copy(alpha = .54f),
+        glassStrong = Color.White.copy(alpha = .70f),
         glassSelection = Color.Black.copy(alpha = .075f),
         text = Color(0xFF1C1C1E),
-        textSecondary = Color(0xFF4B4B50),
-        textMuted = Color(0xFF5F6066),
+        textSecondary = Color(0xFF3C3C43),
+        textMuted = Color(0xFF636366),
         accent = Color(0xFF007AFF),
         accentSoft = Color(0xFF007AFF).copy(alpha = .10f),
         positive = Color(0xFF087B51),
         warning = Color(0xFF9A6700),
         error = Color(0xFFFF3B30),
-        divider = Color(0xFF3C3C43).copy(alpha = .18f),
-        outline = Color(0xFF3C3C43).copy(alpha = .18f),
+        divider = Color(0xFF3C3C43).copy(alpha = .30f),
+        outline = Color(0xFF3C3C43).copy(alpha = .30f),
         scrim = Color.Black.copy(alpha = .34f),
     )
 }
@@ -92,6 +94,7 @@ object RefugeSpacing {
     val xl = 24.dp
     val section = 32.dp
     val page = 24.dp
+    val rootNavigation = 208.dp
 }
 
 object RefugeRadius {
@@ -186,8 +189,8 @@ object RefugeTypography {
     fun caption(palette: RefugePalette) = TextStyle(
         color = palette.textMuted,
         fontFamily = pingFang,
-        fontSize = 11.sp,
-        lineHeight = 15.sp,
+        fontSize = 12.sp,
+        lineHeight = 17.sp,
         fontWeight = FontWeight.SemiBold,
     )
 

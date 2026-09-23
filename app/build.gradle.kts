@@ -27,6 +27,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // Keep the standard per-user debug keystore explicit so every desktop APK

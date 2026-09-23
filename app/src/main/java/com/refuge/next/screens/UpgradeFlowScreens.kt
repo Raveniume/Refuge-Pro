@@ -179,6 +179,16 @@ fun StoreUpgradePurchaseScreen(
     var notice by remember { mutableStateOf<String?>(null) }
     val guard = remember { SafeMutationGuard() }
 
+    fun previousStage() {
+        query = ""
+        when (stage) {
+            UpgradeStage.TARGET -> onNavigate(rootTab)
+            UpgradeStage.SKU -> { stage = UpgradeStage.TARGET; sku = null; source = null }
+            UpgradeStage.SOURCE -> { stage = UpgradeStage.SKU; source = null }
+            UpgradeStage.REVIEW -> { stage = UpgradeStage.SOURCE; source = null }
+        }
+    }
+
     com.refuge.next.material.RefreshWhileVisible(purchaseRepository to catalogAttempt) {
         val cached = withContext(Dispatchers.IO) {
             purchaseRepository.awaitCachedCatalog()?.let { parseUpgradeCatalog(it, translationRepository) }.orEmpty()
@@ -215,7 +225,7 @@ fun StoreUpgradePurchaseScreen(
             }
         }
     }
-    LaunchedEffect(sku?.id, purchaseRepository, sourceAttempt) {
+    LaunchedEffect(sku?.id, target?.id, purchaseRepository, sourceAttempt) {
         source = null
         sourceError = null
         val selectedSku = sku ?: run {
@@ -223,11 +233,18 @@ fun StoreUpgradePurchaseScreen(
             sourceLoading = false
             return@LaunchedEffect
         }
+        val selectedTarget = target ?: run {
+            sourceIds = emptySet()
+            sourceLoading = false
+            return@LaunchedEffect
+        }
         // Publish the previous source snapshot synchronously, then replace it
         // with RSI's refreshed result. The selector never opens as a blank page.
-        sourceIds = purchaseRepository.cachedSourceIds(selectedSku.id)
+        // The endpoint expects the destination ship id. Passing the edition
+        // SKU id returned an empty source list and broke the third step.
+        sourceIds = purchaseRepository.cachedSourceIds(selectedTarget.id)
         sourceLoading = sourceIds.isEmpty()
-        runCatching { purchaseRepository.sourceIds(selectedSku.id) }
+        runCatching { purchaseRepository.sourceIds(selectedTarget.id) }
             .onSuccess { refreshed -> sourceIds = refreshed }
             .onFailure { failure ->
                 sourceError = failure.message ?: "可升级来源读取失败"
@@ -267,10 +284,18 @@ fun StoreUpgradePurchaseScreen(
             }
             .toList()
     }
-    val sourceChoices = remember(catalog, sourceIds, target?.id, query) {
-        catalog
+    val sourceChoices = remember(catalog, sourceIds, target?.id, query, sourceError) {
+        val sourceUniverse = if (sourceIds.isNotEmpty()) {
+            catalog.asSequence().filter { it.id in sourceIds }
+        } else if (sourceError != null) {
+            // Keep the cached catalogue useful while RSI is unavailable.
+            catalog.asSequence()
+        } else {
+            emptySequence()
+        }
+        sourceUniverse
             .asSequence()
-            .filter { it.id in sourceIds && it.id != target?.id && it.msrp < (target?.msrp ?: Int.MAX_VALUE) }
+            .filter { it.id != target?.id && it.msrp < (target?.msrp ?: Int.MAX_VALUE) }
             .filter { option ->
                 query.isBlank() || option.name.contains(query.trim(), true) || option.originalName.contains(query.trim(), true) ||
                     option.focus.contains(query, true) || option.manufacturer.contains(query, true)
@@ -290,11 +315,14 @@ fun StoreUpgradePurchaseScreen(
                 palette = palette,
                 icon = RefugeIcons.back,
                 contentDescription = "返回商店",
-                onClick = { onNavigate(rootTab) },
+                onClick = { previousStage() },
             )
         },
         sheetHeight = 780.dp,
-        actionOverContent = false,
+        // The primary control floats over the sheet content. Reserving a
+        // second opaque rail below it produced the disappearing-background
+        // transition and the extra mask visible in the selector reference.
+        actionOverContent = true,
         actionBottomPadding = 12.dp,
         transparentActionArea = false,
         contentScrollable = false,
@@ -346,12 +374,6 @@ fun StoreUpgradePurchaseScreen(
                 // A stale catalog remains usable while the refresh retries in
                 // the background. Keep that state quiet so the selector never
                 // turns a transient network condition into a cache message.
-                if (stage != UpgradeStage.TARGET) item {
-                    androidx.compose.material.TextButton(onClick = {
-                        stage = if (stage == UpgradeStage.SOURCE) UpgradeStage.SKU else UpgradeStage.TARGET
-                        query = ""
-                    }) { Text("返回上一步", color = palette.accent) }
-                }
                 when (stage) {
                     UpgradeStage.TARGET -> {
                         item { FlowTitle(palette, "1", "选择目标舰船") }
@@ -840,7 +862,7 @@ private fun parseUpgradeCatalog(root: JSONObject, translation: com.refuge.next.d
         for (index in 0 until ships.length()) {
             val ship = ships.optJSONObject(index) ?: continue
             val id = ship.optInt("id", 0)
-            val name = ship.optString("name")
+            val name = cleanUpgradeText(ship.optString("name"))
             if (id <= 0 || name.isBlank()) continue
             val skuArray = ship.optJSONArray("skus")
             val skus = buildList {
@@ -848,9 +870,9 @@ private fun parseUpgradeCatalog(root: JSONObject, translation: com.refuge.next.d
                     val sku = skuArray.optJSONObject(skuIndex) ?: continue
                     add(UpgradeSku(
                         id = sku.optInt("id", 0),
-                        title = sku.optString("title").ifBlank { name },
+                        title = cleanUpgradeText(sku.optString("title")).ifBlank { name },
                         price = sku.optInt("price", 0),
-                        body = sku.optString("body").trim(),
+                        body = cleanUpgradeText(sku.optString("body")),
                         available = sku.optBoolean("available", false) &&
                             (!sku.has("availableStock") || sku.optBoolean("unlimitedStock", false) || sku.optInt("availableStock", 0) > 0),
                         originalTitle = sku.optString("title"),
@@ -863,8 +885,8 @@ private fun parseUpgradeCatalog(root: JSONObject, translation: com.refuge.next.d
                     name = name,
                     originalName = name,
                     msrp = ship.optInt("msrp", 0),
-                    focus = ship.optString("focus").trim(),
-                    manufacturer = ship.optJSONObject("manufacturer")?.optString("name").orEmpty().trim(),
+                    focus = cleanUpgradeText(ship.optString("focus")),
+                    manufacturer = cleanUpgradeText(ship.optJSONObject("manufacturer")?.optString("name").orEmpty()),
                     imageUrl = normalizeUpgradeImageUrl(
                         ship.optJSONObject("medias")?.optString("productThumbMediumAndSmall")
                             ?.takeIf(String::isNotBlank)
@@ -898,3 +920,7 @@ private fun dollars(cents: Int): String = if (cents % 100 == 0) {
 } else {
     String.format(Locale.US, "\$%.2f", cents / 100.0)
 }
+
+private fun cleanUpgradeText(value: String): String = value.trim()
+    .takeUnless { it.isBlank() || it.equals("null", true) || it == "—" }
+    .orEmpty()

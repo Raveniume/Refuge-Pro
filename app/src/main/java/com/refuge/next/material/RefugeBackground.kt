@@ -25,10 +25,10 @@ fun RefugeScene(
 ) {
     Box(modifier.fillMaxSize()) {
         val backdrop = rememberLayerBackdrop()
-        val canvasColor = if (palette.background.luminance() < .5f) Color.Black else Color.White
-        // The product canvas is intentionally pure white/black. Liquid Glass
-        // controls still sample page content, but the wallpaper must never
-        // leak through the main background.
+        val canvasColor = if (palette.background.luminance() < .5f) Color.Black else palette.background
+        // Light mode uses the system grouped background so white content groups
+        // remain legible. Dark mode keeps the true black canvas requested by the
+        // product while elevated surfaces supply the hierarchy.
         Box(
             Modifier
                 .matchParentSize()
@@ -37,14 +37,13 @@ fun RefugeScene(
         ) {
         }
         CompositionLocalProvider(
-            // On a pure white canvas a white fill has no visible material
-            // boundary. A restrained semantic tint keeps the light theme
-            // white while making the live refraction, edge and shadow read as
-            // Liquid Glass. Dark mode uses the matching white lift.
+            // Functional glass needs a readable surface even when the page has
+            // no artwork behind it. The blur and lens still sample the page;
+            // this semantic fill supplies the accessible light-mode boundary.
             LocalGlassControlSurface provides if (palette.background.luminance() < .5f) {
                 Color.White.copy(alpha = .12f)
             } else {
-                Color.Black.copy(alpha = .045f)
+                Color.White.copy(alpha = .66f)
             },
         ) {
             CupertinoTheme(colorScheme = if (palette.background.luminance() < .5f)

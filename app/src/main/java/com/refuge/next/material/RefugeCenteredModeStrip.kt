@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import com.refuge.next.design.*
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -66,6 +67,7 @@ fun RefugeCenteredModeStrip(backdrop: Backdrop, palette: RefugePalette, labels: 
         modifier
             .fillMaxWidth()
             .height(44.dp)
+            .testTag("refuge-liquid-mode-selector")
             // Observe the pointer at the outer track so a drag intercepted by
             // LazyRow still expands the navbar immediately. The detector does
             // not consume the event; LazyRow keeps its normal scroll behavior.
@@ -85,10 +87,10 @@ fun RefugeCenteredModeStrip(backdrop: Backdrop, palette: RefugePalette, labels: 
     ) {
         BoxWithConstraints(Modifier.fillMaxWidth(widthFraction).height(44.dp), contentAlignment = Alignment.Center) {
           val sidePadding = ((maxWidth - cell) / 2).coerceAtLeast(0.dp)
-          RefugeLiquidGlass(backdrop, palette, Modifier.fillMaxSize(), radius = 22.dp,
+            RefugeLiquidGlass(backdrop, palette, Modifier.fillMaxSize().testTag("mode-track"), radius = 22.dp,
               surface = palette.contentSurfaceStrong, surfaceAlpha = .20f,
               interactionProgress = if (expanded) 1f else 0f) {
-            RefugeLiquidGlass(backdrop, palette, Modifier.width(cell).height(36.dp).align(Alignment.Center), radius = 18.dp,
+            RefugeLiquidGlass(backdrop, palette, Modifier.width(cell).height(36.dp).align(Alignment.Center).testTag("mode-lens"), radius = 18.dp,
                 surface = palette.glassStrong, surfaceAlpha = .20f,
                 interactionProgress = if (expanded) 1f else 0f) {}
             LazyRow(state = state, flingBehavior = rememberSnapFlingBehavior(state),

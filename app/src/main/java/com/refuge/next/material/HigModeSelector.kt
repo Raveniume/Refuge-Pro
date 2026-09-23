@@ -1,6 +1,7 @@
 package com.refuge.next.material
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,7 +45,7 @@ fun RefugeLiquidModeSelector(
             selectedIndex = selectedIndex,
             onSelected = onSelected,
             icons = icons,
-            modifier = modifier.testTag("mode-track"),
+            modifier = modifier.testTag("refuge-liquid-mode-selector").testTag("mode-track"),
         )
         return
     }
@@ -60,7 +61,7 @@ fun RefugeLiquidModeSelector(
         onSelected = onSelected,
         icons = icons,
         restingFraction = if (icons.any { it != null }) 1f else .70f,
-        modifier = modifier.testTag("mode-track"),
+        modifier = modifier.testTag("refuge-liquid-mode-selector").testTag("mode-track"),
     )
 }
 
@@ -112,6 +113,11 @@ private fun RefugeTwoOptionSelector(
                     contentAlignment = Alignment.Center,
                 ) {
                     if (selected == index) {
+                        val selectedAlpha by androidx.compose.animation.core.animateFloatAsState(
+                            targetValue = .16f,
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            label = "two-option-selection-alpha-$index",
+                        )
                         // Keep the selected half inside the parent optical
                         // surface. Sampling the same backdrop again here
                         // creates a nested RenderNode feedback tree; on the
@@ -122,10 +128,11 @@ private fun RefugeTwoOptionSelector(
                         Box(
                             Modifier
                                 .matchParentSize()
+                                .testTag("mode-lens")
                                 .clip(shape)
                                 .background(
                                     palette.accent.copy(
-                                        alpha = if (palette.background.luminance() < .5f) .18f else .09f,
+                                        alpha = selectedAlpha * if (palette.background.luminance() < .5f) 1f else .62f,
                                     ),
                                 )
                                 .border(

@@ -431,7 +431,7 @@ fun RefugeHeaderActionBar(
             .width(capsuleWidth)
             // The 42dp capsule sits between the 48dp avatar and the title's
             // line box while sharing the header's vertical center.
-            .height(42.dp),
+            .height(44.dp),
     ) {
         OfficialLiquidButtonPort(
             onClick = {}, backdrop = backdrop, modifier = Modifier.fillMaxSize(),
@@ -439,13 +439,13 @@ fun RefugeHeaderActionBar(
             // Let the backdrop effect provide the material. An opaque theme
             // fill makes the connected header bar read as a flat black pill.
             surfaceColor = Color.Unspecified,
-            visualHeight = 42.dp, contentPadding = 0.dp,
+            visualHeight = 44.dp, contentPadding = 0.dp,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             actions.forEachIndexed { index, action ->
                 Box(
                     Modifier
-                        .width(widths[index]).height(42.dp)
+                        .width(widths[index]).height(44.dp)
                         .semantics { contentDescription = action.label; role = Role.Button }
                         .clickable(enabled = action.enabled, interactionSource = interactionSources[index], indication = null, onClick = action.onClick),
                     contentAlignment = Alignment.Center,
@@ -493,11 +493,13 @@ fun RefugeCompactLiquidPill(
         backdrop = backdrop,
         modifier = modifier.semantics { role = Role.Button; contentDescription = label },
         tint = Color.Unspecified,
-        visualHeight = 34.dp,
-        contentPadding = 9.dp,
+        // Compact means visually light, not undersized. Keep the same 44dp
+        // touch/readability baseline as the other text actions.
+        visualHeight = 48.dp,
+        contentPadding = 12.dp,
     ) {
-        Icon(icon, null, tint = palette.textSecondary, modifier = Modifier.size(15.dp))
-        Text(label, style = com.refuge.next.design.RefugeTypography.secondary(palette).copy(color = palette.textSecondary))
+        Icon(icon, null, tint = palette.textSecondary, modifier = Modifier.size(17.dp))
+        Text(label, style = com.refuge.next.design.RefugeTypography.body(palette).copy(color = palette.textSecondary), maxLines = 1)
     }
 }
 
@@ -546,6 +548,7 @@ fun RefugeGlassListGroup(
         modifier = modifier
             .clip(shape)
             .background(palette.contentSurface)
+            .border(.5.dp, palette.outline.copy(alpha = if (palette.background.luminance() < .5f) .34f else .82f), shape)
             .padding(padding),
         contentAlignment = Alignment.Center,
     ) {
@@ -602,7 +605,7 @@ fun RefugeGlassListRow(
                     .fillMaxWidth()
                     .padding(start = dividerInset)
                     .height(1.dp)
-                    .background(palette.text.copy(alpha = .06f)),
+                    .background(palette.text.copy(alpha = if (palette.background.luminance() < .5f) .06f else .12f)),
             )
         }
     }

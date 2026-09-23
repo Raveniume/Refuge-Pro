@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -27,6 +25,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material.Text
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -42,8 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -51,21 +50,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.data.RsiAuthDataSource
 import com.refuge.next.data.RsiLoginStep
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
-import com.refuge.next.design.refugeContinuousShape
 import com.refuge.next.material.RefugeLiquidGlass
 import com.refuge.next.material.RefugeLiquidGlassField
 import com.refuge.next.material.RefugeLiquidGlassButton
-import com.refuge.next.material.LocalOpticalGlassEnabled
 import com.refuge.next.material.ModalGlassScope
 import com.refuge.next.material.RefugeGlassControl
+import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeIcons
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -74,12 +71,14 @@ import kotlinx.coroutines.delay
 fun RsiLoginScreen(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
-    auth: RsiAuthDataSource,
+    auth: com.refuge.next.data.RsiAuthRepository,
+    loginEmailDraft: String = "",
+    onLoginEmailChanged: (String) -> Unit = {},
     allowClose: Boolean = true,
     onAuthenticated: () -> Unit,
     onClose: () -> Unit,
 ) {
-    var email by remember { mutableStateOf(auth.session()?.email ?: auth.loginEmailDraft()) }
+    var email by remember { mutableStateOf(auth.session()?.email ?: loginEmailDraft) }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var captcha by remember { mutableStateOf("") }
@@ -111,10 +110,6 @@ fun RsiLoginScreen(
     // centered card can remain behind the password keyboard, leaving its
     // action visually present in stale coordinates but outside the touchable
     // viewport.
-    // The login form is input-critical. Avoid compiling a full backdrop lens
-    // during IME resize and key dispatch; production pages still use the full
-    // liquid material after authentication.
-    CompositionLocalProvider(LocalOpticalGlassEnabled provides false) {
     Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
         RefugeLiquidGlass(
             backdrop = backdrop,
@@ -125,57 +120,32 @@ fun RsiLoginScreen(
                 .wrapContentHeight()
                 .heightIn(max = 560.dp)
                 .padding(horizontal = RefugeSpacing.page),
-            radius = 24.dp,
+            radius = 28.dp,
             padding = PaddingValues(22.dp),
-            surface = palette.contentSurfaceStrong,
-            surfaceAlpha = .46f,
-            blurRadius = 8.dp,
-            edgeAlpha = .22f,
-            edgeColor = palette.accent,
+            surface = if (palette.background.luminance() < .5f) {
+                palette.contentSurfaceStrong
+            } else {
+                Color.White
+            },
+            surfaceAlpha = if (palette.background.luminance() < .5f) .58f else .82f,
+            blurRadius = 12.dp,
+            edgeAlpha = .04f,
+            edgeColor = palette.outline,
+            highlightAlpha = .08f,
         ) {
-        Column(
+            Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(46.dp)
-                        .background(
-                            Brush.radialGradient(
-                                listOf(palette.accent.copy(alpha = .42f), palette.accent.copy(alpha = .10f)),
-                            ),
-                            CircleShape,
-                        )
-                        .border(1.dp, palette.accent.copy(alpha = .48f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    androidx.compose.material.Icon(
-                        RefugeIcons.rocket,
-                        contentDescription = null,
-                        tint = palette.accent,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("登录 RSI", style = RefugeTypography.largeTitle(palette).copy(color = palette.text))
                 }
             }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(Color.Transparent, palette.accent.copy(alpha = .42f), Color.Transparent),
-                        ),
-                    ),
-            )
             Spacer(Modifier.height(2.dp))
             RefugeLiquidGlassField(
                 value = email,
-                onValueChange = { email = it; auth.saveLoginEmailDraft(it) },
+                onValueChange = { email = it; onLoginEmailChanged(it) },
                 backdrop = backdrop,
                 palette = palette,
                 label = "RSI 邮箱",
@@ -213,9 +183,14 @@ fun RsiLoginScreen(
                                 if (captchaImage != null) showCaptchaDialog = true
                             }
                         },
-                        radius = 16.dp,
-                        padding = PaddingValues(horizontal = 14.dp, vertical = 9.dp),
-                    ) { Text("重新打开", color = palette.text) }
+                        modifier = Modifier.width(128.dp).height(48.dp),
+                        radius = 24.dp,
+                        padding = PaddingValues(0.dp),
+                        edgeAlpha = .10f,
+                        highlightAlpha = .10f,
+                    ) {
+                        Text("重新打开", color = palette.text, style = RefugeTypography.body(palette))
+                    }
                 }
             }
             if (needCode) RefugeLiquidGlassField(
@@ -234,14 +209,30 @@ fun RsiLoginScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (allowClose) {
-                    RefugeGlassControl(backdrop, palette, onClick = { if (!loading) onClose() }, modifier = Modifier.alpha(if (loading) .5f else 1f)) { Text("返回", color = palette.text) }
+                    RefugeLiquidGlassButton(
+                        backdrop = backdrop,
+                        palette = palette,
+                        onClick = { if (!loading) onClose() },
+                        modifier = Modifier
+                            .width(128.dp)
+                            .height(48.dp)
+                            .alpha(if (loading) .5f else 1f),
+                        padding = PaddingValues(0.dp),
+                        edgeAlpha = .10f,
+                        highlightAlpha = .10f,
+                    ) {
+                        Text("返回", color = palette.text, style = RefugeTypography.body(palette))
+                    }
                     Spacer(Modifier.width(RefugeSpacing.sm))
                 }
                 RefugeLiquidGlassButton(
                     backdrop = backdrop,
                     palette = palette,
-                    surface = if (formReady && !loading) palette.accent else palette.contentSurface,
-                    surfaceAlpha = if (formReady && !loading) .72f else .32f,
+                    radius = 24.dp,
+                    surface = if (formReady && !loading) palette.accent else palette.contentSurfaceStrong,
+                    surfaceAlpha = if (formReady && !loading) .92f else .84f,
+                    edgeAlpha = if (formReady && !loading) .16f else .24f,
+                    highlightAlpha = .10f,
                     onClick = {
                         if (!loading && formReady) {
                         loading = true
@@ -256,7 +247,7 @@ fun RsiLoginScreen(
                                 message = if (captchaImage == null) "验证码加载失败，请重试" else null
                             } else if (result.step == RsiLoginStep.NEED_CODE) {
                                 message = "验证码已发送到你的 RSI 邮箱，请输入后登录"
-                            } else if (result.message.contains("4233")) {
+                            } else if (result.retryCaptcha || result.message.contains("4233")) {
                                 captcha = ""
                                 needCaptcha = true
                                 captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
@@ -270,9 +261,9 @@ fun RsiLoginScreen(
                         }
                         }
                     },
-                    modifier = Modifier
-                        .widthIn(min = 124.dp)
-                        .height(48.dp)
+                        modifier = Modifier
+                            .width(128.dp)
+                            .height(48.dp)
                         .semantics {
                             role = androidx.compose.ui.semantics.Role.Button
                             contentDescription = "登录"
@@ -290,7 +281,7 @@ fun RsiLoginScreen(
                     }
                     else Text(
                         if (needCode) "验证并登录" else if (needCaptcha) "提交验证码" else "登录",
-                        color = if (formReady) Color.White else palette.textMuted,
+                        color = if (formReady && !loading) Color.White else palette.text,
                         style = RefugeTypography.body(palette),
                     )
                 }
@@ -298,33 +289,41 @@ fun RsiLoginScreen(
             }
         }
         if (showCaptchaDialog && captchaImage != null) {
-            Dialog(
-                onDismissRequest = { showCaptchaDialog = false },
-                properties = DialogProperties(
-                    usePlatformDefaultWidth = false,
-                    decorFitsSystemWindows = false,
-                ),
+            BackHandler { showCaptchaDialog = false }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(palette.scrim)
+                    .zIndex(2f),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    Modifier.fillMaxSize().background(palette.scrim),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ModalGlassScope(
-                        modifier = Modifier.fillMaxWidth(.88f).padding(20.dp),
-                        base = {
-                            Box(
-                                Modifier
-                                    .matchParentSize()
-                                    .background(palette.contentSurfaceStrong, refugeContinuousShape(28.dp)),
-                            )
-                        },
-                        content = { modalBackdrop ->
+                ModalGlassScope(
+                    modifier = Modifier
+                        .fillMaxWidth(.94f)
+                        .widthIn(max = 520.dp)
+                        .padding(14.dp),
+                    underlay = backdrop,
+                    base = {
+                        RefugeModalSurface(
+                            palette = palette,
+                            modifier = Modifier.matchParentSize(),
+                            radius = 28.dp,
+                            fill = if (palette.background.luminance() < .5f) {
+                                palette.contentSurfaceStrong
+                            } else {
+                                Color.White
+                            },
+                        ) {}
+                    },
+                    content = { modalBackdrop ->
                             Column(
-                                Modifier.padding(24.dp),
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
                                 verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
                             ) {
                                 Text("输入图形验证码", style = RefugeTypography.title(palette).copy(color = palette.text))
-                                Text("请按图片内容输入，验证码不会保存。", style = RefugeTypography.caption(palette).copy(color = palette.textSecondary))
+                                Text("请按图片内容输入，验证码不会保存。", style = RefugeTypography.body(palette).copy(color = palette.textSecondary))
                                 Image(
                                     bitmap = captchaImage!!.asImageBitmap(),
                                     contentDescription = "RSI 图形验证码",
@@ -335,36 +334,53 @@ fun RsiLoginScreen(
                                 )
                                 RefugeLiquidGlassField(
                                     value = captcha,
-                                    onValueChange = { captcha = it },
+                                    onValueChange = { captcha = it.filterNot(Char::isWhitespace) },
                                     backdrop = modalBackdrop,
                                     palette = palette,
                                     label = "图形验证码",
                                     placeholder = "输入图片中的字符",
-                                    modifier = Modifier.fillMaxWidth().focusRequester(captchaFocusRequester),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(captchaFocusRequester),
                                 )
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    RefugeGlassControl(
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RefugeLiquidGlassButton(
                                         backdrop = modalBackdrop,
                                         palette = palette,
+                                        modifier = Modifier.width(92.dp).height(48.dp),
+                                        padding = PaddingValues(0.dp),
+                                        edgeAlpha = .10f,
+                                        highlightAlpha = .10f,
+                                        refractionHeight = 0.dp,
+                                        refractionAmount = 0.dp,
+                                        blurRadius = 2.dp,
                                         onClick = {
                                             scope.launch {
                                                 captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
                                             }
                                         },
                                     ) { Text("刷新", color = palette.text) }
-                                    Spacer(Modifier.width(RefugeSpacing.sm))
-                                    RefugeGlassControl(
+                                    RefugeLiquidGlassButton(
                                         backdrop = modalBackdrop,
                                         palette = palette,
+                                        modifier = Modifier.width(92.dp).height(48.dp),
+                                        padding = PaddingValues(0.dp),
+                                        edgeAlpha = .10f,
+                                        highlightAlpha = .10f,
+                                        refractionHeight = 0.dp,
+                                        refractionAmount = 0.dp,
+                                        blurRadius = 2.dp,
                                         onClick = { showCaptchaDialog = false },
                                     ) { Text("完成", color = palette.text) }
                                 }
                             }
-                        },
-                    )
-                }
+                    },
+                )
             }
         }
-    }
     }
 }

@@ -29,6 +29,7 @@ data class RsiLoginResult(
     val step: RsiLoginStep,
     val message: String,
     val session: RsiSession? = null,
+    val retryCaptcha: Boolean = false,
 ) {
     val success: Boolean get() = step == RsiLoginStep.AUTHENTICATED
 }
@@ -48,6 +49,8 @@ interface RsiAuthRepository {
  */
 class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     private val prefs = context.getSharedPreferences("refuge_rsi_session", Context.MODE_PRIVATE)
+    /** Login challenges are process-local because RSI binds them to its cookie jar. */
+    private var allowPersistedSessionCookies = true
 
     fun loginEmailDraft(): String = prefs.getString(KEY_LOGIN_EMAIL_DRAFT, "").orEmpty()
 
@@ -60,29 +63,27 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
      * request. Keep those cookies in the same in-memory client session rather
      * than relying on a new request having no cookie context.
      */
+    private val cookieJar = RsiCookieJar {
+        if (allowPersistedSessionCookies) session() else null
+    }
     private val client = OkHttpClient.Builder()
-        .cookieJar(object : CookieJar {
-            private val jar = linkedMapOf<String, Cookie>()
-
-            @Synchronized
-            override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                cookies.forEach { cookie ->
-                    val key = "${cookie.domain};${cookie.path};${cookie.name}"
-                    if (cookie.expiresAt < System.currentTimeMillis()) jar.remove(key)
-                    else jar[key] = cookie
-                }
-            }
-
-            @Synchronized
-            override fun loadForRequest(url: HttpUrl): List<Cookie> =
-                rsiRequestCookies(url, session(), jar.values.toList())
-        })
+        .cookieJar(cookieJar)
         .build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private var pendingEmail: String = prefs.getString(KEY_PENDING_EMAIL, "") ?: ""
-    private var pendingDevice: String = prefs.getString(KEY_PENDING_DEVICE, "") ?: ""
-    private var pendingToken: String = prefs.getString(KEY_PENDING_TOKEN, "") ?: ""
-    private var pendingAuth: String = prefs.getString(KEY_PENDING_AUTH, "") ?: ""
+    private var pendingDevice: String = ""
+    private var pendingToken: String = ""
+    private var pendingAuth: String = ""
+
+    init {
+        // A challenge token without its in-memory cookies can never be
+        // completed after a process restart. Keep only the draft email.
+        prefs.edit()
+            .remove(KEY_PENDING_DEVICE)
+            .remove(KEY_PENDING_TOKEN)
+            .remove(KEY_PENDING_AUTH)
+            .apply()
+    }
     /**
      * The hangar, local CCU planner and purchase selector all consume the
      * same read-only ship catalogue. Keep one in-flight/result window per
@@ -114,9 +115,17 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
             // half-finished challenge so a restarted app cannot reuse an old
             // token/device pair with a new image.
             if (captcha.isNullOrBlank()) {
+                allowPersistedSessionCookies = false
+                cookieJar.clear()
                 pendingToken = ""
+                // Do not invent a device id here. RSI creates the challenge
+                // and binds it to the current HTTP session; a client-created
+                // id can make a correct captcha fail on the retry.
                 pendingDevice = ""
                 pendingAuth = ""
+                cookieToken = ""
+                cookieDevice = ""
+                cookieAuth = ""
                 savePending()
             }
             // Do not invent a device header for the captcha challenge. RSI
@@ -169,6 +178,12 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
     }
 
     override fun logout() {
+        allowPersistedSessionCookies = true
+        cookieJar.clear()
+        pendingEmail = ""
+        pendingDevice = ""
+        pendingToken = ""
+        pendingAuth = ""
         prefs.edit()
             .remove(KEY_EMAIL)
             .remove(KEY_DEVICE)
@@ -485,13 +500,10 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         if (endpoint.endsWith("signin/multiStep")) {
             if (pendingDevice.isNotBlank()) builder.header("x-rsi-device", pendingDevice)
             if (pendingToken.isNotBlank()) builder.header("x-rsi-token", pendingToken)
-            if (pendingDevice.isNotBlank() || pendingToken.isNotBlank() || pendingAuth.isNotBlank()) {
-                builder.header("Cookie", buildString {
-                    if (pendingDevice.isNotBlank()) append("_rsi_device=").append(pendingDevice).append(';')
-                    if (pendingToken.isNotBlank()) append("Rsi-Token=").append(pendingToken).append(';')
-                    if (pendingAuth.isNotBlank()) append("Rsi-Account-Auth=").append(pendingAuth).append(';')
-                })
-            }
+            // Leave the Cookie header to OkHttp's CookieJar. The challenge
+            // cookie returned by the captcha endpoint must be sent together
+            // with any launcher cookies; replacing it with a hand-built list
+            // was the reason valid answers were rejected.
         }
         client.newCall(builder.build()).execute().use { response ->
             val text = response.body?.string().orEmpty()
@@ -506,7 +518,10 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         val message = json.optString("msg").ifBlank { json.optString("message") }.ifBlank { "RSI 登录未完成" }
         val data = json.optJSONObject("data")
         val responseToken = data?.optString("session_id").orEmpty().ifBlank { cookieToken }
-        val responseDevice = data?.optString("device_id").orEmpty().ifBlank { cookieDevice }
+        val responseDevice = data?.optString("device_id").orEmpty()
+            .ifBlank { cookieDevice }
+            .ifBlank { device }
+            .ifBlank { pendingDevice }
         if (code == "ErrMultiStepRequired" || code == "ErrCaptchaRequiredLauncher") {
             pendingEmail = email
             pendingDevice = responseDevice
@@ -521,7 +536,22 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         }
         if (code == "ErrWrongPassword_email") return RsiLoginResult(RsiLoginStep.FAILED, "邮箱或密码错误")
         if (code == "ErrMaxThrottleLogin") return RsiLoginResult(RsiLoginStep.FAILED, "登录过于频繁，请稍后再试")
-        val success = json.optInt("success", 0) == 1 || code == "ErrNoGamePackage"
+        val retryCaptcha = code.equals("ErrCaptchaInvalid", ignoreCase = true) ||
+            code.equals("ErrCaptchaIncorrect", ignoreCase = true) ||
+            code.equals("ErrCaptchaFailed", ignoreCase = true) ||
+            message.contains("captcha", ignoreCase = true) &&
+                (message.contains("invalid", true) || message.contains("incorrect", true) || message.contains("wrong", true))
+        val success = when (val value = json.opt("success")) {
+            is Number -> value.toInt() == 1
+            is Boolean -> value
+            is String -> value == "1" || value.equals("true", ignoreCase = true)
+            else -> false
+        } || code == "ErrNoGamePackage"
+        if (retryCaptcha) return RsiLoginResult(
+            RsiLoginStep.FAILED,
+            "图形验证码无效，请重新输入",
+            retryCaptcha = true,
+        )
         if (!success || data == null && code != "ErrNoGamePackage") return RsiLoginResult(RsiLoginStep.FAILED, message)
         val token = data?.optString("session_id").orEmpty().ifBlank { cookieToken }
         val actualDevice = data?.optString("device_id").orEmpty()
@@ -535,6 +565,8 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
             .putString(KEY_TOKEN, stored.token)
             .putString(KEY_AUTH, stored.accountAuth)
             .apply()
+        allowPersistedSessionCookies = true
+        cookieJar.clear()
         pendingEmail = ""
         pendingDevice = ""
         pendingToken = ""
@@ -555,9 +587,9 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         val pair = value.substringBefore(';')
         val key = pair.substringBefore('=').trim()
         val token = pair.substringAfter('=', "").trim()
-        when (key) {
-            "Rsi-Token" -> cookieToken = token
-            "Rsi-Account-Auth" -> cookieAuth = token
+        when (key.lowercase()) {
+            "rsi-token" -> cookieToken = token
+            "rsi-account-auth" -> cookieAuth = token
             "_rsi_device" -> cookieDevice = token
         }
     }
@@ -589,6 +621,28 @@ class RsiAuthDataSource(context: Context) : RsiAuthRepository {
         private const val KEY_PENDING_TOKEN = "pending_token"
         private const val KEY_PENDING_AUTH = "pending_auth"
     }
+}
+
+private class RsiCookieJar(
+    private val sessionProvider: () -> RsiSession?,
+) : CookieJar {
+    private val jar = linkedMapOf<String, Cookie>()
+
+    @Synchronized
+    override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+        cookies.forEach { cookie ->
+            val key = "${cookie.domain};${cookie.path};${cookie.name.lowercase()}"
+            if (cookie.expiresAt < System.currentTimeMillis()) jar.remove(key)
+            else jar[key] = cookie
+        }
+    }
+
+    @Synchronized
+    override fun loadForRequest(url: HttpUrl): List<Cookie> =
+        rsiRequestCookies(url, sessionProvider(), jar.values.toList())
+
+    @Synchronized
+    fun clear() = jar.clear()
 }
 
 /** OkHttp replaces an explicit Cookie header when CookieJar returns any cookies.

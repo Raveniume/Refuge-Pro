@@ -240,7 +240,7 @@ class RsiLiveCcuPurchaseRepository(
             val sku = org.json.JSONObject()
                 .put("id", id)
                 .put("title", ship.name)
-                .put("body", "本地目录")
+                .put("body", "")
                 .put("price", ship.purchasePrice)
                 .put("available", true)
                 .put("unlimitedStock", true)

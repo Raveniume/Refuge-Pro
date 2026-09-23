@@ -311,10 +311,10 @@ private fun OfficialLiquidTabsCore(
     val animationScope = rememberCoroutineScope()
     val tabsBackdrop = rememberLayerBackdrop()
     val accentColor = if (isDark) OfficialDarkAccent else OfficialLightAccent
-        val containerColor = if (isDark) {
-        Color(0xFF1C1C1E).copy(alpha = .24f)
+    val containerColor = if (isDark) {
+        Color(0xFF1C1C1E).copy(alpha = .48f)
     } else {
-        Color.White.copy(alpha = .34f)
+        Color.White.copy(alpha = .78f)
     }
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
         val density = LocalDensity.current
@@ -515,13 +515,13 @@ private fun OfficialLiquidTabsCore(
                     onDrawSurface = {
                         val progress = drag.pressProgress
                         drawRect(
-                            if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .045f),
+                            if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .065f),
                             alpha = 1f - progress,
                         )
                         drawRect(Color.Black.copy(alpha = .03f * progress))
                     },
                 ) else Modifier.background(
-                    if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .045f),
+                    if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .065f),
                     Capsule(RoundedCornerStyle.Continuous),
                 ))
                 .height(selectedHeight)

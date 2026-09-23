@@ -75,6 +75,7 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
 import com.refuge.next.R
+import com.refuge.next.BuildConfig
 import com.refuge.next.data.ProductionTerminalRepository
 import com.refuge.next.data.CcuRepository
 import com.refuge.next.data.CcuRoutePlan
@@ -125,10 +126,12 @@ import com.refuge.next.material.RefugeFloatingAction
 import com.refuge.next.material.RefugeHeaderActionBar
 import com.refuge.next.material.RefugeHeaderAvatar
 import com.refuge.next.material.RefugePullToRefresh
+import com.refuge.next.material.refugeTopEdgeFade
 import com.refuge.next.material.RefugeAnimatedSearch
 import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeStandardGlassSurface
 import com.refuge.next.reference.ReferenceLiquidButton
+import com.refuge.next.reference.OfficialLiquidButtonPort
 import com.refuge.next.reference.ReferenceLiquidBottomTabs
 import com.refuge.next.reference.ReferenceLiquidSelectionBar
 import com.refuge.next.reference.ReferenceSearchField
@@ -335,11 +338,12 @@ fun TerminalScreen(
             isRefreshing = isRefreshing,
             onRefresh = { isRefreshing = true; loadAttempt++ },
             indicatorColor = palette.accent,
+            edgeColor = palette.background,
             modifier = Modifier.fillMaxSize(),
         ) {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
+            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.Top,
             state = listState,
         ) {
@@ -453,7 +457,7 @@ fun TerminalScreen(
 
     selectedItem?.let { TerminalDetailSheet(backdrop, palette, it) { selectedItem = null } }
     if (showLoadout) {
-        NativeLoadoutScreen(palette = palette, isDark = isDark, onDismiss = { showLoadout = false })
+        NativeLoadoutScreen(backdrop = backdrop, palette = palette, isDark = isDark, onDismiss = { showLoadout = false })
         /* Legacy terminal loadout remains compiled for migration previews. */
         /*
         TerminalLoadoutSheet(
@@ -794,6 +798,7 @@ fun ProfileScreen(
     initialProfile: ProfileData,
     fleetSummary: String = "舰队资料",
     onToggleOnline: () -> Unit,
+    onOverlayVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     var profileData by remember(profileRepository) { mutableStateOf(initialProfile) }
     var profileToolGroups by remember { mutableStateOf(emptyList<Pair<String, List<ToolItem>>>()) }
@@ -824,6 +829,9 @@ fun ProfileScreen(
     val profile = profileData.copy(isOnline = isOnline)
     var selectedTool by remember { mutableStateOf<ToolItem?>(null) }
     var selectedToolDetail by remember { mutableStateOf<ToolDetail?>(null) }
+    LaunchedEffect(selectedTool) {
+        onOverlayVisibilityChanged(selectedTool == null)
+    }
     LaunchedEffect(selectedTool, utilityRepository) {
         selectedToolDetail = null
         selectedToolDetail = selectedTool?.let { utilityRepository.detail(it.id) }
@@ -832,8 +840,8 @@ fun ProfileScreen(
         backdrop = backdrop,
         content = {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
+            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
             state = com.refuge.next.navigation.rememberRootListState(4),
         ) {
@@ -1118,8 +1126,8 @@ fun ToolsScreen(
         backdrop = backdrop,
         content = {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
+            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
         ) {
             item {
@@ -1349,8 +1357,8 @@ fun SettingsScreen(
         backdrop = backdrop,
         content = {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
+            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
         ) {
             item {
@@ -1395,7 +1403,7 @@ fun SettingsScreen(
             }
             item {
                 SettingsGroup(palette, "关于") {
-                    SettingsActionRow(palette, "版本", "0.1.0") { showAbout = true }
+                    SettingsActionRow(palette, "版本", BuildConfig.VERSION_NAME) { showAbout = true }
                     DividerLine(palette)
                     SettingsActionRow(palette, "开源协议", "GNU AGPLv3") { showLicense = true }
                 }
@@ -1459,6 +1467,7 @@ fun CcuScreen(
     presence: UserPresence,
     avatarUrl: String?,
     onToggleOnline: () -> Unit,
+    onOverlayVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     var ships by remember(ccuRepository) { mutableStateOf(ccuRepository.cachedShips()) }
     var seed by remember { mutableStateOf<CcuShip?>(null) }
@@ -1472,6 +1481,9 @@ fun CcuScreen(
     var loadAttempt by remember { mutableIntStateOf(0) }
     var calculated by remember { mutableStateOf(false) }
     var objective by remember { mutableIntStateOf(0) }
+    LaunchedEffect(showSeed, showTarget, showOwned) {
+        onOverlayVisibilityChanged(!showSeed && !showTarget && !showOwned)
+    }
     LaunchedEffect(ccuRepository, selectedBottomTab, loadAttempt) {
         loading = false
         loadError = null
@@ -1529,8 +1541,8 @@ fun CcuScreen(
         backdrop = backdrop,
         content = {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = 142.dp),
+            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
         ) {
             item { ProductionHeader(palette, "升级规划", presence = presence, avatarUrl = avatarUrl, onAvatarClick = onToggleOnline, actions = { HeaderAction(backdrop, palette, RefugeIcons.back, "返回", { onNavigate(rootTab) }) }) }
@@ -1670,15 +1682,36 @@ fun HangarUpgradePanel(
                 target = target?.displayName(),
                 onStart = { showStart = true },
                 onTarget = { showTarget = true },
-                heading = "本地规划引擎",
+                heading = "升级规划",
                 startLabel = "选择种子舰船",
                 targetLabel = "选择目标舰船",
                 // Keep both selectors visible, matching the legacy planner
                 // layout and allowing the target to be chosen first.
                 showTargetAfterStart = false,
             )
-            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.design, "使用机库数据本地规划",
-                { calculated = true }, Modifier.fillMaxWidth())
+            val canCalculate = start != null && target != null
+            OfficialLiquidButtonPort(
+                onClick = { calculated = true },
+                backdrop = backdrop,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canCalculate,
+                tint = if (canCalculate) palette.accent else Color.Unspecified,
+                visualHeight = 56.dp,
+                contentPadding = 16.dp,
+            ) {
+                Icon(
+                    RefugeIcons.upgrade,
+                    contentDescription = null,
+                    tint = if (canCalculate) Color.White else palette.textMuted,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    "计算升级路线",
+                    style = RefugeTypography.body(palette).copy(
+                        color = if (canCalculate) Color.White else palette.textMuted,
+                    ),
+                )
+            }
             if (start != null && target != null) {
                 RefugeStandardGlassSurface(
                     backdrop = backdrop,

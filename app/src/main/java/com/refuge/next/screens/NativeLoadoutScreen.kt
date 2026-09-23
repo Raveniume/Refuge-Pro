@@ -18,9 +18,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.zIndex
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.refuge.next.data.*
 import com.refuge.next.design.*
 import com.refuge.next.material.*
@@ -34,7 +35,7 @@ import zone.ien.hig.MenuAction
 import zone.ien.hig.MenuPickerAction
 
 @Composable
-internal fun NativeLoadoutScreen(palette: RefugePalette, isDark: Boolean, onDismiss: () -> Unit) {
+internal fun NativeLoadoutScreen(backdrop: LayerBackdrop, palette: RefugePalette, isDark: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ErkulLoadoutRepository.shared(context) }
     var branch by rememberSaveable { mutableStateOf("LIVE") }
@@ -106,11 +107,21 @@ internal fun NativeLoadoutScreen(palette: RefugePalette, isDark: Boolean, onDism
     val slots = remember(ship, catalog, draft) { if (ship != null && catalog != null) resolveErkulSlots(ship!!, catalog!!, draft.obj("overrides")) else emptyList() }
     val metrics = remember(ship, slots, draft) { ship?.let { calculateErkulMetrics(it, slots, draft) } }
     val stock = remember(ship, catalog) { if (ship != null && catalog != null) calculateErkulMetrics(ship!!, resolveErkulSlots(ship!!, catalog!!, JSONObject()), JSONObject()) else null }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        BackHandler { if (picker != null) picker = null else onDismiss() }
-        RefugeScene(palette) { backdrop ->
-            val canvasColor = if (palette.background.luminance() < .5f) androidx.compose.ui.graphics.Color.Black else androidx.compose.ui.graphics.Color.White
-            Column(Modifier.fillMaxSize().background(canvasColor).systemBarsPadding().testTag("native-loadout")) {
+    BackHandler { if (picker != null) picker = null else onDismiss() }
+    // Keep the editor in the activity composition. A platform Dialog creates
+    // a second window and removes the live page during its opening frame.
+    RefugeLiquidSheet(
+        backdrop = backdrop,
+        palette = palette,
+        title = "",
+        onDismiss = onDismiss,
+        sheetHeight = 780.dp,
+        contentScrollable = false,
+        contentUnderHandle = true,
+        modifier = Modifier.zIndex(5f),
+    ) { modalBackdrop ->
+            val canvasColor = if (palette.background.luminance() < .5f) androidx.compose.ui.graphics.Color.Black else palette.background
+            Column(Modifier.fillMaxWidth().background(canvasColor).systemBarsPadding().testTag("native-loadout")) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.back, "返回", onDismiss)
                     Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f).padding(start = 8.dp))
@@ -161,7 +172,7 @@ internal fun NativeLoadoutScreen(palette: RefugePalette, isDark: Boolean, onDism
                         item { ProductionErrorState(backdrop, palette, message, { attempt++ }) }
                     }
                     if (ship != null && metrics != null) {
-                        item { ErkulPowerCard(palette, ship!!, slots, draft, metrics!!, ::update, showTelemetry = false) }
+                        item { ErkulPowerCard(palette, ship!!, slots, draft, metrics!!, ::update, showTelemetry = true) }
                         item {
                             RefugeLightweightGlassSurface(
                                 palette = palette,
@@ -275,6 +286,11 @@ internal fun NativeLoadoutScreen(palette: RefugePalette, isDark: Boolean, onDism
             }
         }
     }
+
+/** Compatibility entry retained for isolated rendering fixtures. */
+@Composable
+internal fun NativeLoadoutScreen(palette: RefugePalette, isDark: Boolean, onDismiss: () -> Unit) {
+    NativeLoadoutScreen(rememberLayerBackdrop(), palette, isDark, onDismiss)
 }
 
 @Composable
@@ -336,8 +352,9 @@ private fun LoadoutPerformanceSheet(
                 LinearProgressIndicator(coolingRatio.coerceAtMost(1f), Modifier.fillMaxWidth().height(5.dp), if (coolingRatio > 1f) palette.error else palette.accent, palette.glassStrong)
                 Text("${metrics.coolingUsed.metric(" /s")} / ${metrics.cooling.metric(" /s")}", style = RefugeTypography.caption(palette))
             }
-        }
     }
+}
+
 }
 
 @Composable

@@ -129,6 +129,7 @@ import com.refuge.next.material.RefugeAnimatedSearch
 import com.refuge.next.material.RefugeLiquidGlassField
 import com.refuge.next.material.RefugeLiquidGlass
 import com.refuge.next.material.RefugePullToRefresh
+import com.refuge.next.material.refugeTopEdgeFade
 import com.refuge.next.reference.OfficialLiquidButtonPort
 import androidx.compose.ui.platform.testTag
 import com.refuge.next.design.translatedShipName
@@ -159,6 +160,7 @@ fun HangarScreen(
     presence: UserPresence,
     avatarUrl: String?,
     onToggleOnline: () -> Unit,
+    onOverlayVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     var ownedShips by remember(repository) { mutableStateOf(repository.cachedOwnedShips()) }
@@ -186,6 +188,13 @@ fun HangarScreen(
     var loadAttempt by remember { mutableIntStateOf(0) }
     val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
     val listState = com.refuge.next.navigation.rememberRootListState(0)
+
+    LaunchedEffect(showFilter, showSort, selectedDetail, showLogs, selectedSection) {
+        onOverlayVisibilityChanged(
+            selectedSection != 2 &&
+                !showFilter && !showSort && selectedDetail == null && !showLogs,
+        )
+    }
 
     LaunchedEffect(repository, buybackRepository, hangarLogRepository, loadAttempt) {
         loading = ownedShips.isEmpty() && inventory.isEmpty()
@@ -241,16 +250,17 @@ fun HangarScreen(
             isRefreshing = isRefreshing,
             onRefresh = { isRefreshing = true; loadAttempt++ },
             indicatorColor = palette.accent,
+            edgeColor = palette.background,
             modifier = Modifier.fillMaxSize(),
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().statusBarsPadding(),
+                modifier = Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
                 state = listState,
                 contentPadding = PaddingValues(
                     start = RefugeSpacing.page,
                     top = RefugeSpacing.lg,
                     end = RefugeSpacing.page,
-                    bottom = 132.dp,
+                    bottom = RefugeSpacing.rootNavigation,
                 ),
                 verticalArrangement = Arrangement.Top,
             ) {
@@ -1973,7 +1983,7 @@ private fun HangarSortSheet(
     onSelected: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, "排序舰库", onDismiss) { modalBackdrop ->
+    RefugeLiquidSheet(backdrop, palette, "排序舰库", onDismiss, sheetHeight = 248.dp) { modalBackdrop ->
         listOf("最新同步" to true, "最早同步" to false).forEach { (label, value) ->
             Row(
                 Modifier.fillMaxWidth().clickable { onSelected(value) },

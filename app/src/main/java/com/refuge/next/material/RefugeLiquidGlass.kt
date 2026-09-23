@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
@@ -73,6 +74,7 @@ fun RefugeLiquidGlass(
     chromaticAberration: Boolean = false,
     edgeAlpha: Float = 0f,
     edgeColor: androidx.compose.ui.graphics.Color = palette.text,
+    highlightAlpha: Float = .26f,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val shape = refugeContinuousShape(radius)
@@ -131,7 +133,7 @@ fun RefugeLiquidGlass(
                     )
                 },
                 highlight = {
-                    RefugeGlassStyle.controlHighlight.copy(alpha = .26f + progress * .18f)
+                    RefugeGlassStyle.controlHighlight.copy(alpha = highlightAlpha + progress * .12f)
                 },
                 shadow = {
                     RefugeGlassStyle.controlShadow
@@ -167,9 +169,15 @@ fun RefugeLiquidGlassButton(
     radius: Dp = RefugeRadius.control,
     padding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
     edgeAlpha: Float = .16f,
+    highlightAlpha: Float = .20f,
     enabled: Boolean = true,
     surface: androidx.compose.ui.graphics.Color = palette.glassStrong,
-    surfaceAlpha: Float = .065f,
+    // Keep light-mode actions visibly separated from the grouped canvas so
+    // labels remain readable even when the backdrop is plain white.
+    surfaceAlpha: Float = if (palette.background.luminance() < .5f) .065f else .16f,
+    refractionHeight: Dp = 12.dp,
+    refractionAmount: Dp = 18.dp,
+    blurRadius: Dp = 3.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -179,6 +187,9 @@ fun RefugeLiquidGlassButton(
         backdrop = backdrop,
         palette = palette,
         modifier = modifier
+            // Keep every text action in the app at the same comfortable HIG
+            // control height. Callers may still request a larger card.
+            .heightIn(min = 48.dp)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
@@ -194,15 +205,16 @@ fun RefugeLiquidGlassButton(
             },
         radius = radius,
         padding = padding,
-        refractionHeight = 12.dp,
-        refractionAmount = 18.dp,
-        blurRadius = 3.dp,
+        refractionHeight = refractionHeight,
+        refractionAmount = refractionAmount,
+        blurRadius = blurRadius,
         // Keep controls visibly glassy on both wallpaper and image-backed
         // pages. The previous near-zero fill made upgrade selectors and
         // modal actions read as flat transparent text.
         surface = surface,
         surfaceAlpha = surfaceAlpha,
-        edgeAlpha = edgeAlpha,
+        edgeAlpha = if (palette.background.luminance() < .5f) edgeAlpha else edgeAlpha.coerceAtLeast(.20f),
+        highlightAlpha = highlightAlpha,
         interactionProgress = progress,
         content = content,
     )
@@ -237,7 +249,10 @@ fun RefugeLiquidGlassField(
         keyboardOptions = keyboardOptions,
         visualTransformation = visualTransformation,
         textStyle = RefugeTypography.body(palette).copy(color = palette.text),
-        cursorBrush = SolidColor(palette.accent),
+        // Focus is communicated through a slightly stronger neutral glass
+        // surface. A blue frame here reads like a web form selection state
+        // and overwhelms the translucent control.
+        cursorBrush = SolidColor(palette.text),
         modifier = modifier.onFocusChanged { focused = it.isFocused },
         decorationBox = { innerTextField ->
             Column(Modifier.fillMaxWidth()) {
@@ -247,7 +262,7 @@ fun RefugeLiquidGlassField(
                 androidx.compose.material.Text(
                     text = label,
                     style = RefugeTypography.caption(palette).copy(
-                        color = if (focused) palette.accent else palette.textSecondary,
+                        color = palette.textSecondary,
                     ),
                 )
                 Spacer(Modifier.height(5.dp))
@@ -258,8 +273,8 @@ fun RefugeLiquidGlassField(
                         .fillMaxWidth()
                         .height(52.dp)
                         .border(
-                            width = 1.dp,
-                            color = palette.accent.copy(alpha = if (focused) .72f else .26f),
+                            width = .5.dp,
+                            color = palette.outline.copy(alpha = if (focused) .20f else .12f),
                             shape = refugeContinuousShape(18.dp),
                         ),
                     radius = 18.dp,
@@ -268,8 +283,9 @@ fun RefugeLiquidGlassField(
                     refractionAmount = 16.dp,
                     blurRadius = 3.dp,
                     surface = palette.glassStrong,
-                    surfaceAlpha = if (focused) .14f else .085f,
-                    edgeAlpha = if (focused) .42f else .22f,
+                    surfaceAlpha = if (focused) .12f else .085f,
+                    edgeAlpha = if (focused) .10f else .06f,
+                    highlightAlpha = .08f,
                     interactionProgress = progress,
                 ) {
                     Row(
@@ -291,7 +307,7 @@ fun RefugeLiquidGlassField(
                                 Icon(
                                     imageVector = leadingIcon,
                                     contentDescription = leadingIconContentDescription,
-                                    tint = if (focused) palette.accent else palette.textSecondary,
+                                    tint = palette.textSecondary,
                                 )
                             }
                         }

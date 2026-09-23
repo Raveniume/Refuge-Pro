@@ -17,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -30,6 +32,22 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.lazy.LazyListState
 import kotlin.math.min
+
+fun Modifier.refugeTopEdgeFade(
+    edgeColor: Color,
+    height: androidx.compose.ui.unit.Dp = 36.dp,
+): Modifier = drawWithContent {
+    drawContent()
+    if (edgeColor.alpha > 0f) {
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(edgeColor.copy(alpha = .96f), edgeColor.copy(alpha = .62f), Color.Transparent),
+                startY = 0f,
+                endY = height.toPx(),
+            ),
+        )
+    }
+}
 
 /**
  * A small, native pull-to-refresh container for a LazyColumn.
@@ -47,6 +65,7 @@ fun RefugePullToRefresh(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
     indicatorColor: Color = Color(0xFF0A84FF),
+    edgeColor: Color = Color.Transparent,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val latestRefresh by rememberUpdatedState(onRefresh)
@@ -93,7 +112,9 @@ fun RefugePullToRefresh(
 
     val progress = (pullDistance / thresholdPx).coerceIn(0f, 1f)
     Box(
-        modifier = modifier.nestedScroll(connection),
+        modifier = modifier
+            .nestedScroll(connection)
+            .refugeTopEdgeFade(edgeColor, 34.dp),
     ) {
         Box(
             Modifier

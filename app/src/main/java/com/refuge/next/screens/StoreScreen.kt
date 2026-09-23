@@ -72,6 +72,7 @@ import com.refuge.next.material.RefugeLiquidModeSelector
 import com.refuge.next.material.RefugeAnimatedSearch
 import com.refuge.next.material.RefugeHeaderAvatar
 import com.refuge.next.material.RefugePullToRefresh
+import com.refuge.next.material.refugeTopEdgeFade
 import com.refuge.next.reference.ReferenceLiquidButton
 import com.refuge.next.reference.ReferenceSearchField
 
@@ -102,6 +103,7 @@ fun StoreScreen(
     presence: UserPresence,
     avatarUrl: String?,
     onToggleOnline: () -> Unit,
+    onOverlayVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     var products by remember(repository) { mutableStateOf(repository.cachedProducts()) }
     var isLoading by remember(repository) { mutableStateOf(products.isEmpty()) }
@@ -122,6 +124,12 @@ fun StoreScreen(
     var pendingNotice by remember { mutableStateOf<String?>(null) }
     val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
     val listState = com.refuge.next.navigation.rememberRootListState(1)
+
+    LaunchedEffect(showFilter, showSort, showCart, selectedProduct, pendingNotice) {
+        onOverlayVisibilityChanged(
+            !showFilter && !showSort && !showCart && selectedProduct == null && pendingNotice == null,
+        )
+    }
 
     LaunchedEffect(repository, loadAttempt) {
         isLoading = products.isEmpty()
@@ -182,16 +190,17 @@ fun StoreScreen(
             isRefreshing = isRefreshing,
             onRefresh = { isRefreshing = true; loadAttempt++ },
             indicatorColor = palette.accent,
+            edgeColor = palette.background,
             modifier = Modifier.fillMaxSize(),
         ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().statusBarsPadding(),
+            modifier = Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
             state = listState,
             contentPadding = PaddingValues(
                 start = RefugeSpacing.page,
                 top = RefugeSpacing.lg,
                 end = RefugeSpacing.page,
-                bottom = 132.dp,
+                bottom = RefugeSpacing.rootNavigation,
             ),
             verticalArrangement = Arrangement.Top,
         ) {
@@ -597,7 +606,7 @@ private fun StoreSortSheet(
     onSelected: (StoreSortOrder) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    StoreSheetFrame(backdrop, palette, "排序商品", onDismiss) {
+    StoreSheetFrame(backdrop, palette, "排序商品", onDismiss, sheetHeight = 268.dp) {
         StoreSortOrder.entries.forEach { choice ->
             StoreChoiceRow(palette, choice.label, order == choice) { onSelected(choice) }
         }
@@ -809,6 +818,7 @@ private fun StoreSheetFrame(
     palette: RefugePalette,
     title: String,
     onDismiss: () -> Unit,
+    sheetHeight: androidx.compose.ui.unit.Dp? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.(LayerBackdrop) -> Unit,
 ) {
     RefugeLiquidSheet(
@@ -816,6 +826,7 @@ private fun StoreSheetFrame(
         palette = palette,
         title = title,
         onDismiss = onDismiss,
+        sheetHeight = sheetHeight,
         actionOverContent = false,
         transparentActionArea = false,
         action = { actionBackdrop ->

@@ -39,7 +39,7 @@ internal fun Modifier.refugeContentMaterial(
         )
         .clip(shape)
         .background(fill)
-        .border(.5.dp, if (isDark) Color.White.copy(alpha = .055f) else Color.Black.copy(alpha = .035f), shape)
+        .border(.5.dp, if (isDark) Color.White.copy(alpha = .075f) else Color.Black.copy(alpha = .085f), shape)
 }
 
 internal object RefugeGlassStyle {

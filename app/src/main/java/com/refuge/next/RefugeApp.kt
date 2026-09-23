@@ -295,6 +295,8 @@ fun RefugeApp() {
                     backdrop = backdrop,
                     palette = palette,
                     auth = auth,
+                    loginEmailDraft = auth.loginEmailDraft(),
+                    onLoginEmailChanged = auth::saveLoginEmailDraft,
                     allowClose = false,
                     onAuthenticated = { authenticated = true },
                     onClose = {},
@@ -461,6 +463,7 @@ private fun RefugeContent(
             presence = presence,
             avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
+            onOverlayVisibilityChanged = onTerminalOverlayVisibilityChanged,
         )
 
         1 -> StoreScreen(
@@ -477,6 +480,7 @@ private fun RefugeContent(
             presence = presence,
             avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
+            onOverlayVisibilityChanged = onTerminalOverlayVisibilityChanged,
         )
 
         2 -> TerminalScreen(
@@ -521,6 +525,7 @@ private fun RefugeContent(
             initialProfile = initialProfile,
             fleetSummary = "舰队资料",
             onToggleOnline = onToggleOnline,
+            onOverlayVisibilityChanged = onTerminalOverlayVisibilityChanged,
         )
 
         5 -> SettingsScreen(
@@ -553,6 +558,7 @@ private fun RefugeContent(
             presence = presence,
             avatarUrl = avatarUrl,
             onToggleOnline = onToggleOnline,
+            onOverlayVisibilityChanged = onTerminalOverlayVisibilityChanged,
         )
 
         7 -> DesignLabScreen(
