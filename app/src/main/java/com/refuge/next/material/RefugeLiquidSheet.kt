@@ -236,7 +236,10 @@ fun RefugeLiquidSheet(
                                                 // Keep the sampled page visible around the sheet during the
                                                 // transition, while making the sheet body opaque enough that
                                                 // the page's text does not ghost through its controls.
-                                                drawRect(palette.contentSurfaceStrong.copy(alpha = .94f))
+                                                // Keep enough live page color for the HIG in-place
+                                                // presentation while the content rows themselves use
+                                                // opaque surfaces for text legibility.
+                                                drawRect(palette.contentSurfaceStrong.copy(alpha = .86f))
                                             }
                                         },
                                     )
