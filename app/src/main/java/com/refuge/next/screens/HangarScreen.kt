@@ -230,7 +230,10 @@ fun HangarScreen(
             ownedShips = loaded.ships
             inventory = loaded.items
             buybackItems = loaded.buyback
-            logEntries = loaded.logs
+            // A failed or empty live response must not erase the last useful
+            // snapshot. The repository can legitimately return an empty list
+            // while the account endpoint is unavailable during refresh.
+            if (loaded.logs.isNotEmpty()) logEntries = loaded.logs
         }.onFailure { loadError = it.message ?: "机库缓存读取失败" }
         loading = false
         isRefreshing = false

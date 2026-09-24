@@ -251,8 +251,21 @@ class RefugeExtendedParityTest {
         compose.setContent {
             CompositionLocalProvider(com.refuge.next.design.LocalRefugeTranslation provides translations) {
                 RefugeScene(RefugeColors.light) { canvas ->
-                    StoreUpgradePurchaseScreen(canvas, RefugeColors.light, false, 0, {}, auth, purchase,
-                        hangar, translations, UserPresence.ONLINE, null, {})
+                    StoreUpgradePurchaseScreen(
+                        backdrop = canvas,
+                        palette = RefugeColors.light,
+                        isDark = false,
+                        rootTab = 0,
+                        onNavigate = {},
+                        onClose = {},
+                        auth = auth,
+                        purchaseRepository = purchase,
+                        hangarRepository = hangar,
+                        translationRepository = translations,
+                        presence = UserPresence.ONLINE,
+                        avatarUrl = null,
+                        onAvatarClick = {},
+                    )
                 }
             }
         }
