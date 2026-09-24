@@ -375,14 +375,20 @@ private fun RefugeAppContent() {
                     Text("我的机库", color = palette.text)
                 }
             } else {
-                val navigate: (Int) -> Unit = { route ->
+                    val navigate: (Int) -> Unit = { route ->
                     rootNavigationVisible = true
                     if (route == 9) {
                         // Keep the store route mounted so its category, search,
                         // and scroll state remain intact beneath the purchase sheet.
                         showStoreUpgrade = true
                     } else if (route == selectedTab) {
-                        appScope.launch { rootScrollRegistry.scrollToTop(route) }
+                        appScope.launch {
+                            if (rootScrollRegistry.isAtTop(route)) {
+                                rootScrollRegistry.triggerRefresh(route)
+                            } else {
+                                rootScrollRegistry.scrollToTop(route)
+                            }
+                        }
                     } else {
                         if (route in productionRootRoutes) rootTab = route
                         selectedTab = route
@@ -390,7 +396,7 @@ private fun RefugeAppContent() {
                 }
                 CompositionLocalProvider(
                     LocalRootNavigationOverlay provides RootNavigationOverlay(selectedTab to rootNavigationVisible) { pageBackdrop ->
-                        if (rootNavigationVisible && selectedTab in productionRootRoutes) {
+                        if (selectedTab in productionRootRoutes) {
                             RootBottomNav(
                                 pageBackdrop,
                                 isDark,
@@ -478,8 +484,14 @@ private fun RefugeAppContent() {
                             selected = presence,
                             onSelected = {
                                 userStatus.set(it)
-                                showPresencePicker = false
-                                appScope.launch { runCatching { userStatus.syncToRsi(auth) } }
+                                // Keep the selected row visible for the short
+                                // Cupertino dismissal window before removing
+                                // the sheet from the composition.
+                                appScope.launch {
+                                    delay(160)
+                                    showPresencePicker = false
+                                    runCatching { userStatus.syncToRsi(auth) }
+                                }
                             },
                             onDismiss = { showPresencePicker = false },
                         )

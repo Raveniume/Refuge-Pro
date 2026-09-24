@@ -48,6 +48,7 @@ import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -187,6 +188,13 @@ fun HangarScreen(
     var loadAttempt by remember { mutableIntStateOf(0) }
     val safeNoOp = remember { SafeNoOpDestructiveActionExecutor() }
     val listState = com.refuge.next.navigation.rememberRootListState(0)
+    val refreshCallback = remember { { loadAttempt++; Unit } }
+    val scrollRegistry = com.refuge.next.navigation.LocalRootScrollRegistry.current
+    DisposableEffect(Unit) {
+        val registry = scrollRegistry
+        registry?.registerRefresh(0, refreshCallback)
+        onDispose { registry?.unregisterRefresh(0, refreshCallback) }
+    }
 
     LaunchedEffect(showFilter, showSort, selectedDetail, showLogs, selectedSection) {
         onOverlayVisibilityChanged(

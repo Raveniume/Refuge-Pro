@@ -42,7 +42,7 @@ fun Modifier.refugeTopEdgeFade(
     if (edgeColor.alpha > 0f) {
         // The fade is a background veil, not a white highlight. Dark mode
         // must fade with black so content disappears into the black canvas.
-        val veilColor = if (edgeColor.luminance() < .5f) Color.Black else edgeColor
+        val veilColor = if (edgeColor.luminance() < .5f) Color.Black else Color.White
         drawRect(
             brush = Brush.verticalGradient(
                 colors = listOf(veilColor.copy(alpha = .94f), veilColor.copy(alpha = .54f), Color.Transparent),

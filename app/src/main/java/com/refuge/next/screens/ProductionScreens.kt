@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -180,7 +181,7 @@ fun PresencePickerSheet(
         // profile page visible instead of opening a full-height modal.
         // Five rows plus the handle/title need roughly 250 dp. Keeping the
         // picker compact leaves the profile header and page context visible.
-        sheetHeight = 268.dp,
+        sheetHeight = 286.dp,
     ) { _ ->
         UserPresence.entries.forEach { presence ->
             Row(
@@ -312,6 +313,13 @@ fun TerminalScreen(
         onOverlayVisibilityChanged(selectedItem == null && !showLoadout && loadoutPicker == null && !showFilter)
     }
     val listState = com.refuge.next.navigation.rememberRootListState(2)
+    val refreshCallback = remember { { loadAttempt++; Unit } }
+    val scrollRegistry = com.refuge.next.navigation.LocalRootScrollRegistry.current
+    DisposableEffect(Unit) {
+        val registry = scrollRegistry
+        registry?.registerRefresh(2, refreshCallback)
+        onDispose { registry?.unregisterRefresh(2, refreshCallback) }
+    }
 
     LaunchedEffect(repository, loadAttempt) {
         loading = items.isEmpty()
@@ -2031,11 +2039,14 @@ private fun ShipSelectorSheet(
         }
             .sortedWith(compareByDescending<CcuShip> { it.owned }.thenBy { it.purchasePrice })
     }
-    RefugeLiquidSheet(
+        RefugeLiquidSheet(
         backdrop = backdrop,
         palette = palette,
         title = title,
         onDismiss = onDismiss,
+        leadingAction = { modalBackdrop ->
+            RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
+        },
         sheetHeight = 760.dp,
         // Ship selection is a focused upgrade decision. Keep the content
         // surface opaque so the planner behind it cannot ghost through rows or
@@ -2282,7 +2293,7 @@ private fun TerminalDetailSheet(backdrop: LayerBackdrop, palette: RefugePalette,
         respectTopSafeArea = true,
         // The sheet reserves the action rail in its scroll viewport. This
         // keeps the final specification row readable above “完成”.
-        actionOverContent = false,
+        actionOverContent = true,
         transparentActionArea = false,
         surfaceRefraction = false,
         action = { actionBackdrop ->
@@ -2380,6 +2391,9 @@ TerminalRemoteImage(
                     )
                 }
             }
+            // The action is optically floating over the final content row;
+            // leave only a transparent scroll tail for its hit area.
+            Spacer(Modifier.height(64.dp))
         }
     }
 }
@@ -2597,7 +2611,22 @@ fun ProductionListSheet(
     sheetHeight: androidx.compose.ui.unit.Dp? = null,
     onDismiss: () -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, title, onDismiss, sheetHeight = sheetHeight) { modalBackdrop ->
+    RefugeLiquidSheet(
+        backdrop = backdrop,
+        palette = palette,
+        title = title,
+        onDismiss = onDismiss,
+        sheetHeight = sheetHeight,
+        leadingAction = { modalBackdrop ->
+            RefugeCircularHeaderButton(
+                modalBackdrop,
+                palette,
+                RefugeIcons.back,
+                "返回",
+                onDismiss,
+            )
+        },
+    ) { modalBackdrop ->
         if (entries.isEmpty()) {
             Text("暂无记录", style = RefugeTypography.body(palette))
         } else {
@@ -2663,9 +2692,10 @@ private fun TerminalFilterSheet(
     onTaggedChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, "终端筛选", onDismiss) { modalBackdrop ->
+    RefugeLiquidSheet(backdrop, palette, "终端筛选", onDismiss, sheetHeight = 300.dp, actionOverContent = true) { modalBackdrop ->
         SettingsToggleRow(modalBackdrop, palette, "仅显示有 USD 价格", if (pricedOnly) "开启" else "关闭", pricedOnly) { onPricedChanged(!pricedOnly) }
         SettingsToggleRow(modalBackdrop, palette, "仅显示有标签", if (taggedOnly) "开启" else "关闭", taggedOnly) { onTaggedChanged(!taggedOnly) }
+        Spacer(Modifier.height(60.dp))
         RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
     }
 }

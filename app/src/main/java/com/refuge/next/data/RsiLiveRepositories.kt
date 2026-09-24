@@ -816,7 +816,7 @@ class RsiLiveHangarRepository(
 
     private fun extractIncludedEntries(html: String): List<HangarIncludedItem> {
         val starts = Regex("(?is)<div[^>]+class=[\"'][^\"']*\\bitem\\b[^\"']*[\"'][^>]*>").findAll(html).toList()
-        return starts.mapIndexedNotNull { index, match ->
+        val strict = starts.mapIndexedNotNull { index, match ->
             val end = starts.getOrNull(index + 1)?.range?.first ?: html.length
             val itemHtml = html.substring(match.range.first, end)
             val imageUrl = Regex("(?is)background-image\\s*:\\s*url\\(['\"]?([^'\")]+)")
@@ -834,6 +834,7 @@ class RsiLiveHangarRepository(
                 )
             }
         }
+        return strict
     }
 
     private fun extractAlsoContainsTitles(html: String): List<String> =
@@ -1464,7 +1465,7 @@ class RsiLiveHangarLogRepository(
         if (rendered.isBlank()) return emptyList()
         val entryStart = Regex("(?is)<[^>]+class=[\"'][^\"']*pledge-log-entry[^\"']*[\"'][^>]*>")
         val starts = entryStart.findAll(rendered).toList()
-        return starts.mapIndexedNotNull { index, match ->
+        val strict = starts.mapIndexedNotNull { index, match ->
             val end = starts.getOrNull(index + 1)?.range?.first ?: rendered.length
             val block = rendered.substring(match.range.first, end)
             val text = Regex("(?is)<p[^>]*>(.*?)</p>").find(block)?.groupValues?.getOrNull(1)
@@ -1475,6 +1476,17 @@ class RsiLiveHangarLogRepository(
                 ?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
             parseLogEntry(text.orEmpty(), name, index)
         }
+        if (strict.isNotEmpty()) return strict
+        val wrappers = Regex("(?is)<(?:li|article|div)[^>]*>(.*?)</(?:li|article|div)>")
+            .findAll(rendered)
+            .map { match ->
+                Html.fromHtml(match.groupValues[1], Html.FROM_HTML_MODE_LEGACY)
+                    .toString().replace(Regex("\\s+"), " ").trim()
+            }
+            .filter { it.contains("#") && it.contains("-") }
+            .distinct()
+            .toList()
+        return wrappers.mapIndexedNotNull { index, text -> parseLegacyLog(text, index) }
     }
 
     private fun parseLogEntry(text: String, name: String, index: Int): HangarLogEntry? {

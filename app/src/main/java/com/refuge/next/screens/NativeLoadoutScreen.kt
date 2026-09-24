@@ -144,6 +144,9 @@ internal fun NativeLoadoutScreen(
         palette = palette,
         title = "",
         onDismiss = onDismiss,
+        leadingAction = { modalBackdrop ->
+            RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
+        },
         sheetHeight = 780.dp,
         contentScrollable = false,
         contentUnderHandle = true,
@@ -151,10 +154,9 @@ internal fun NativeLoadoutScreen(
         surfaceRefraction = false,
         surfaceAlpha = 1f,
     ) { modalBackdrop ->
-            Column(Modifier.fillMaxWidth().background(palette.contentSurface).systemBarsPadding().testTag("native-loadout")) {
+            Column(Modifier.fillMaxWidth().testTag("native-loadout")) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
-                    Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f).padding(start = 8.dp))
+                    Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
                     Box {
                         RefugeHeaderActionBar(modalBackdrop, palette, listOf(
                             RefugeFloatingAction(RefugeIcons.refresh, "重置配装", { update(JSONObject()) }),

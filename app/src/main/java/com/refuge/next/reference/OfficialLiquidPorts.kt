@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -314,8 +315,8 @@ private fun OfficialLiquidTabsCore(
         val containerColor = if (isDark) {
             Color(0xFF1C1C1E).copy(alpha = .34f)
         } else {
-            Color.White.copy(alpha = .58f)
-    }
+            Color(0xFFECECF1).copy(alpha = .86f)
+        }
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
         val density = LocalDensity.current
         val tabWidth = with(density) { (constraints.maxWidth.toFloat() - 8.dp.toPx()) / tabsCount }
@@ -418,6 +419,11 @@ private fun OfficialLiquidTabsCore(
                 .then(if (containerRespondsToGesture) interactiveHighlight.modifier else Modifier)
                 .height(outerHeight)
                 .fillMaxWidth()
+                .border(
+                    1.dp,
+                    if (isDark) Color.White.copy(alpha = .12f) else Color.Black.copy(alpha = .08f),
+                    Capsule(RoundedCornerStyle.Continuous),
+                )
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

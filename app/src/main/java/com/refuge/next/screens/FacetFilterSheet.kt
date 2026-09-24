@@ -22,14 +22,16 @@ internal fun FacetFilterSheet(
     onChange: (FacetSelection) -> Unit, onDismiss: () -> Unit,
 ) {
     var group by remember { mutableStateOf<String?>(null) }
-    RefugeLiquidSheet(backdrop, palette, if (group == null) title else group!!, onDismiss, sheetHeight = 740.dp,
+    val optionCount = if (group == null) groups.size else 1 + groups[group].orEmpty().size
+    val compactHeight = (if (group == null) 170 else 150 + optionCount * 46).dp.coerceIn(300.dp, 620.dp)
+    RefugeLiquidSheet(backdrop, palette, if (group == null) title else group!!, onDismiss, sheetHeight = compactHeight,
+        actionOverContent = true,
+        leadingAction = if (group != null) ({ local ->
+            RefugeCircularHeaderButton(local, palette, RefugeIcons.back, "返回筛选", { group = null })
+        }) else null,
         action = { local -> RefugeCompactUtilityPill(local, palette, RefugeIcons.check, "完成", onDismiss, Modifier.fillMaxWidth()) }) { local ->
         BackHandler(group != null) { group = null }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            if (group != null) {
-                RefugeCircularHeaderButton(local, palette, RefugeIcons.back, "返回筛选", { group = null })
-                Spacer(Modifier.width(8.dp))
-            }
             Text("已选 ${selection.values.sumOf { it.size }} 项", style = RefugeTypography.caption(palette), modifier = Modifier.weight(1f))
             TextButton({ onChange(emptyMap()) }) { Text("重置", color = palette.accent) }
         }
@@ -52,5 +54,6 @@ internal fun FacetFilterSheet(
                 }
             }
         }
+        Spacer(Modifier.height(64.dp))
     }
 }

@@ -39,8 +39,8 @@ data class RefugePalette(
 
 object RefugeColors {
     val dark = RefugePalette(
-        background = Color(0xFF101012),
-        backgroundEdge = Color(0xFF18181B),
+        background = Color.Black,
+        backgroundEdge = Color(0xFF101012),
         backgroundLight = Color(0xFF232326),
         contentSurface = Color(0xFF1C1C1E),
         contentSurfaceStrong = Color(0xFF2C2C2E),
@@ -63,10 +63,10 @@ object RefugeColors {
     val light = RefugePalette(
         // Match the iOS grouped-background relationship: the page is a
         // visibly tinted system group and content surfaces remain white.
-        background = Color(0xFFF2F2F7),
+        background = Color.White,
         backgroundEdge = Color(0xFFE5E5EA),
         backgroundLight = Color(0xFFFFFFFF),
-        contentSurface = Color(0xFFFFFFFF),
+        contentSurface = Color(0xFFF7F7F9),
         contentSurfaceStrong = Color(0xFFEFEFF4),
         glass = Color.White.copy(alpha = .54f),
         glassStrong = Color.White.copy(alpha = .70f),

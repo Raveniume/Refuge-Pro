@@ -322,6 +322,9 @@ fun RefugeLiquidSheet(
                             Modifier
                                 .align(Alignment.TopStart)
                                 .zIndex(2f)
+                                // The 28 dp continuous sheet corner and the
+                                // circular 44 dp control share the same
+                                // tangent point (6 dp optical inset).
                                 .padding(start = 6.dp, top = 6.dp),
                         ) {
                             action.invoke(combinedBackdrop)
