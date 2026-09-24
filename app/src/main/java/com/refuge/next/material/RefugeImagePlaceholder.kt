@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.animation.core.LinearEasing
@@ -37,6 +38,9 @@ import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeTypography
 import com.refuge.next.design.refugeContinuousShape
+
+/** Artwork is enabled after the cached first frame has reached the window. */
+val LocalRemoteArtworkEnabled = staticCompositionLocalOf { true }
 
 /** The legacy three-arched-circle indicator used while Wiki artwork loads. */
 @Composable
@@ -75,13 +79,22 @@ fun RefugeThreeArchedCircle(
 /** Remote image with a fixed box and the legacy animated loading state. */
 @Composable
 fun RefugeRemoteImage(
-    model: Any,
+    model: Any?,
     fallback: Painter,
     contentDescription: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     loadingColor: Color = Color.White.copy(alpha = .82f),
 ) {
+    if (!LocalRemoteArtworkEnabled.current || model == null) {
+        Image(
+            painter = fallback,
+            contentDescription = contentDescription,
+            contentScale = contentScale,
+            modifier = modifier,
+        )
+        return
+    }
     SubcomposeAsyncImage(
         model = model,
         contentDescription = contentDescription,

@@ -149,8 +149,8 @@ fun OfficialLiquidButtonPort(
                 shape = { shape },
                 effects = {
                     vibrancy()
-                    blur(2.dp.toPx())
-                    lens(12.dp.toPx(), 24.dp.toPx())
+                    blur(8.dp.toPx())
+                    lens(16.dp.toPx(), 24.dp.toPx())
                 },
                 highlight = { RefugeGlassStyle.controlHighlight },
                 shadow = { RefugeGlassStyle.controlShadow },
@@ -290,9 +290,9 @@ private fun OfficialLiquidTabsCore(
     require(tabsCount > 0) { "Liquid tabs require at least one tab" }
     if (!LocalOpticalGlassEnabled.current) {
         val containerColor = if (isDark) {
-            Color(0xFF121212).copy(alpha = .24f)
+            Color(0xFF121212).copy(alpha = .18f)
         } else {
-            Color(0xFFFAFAFA).copy(alpha = .34f)
+            Color(0xFFFAFAFA).copy(alpha = .28f)
         }
         Row(
             modifier
@@ -311,10 +311,10 @@ private fun OfficialLiquidTabsCore(
     val animationScope = rememberCoroutineScope()
     val tabsBackdrop = rememberLayerBackdrop()
     val accentColor = if (isDark) OfficialDarkAccent else OfficialLightAccent
-    val containerColor = if (isDark) {
-        Color(0xFF1C1C1E).copy(alpha = .48f)
-    } else {
-        Color.White.copy(alpha = .78f)
+        val containerColor = if (isDark) {
+            Color(0xFF1C1C1E).copy(alpha = .34f)
+        } else {
+            Color.White.copy(alpha = .58f)
     }
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
         val density = LocalDensity.current
@@ -398,8 +398,8 @@ private fun OfficialLiquidTabsCore(
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
                     effects = {
                         vibrancy()
-                        blur(8.dp.toPx())
-                        lens(24.dp.toPx(), 24.dp.toPx())
+                        blur(16.dp.toPx())
+                        lens(28.dp.toPx(), 32.dp.toPx())
                     },
                     highlight = { RefugeGlassStyle.barHighlight },
                     shadow = { RefugeGlassStyle.barShadow },

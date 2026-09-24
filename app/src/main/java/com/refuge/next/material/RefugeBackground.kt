@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import zone.ien.hig.theme.CupertinoTheme
 import zone.ien.hig.theme.darkColorScheme
 import zone.ien.hig.theme.lightColorScheme
+import com.refuge.next.material.LocalOpticalGlassEnabled
 
 @Composable
 fun RefugeScene(
@@ -33,7 +34,12 @@ fun RefugeScene(
             Modifier
                 .matchParentSize()
                 .background(canvasColor)
-                .layerBackdrop(backdrop),
+                // Do not allocate the full-screen backdrop RenderNode during
+                // cold start. The cached page is already readable without the
+                // optical pass; enabling it after the first stable frames
+                // keeps Android 15's emulator RenderThread responsive while
+                // images and the list compiler are warming.
+                .then(if (LocalOpticalGlassEnabled.current) Modifier.layerBackdrop(backdrop) else Modifier),
         ) {
         }
         CompositionLocalProvider(

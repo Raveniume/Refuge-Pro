@@ -110,6 +110,18 @@ internal fun setPowerGroup(allocation: PowerAllocation, draft: JSONObject, group
     return JSONObject(draft.toString()).put("powerSegments", JSONObject(values))
 }
 
+/** Toggle every component in a power group while keeping the draft format used by Erkul. */
+internal fun togglePowerGroup(draft: JSONObject, members: List<PowerConsumer>, disable: Boolean): JSONObject {
+    val next = JSONObject(draft.toString())
+    val disabled = next.strings("disabled").toMutableSet()
+    members.forEach { member ->
+        if (disable) disabled.add(member.path) else disabled.remove(member.path)
+    }
+    if (disabled.isEmpty()) next.remove("disabled")
+    else next.put("disabled", org.json.JSONArray(disabled.toList().sorted()))
+    return next
+}
+
 internal fun powerOutputRatio(item: JSONObject, supplied: Int): Double {
     val demand = resourceUnits(item, false, "Power")
     if (demand <= 0) return 1.0

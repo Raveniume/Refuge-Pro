@@ -3,6 +3,10 @@ package com.refuge.next.material
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.PaddingValues
@@ -487,19 +491,39 @@ fun RefugeCompactLiquidPill(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // The legacy list controls are 44 dp tall. Keep their visual height
+    // separate from the larger primary actions used inside sheets.
+    visualHeight: Dp = 34.dp,
 ) {
     OfficialLiquidButtonPort(
         onClick = onClick,
         backdrop = backdrop,
-        modifier = modifier.semantics { role = Role.Button; contentDescription = label },
+        modifier = modifier
+            .semantics { role = Role.Button; contentDescription = label },
         tint = Color.Unspecified,
         // Compact means visually light, not undersized. Keep the same 44dp
         // touch/readability baseline as the other text actions.
-        visualHeight = 48.dp,
-        contentPadding = 12.dp,
+        visualHeight = visualHeight,
+        contentPadding = 9.dp,
     ) {
-        Icon(icon, null, tint = palette.textSecondary, modifier = Modifier.size(17.dp))
-        Text(label, style = com.refuge.next.design.RefugeTypography.body(palette).copy(color = palette.textSecondary), maxLines = 1)
+        AnimatedContent(
+            targetState = icon,
+            transitionSpec = { fadeIn(tween(90)) togetherWith fadeOut(tween(90)) },
+            label = "utility-pill-icon",
+        ) { currentIcon ->
+            Icon(currentIcon, null, tint = palette.textSecondary, modifier = Modifier.size(15.dp))
+        }
+        AnimatedContent(
+            targetState = label,
+            transitionSpec = { fadeIn(tween(90)) togetherWith fadeOut(tween(90)) },
+            label = "utility-pill-label",
+        ) { currentLabel ->
+            Text(
+                currentLabel,
+                style = com.refuge.next.design.RefugeTypography.secondary(palette).copy(color = palette.textSecondary),
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -548,7 +572,6 @@ fun RefugeGlassListGroup(
         modifier = modifier
             .clip(shape)
             .background(palette.contentSurface)
-            .border(.5.dp, palette.outline.copy(alpha = if (palette.background.luminance() < .5f) .34f else .82f), shape)
             .padding(padding),
         contentAlignment = Alignment.Center,
     ) {

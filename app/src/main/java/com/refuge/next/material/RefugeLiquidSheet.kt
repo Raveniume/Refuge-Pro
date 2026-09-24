@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.activity.compose.BackHandler
@@ -83,6 +84,7 @@ fun RefugeLiquidSheet(
     contentUnderHandle: Boolean = false,
     transparentActionArea: Boolean = false,
     surfaceRefraction: Boolean = true,
+    surfaceAlpha: Float = .86f,
     contentScrollable: Boolean = true,
     leadingAction: (@Composable (Backdrop) -> Unit)? = null,
     action: (@Composable (Backdrop) -> Unit)? = null,
@@ -93,7 +95,15 @@ fun RefugeLiquidSheet(
     // composition preserves the live page underneath during the entire slide
     // animation. A platform Dialog creates a second window and briefly turns
     // the page into a uniform dim rectangle while its content is entering.
-    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+    // Keep the root tab bar mounted at its original coordinates underneath the
+    // sheet. The sheet itself must win the sibling z-order so its opaque body
+    // and scrim cover the bar instead of letting the bar paint over the picker.
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .zIndex(1000f),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
             val density = androidx.compose.ui.platform.LocalDensity.current
             val statusBarInset = with(density) {
                 WindowInsets.statusBars.getTop(this).toDp()
@@ -239,7 +249,7 @@ fun RefugeLiquidSheet(
                                                 // Keep enough live page color for the HIG in-place
                                                 // presentation while the content rows themselves use
                                                 // opaque surfaces for text legibility.
-                                                drawRect(palette.contentSurfaceStrong.copy(alpha = .86f))
+                                                drawRect(palette.contentSurfaceStrong.copy(alpha = surfaceAlpha.coerceIn(0f, 1f)))
                                             }
                                         },
                                     )
@@ -250,7 +260,8 @@ fun RefugeLiquidSheet(
                                 },
                             )
                             .clip(shape)
-                            .border(.5.dp, palette.text.copy(alpha = if (isDark) .08f else .06f), shape),
+                            // The sheet surface already has enough separation
+                            // from the scrim; an outline becomes a dark rim.
                     )
                 },
                 content = { modalBackdrop ->
@@ -285,8 +296,6 @@ fun RefugeLiquidSheet(
                         }
                         if (title.isNotBlank()) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                leadingAction?.invoke(modalBackdrop)
-                                if (leadingAction != null) androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                                 androidx.compose.material.Text(title, style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
                             }
                         }
@@ -308,6 +317,16 @@ fun RefugeLiquidSheet(
                     }
                 },
                 overlay = { combinedBackdrop ->
+                    leadingAction?.let { action ->
+                        Box(
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .zIndex(2f)
+                                .padding(start = 6.dp, top = 6.dp),
+                        ) {
+                            action.invoke(combinedBackdrop)
+                        }
+                    }
                     if (contentUnderHandle) {
                         Box(
                             Modifier

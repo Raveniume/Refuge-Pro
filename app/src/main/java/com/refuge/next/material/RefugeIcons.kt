@@ -6,6 +6,7 @@ import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.ArrowOutward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -73,6 +74,8 @@ object RefugeIcons {
     val design: ImageVector = Icons.Outlined.Tune
     val filter: ImageVector = Icons.Outlined.FilterList
     val sort: ImageVector = Icons.Outlined.SwapVert
+    val sortAscending: ImageVector = Icons.Outlined.ArrowUpward
+    val sortDescending: ImageVector = Icons.Outlined.ArrowDownward
     val search: ImageVector = Icons.Outlined.Search
     val store: ImageVector = Icons.Outlined.Storefront
     val cart: ImageVector = Icons.Outlined.ShoppingBag

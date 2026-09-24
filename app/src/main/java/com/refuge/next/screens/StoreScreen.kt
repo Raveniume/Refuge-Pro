@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -32,6 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
@@ -71,9 +72,11 @@ import com.refuge.next.material.RefugeLiquidSheet
 import com.refuge.next.material.RefugeLiquidModeSelector
 import com.refuge.next.material.RefugeAnimatedSearch
 import com.refuge.next.material.RefugeHeaderAvatar
+import com.refuge.next.material.RefugeThreeArchedCircle
 import com.refuge.next.material.RefugePullToRefresh
 import com.refuge.next.material.refugeTopEdgeFade
 import com.refuge.next.reference.ReferenceLiquidButton
+import com.refuge.next.reference.OfficialLiquidButtonPort
 import com.refuge.next.reference.ReferenceSearchField
 
 private val StoreDiscountOrange = Color(0xFFFF8A00)
@@ -468,7 +471,11 @@ private fun StoreToolbar(
         Spacer(Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
             RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.filter, if (filterActive) "筛选 · 已选" else "筛选", onFilter)
-            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.sort, when (sortOrder) {
+            RefugeCompactUtilityPill(backdrop, palette, when (sortOrder) {
+                StoreSortOrder.DEFAULT -> RefugeIcons.sort
+                StoreSortOrder.DESCENDING -> RefugeIcons.sortDescending
+                StoreSortOrder.ASCENDING -> RefugeIcons.sortAscending
+            }, when (sortOrder) {
                 StoreSortOrder.DEFAULT -> "排序：默认"
                 StoreSortOrder.DESCENDING -> "排序：高到低"
                 StoreSortOrder.ASCENDING -> "排序：低到高"
@@ -550,7 +557,7 @@ private fun StoreLoadingRow(palette: RefugePalette) {
                 Box(Modifier.width(130.dp).height(11.dp).clip(refugeContinuousShape(8.dp)).background(palette.glassStrong.copy(alpha = .18f)))
             }
             Spacer(Modifier.weight(1f))
-            CircularProgressIndicator(Modifier.size(18.dp), color = palette.accent, strokeWidth = 2.dp)
+            RefugeThreeArchedCircle(color = palette.accent, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -630,7 +637,10 @@ private fun StoreProductSheet(
         title = translatedShipName(product.title),
         onDismiss = onDismiss,
         sheetHeight = 720.dp,
-        actionOverContent = false,
+        // Keep the action row floating over the live sheet content. The
+        // content already reserves its final 76 dp, so no opaque rail is
+        // inserted beneath the Liquid Glass button.
+        actionOverContent = true,
         actionBottomPadding = 12.dp,
         transparentActionArea = false,
         surfaceRefraction = false,
@@ -640,46 +650,23 @@ private fun StoreProductSheet(
                 horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ReferenceLiquidButton(
+                StoreActionButton(
                     backdrop = actionBackdrop,
-                    onClick = {
-                        onAddToCart()
-                        addedCount++
-                    },
+                    palette = palette,
                     modifier = Modifier.weight(1f),
-                    minHeight = 56.dp,
-                ) {
-                    Icon(
-                        if (addedCount > 0) RefugeIcons.check else RefugeIcons.cart,
-                        contentDescription = null,
-                        tint = palette.text,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        if (addedCount > 0) "已加入 $addedCount 件" else "加入购物车",
-                        style = RefugeTypography.body(palette).copy(color = palette.text),
-                        maxLines = 1,
-                    )
-                }
+                    icon = if (addedCount > 0) RefugeIcons.check else RefugeIcons.cart,
+                    label = if (addedCount > 0) "已加入 $addedCount 件" else "加入购物车",
+                    onActionClick = { onAddToCart(); addedCount++ },
+                )
                 if (onOpenUpgrade != null) {
-                    ReferenceLiquidButton(
+                    StoreActionButton(
                         backdrop = actionBackdrop,
-                        onClick = onOpenUpgrade,
+                        palette = palette,
                         modifier = Modifier.weight(1f),
-                        minHeight = 56.dp,
-                    ) {
-                        Icon(
-                            RefugeIcons.hangarUpgrade,
-                            contentDescription = null,
-                            tint = palette.text,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            "选择升级",
-                            style = RefugeTypography.body(palette).copy(color = palette.text),
-                            maxLines = 1,
-                        )
-                    }
+                        icon = RefugeIcons.hangarUpgrade,
+                        label = "选择升级",
+                        onActionClick = onOpenUpgrade,
+                    )
                 }
             }
         },
@@ -735,6 +722,51 @@ private fun StoreProductSheet(
 }
 
 @Composable
+private fun StoreActionButton(
+    backdrop: com.kyant.backdrop.Backdrop,
+    palette: RefugePalette,
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onActionClick: () -> Unit,
+) {
+    // The glass is a visual layer; the native Button supplies a dependable
+    // semantics/click target for touch, keyboard and Compose automation.
+    Box(
+        modifier
+            .height(56.dp)
+            .semantics(mergeDescendants = true) {
+                this.onClick {
+                    onActionClick()
+                    true
+                }
+            }
+            .clickable(
+                interactionSource = null,
+                indication = null,
+                onClick = onActionClick,
+            ),
+    ) {
+        OfficialLiquidButtonPort(
+            onClick = {},
+            backdrop = backdrop,
+            modifier = Modifier.fillMaxSize(),
+            handlesClick = false,
+            visualHeight = 56.dp,
+            contentPadding = 0.dp,
+        ) {}
+        Row(
+            Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        ) {
+            Icon(icon, contentDescription = null, tint = palette.text, modifier = Modifier.size(20.dp))
+            Text(label, style = RefugeTypography.body(palette).copy(color = palette.text), maxLines = 1)
+        }
+    }
+}
+
+@Composable
 private fun StoreCartSheet(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
@@ -750,7 +782,7 @@ private fun StoreCartSheet(
         title = "购物车",
         onDismiss = onDismiss,
         sheetHeight = 720.dp,
-        actionOverContent = false,
+        actionOverContent = true,
         actionBottomPadding = 12.dp,
         transparentActionArea = false,
         action = { actionBackdrop ->
@@ -827,7 +859,7 @@ private fun StoreSheetFrame(
         title = title,
         onDismiss = onDismiss,
         sheetHeight = sheetHeight,
-        actionOverContent = false,
+        actionOverContent = true,
         transparentActionArea = false,
         action = { actionBackdrop ->
             ReferenceLiquidButton(

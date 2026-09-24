@@ -9,6 +9,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.layer.CompositingStrategy
+import androidx.compose.ui.semantics.dialog
+import androidx.compose.ui.semantics.semantics
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
@@ -17,6 +19,14 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 private val LocalPageGlassScopeActive = staticCompositionLocalOf { false }
 private val LocalPageContentBackdrop = staticCompositionLocalOf<Backdrop?> { null }
+
+data class RootNavigationOverlay(
+    val key: Any,
+    val content: @Composable (Backdrop) -> Unit,
+)
+
+/** Root navigation is drawn after page content but before in-page modals. */
+val LocalRootNavigationOverlay = staticCompositionLocalOf<RootNavigationOverlay?> { null }
 
 // Only overlays outside the captured tree may consume this backdrop.
 // In-flow controls keep sampling their explicitly supplied lower layer.
@@ -46,26 +56,45 @@ fun PageGlassScope(
     if (LocalPageGlassScopeActive.current) {
         Box(modifier.fillMaxSize()) {
             content()
-            overlay(LocalPageContentBackdrop.current ?: backdrop)
+            val pageBackdrop = LocalPageContentBackdrop.current ?: backdrop
+            overlay(pageBackdrop)
+            LocalRootNavigationOverlay.current?.let { navigation ->
+                androidx.compose.runtime.key(navigation.key) { navigation.content(pageBackdrop) }
+            }
         }
         return
     }
-    // Capture only the page content for floating navigation. It uses a
-    // dedicated backdrop so controls inside the page can keep sampling the
-    // scene backdrop without creating a recursive RenderNode capture graph.
-    val pageContentBackdrop = rememberLayerBackdrop()
+    // Keep content controls on the scene backdrop so they never sample
+    // themselves. The floating root navbar gets a separate page capture so
+    // the live list refracts and blurs beneath it like a real glass layer.
+    val navigationBackdrop = if (LocalRootNavigationOverlay.current != null) {
+        rememberLayerBackdrop()
+    } else {
+        null
+    }
     Box(modifier.fillMaxSize()) {
-        CompositionLocalProvider(
-            LocalPageGlassScopeActive provides true,
-            // In-flow controls sample the scene layer to avoid recording the
-            // same content backdrop they draw into. The floating bottom bar
-            // is outside this capture and samples the live route content.
-            LocalPageOverlayBackdrop provides backdrop,
-            LocalPageContentBackdrop provides pageContentBackdrop,
-        ) {
-            Box(Modifier.fillMaxSize().layerBackdrop(pageContentBackdrop)) { content() }
+        if (navigationBackdrop != null) {
+            Box(Modifier.fillMaxSize().layerBackdrop(navigationBackdrop)) {
+                CompositionLocalProvider(
+                    LocalPageGlassScopeActive provides true,
+                    LocalPageOverlayBackdrop provides backdrop,
+                ) {
+                    content()
+                }
+            }
+        } else {
+            CompositionLocalProvider(
+                LocalPageGlassScopeActive provides true,
+                LocalPageOverlayBackdrop provides backdrop,
+            ) {
+                content()
+            }
         }
-        overlay(pageContentBackdrop)
+        overlay(backdrop)
+        LocalRootNavigationOverlay.current?.let { navigation ->
+            val glassBackdrop = navigationBackdrop ?: backdrop
+            androidx.compose.runtime.key(navigation.key) { navigation.content(glassBackdrop) }
+        }
     }
 }
 
@@ -88,7 +117,7 @@ fun ModalGlassScope(
     } else {
         rememberCombinedBackdrop(underlay, modalBackdrop, contentBackdrop)
     }
-    Box(modifier) {
+    Box(modifier.semantics { dialog() }) {
         Box(Modifier.matchParentSize().layerBackdrop(modalBackdrop)) {
             base()
         }

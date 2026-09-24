@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -35,13 +36,16 @@ import kotlin.math.min
 
 fun Modifier.refugeTopEdgeFade(
     edgeColor: Color,
-    height: androidx.compose.ui.unit.Dp = 36.dp,
+    height: androidx.compose.ui.unit.Dp = 24.dp,
 ): Modifier = drawWithContent {
     drawContent()
     if (edgeColor.alpha > 0f) {
+        // The fade is a background veil, not a white highlight. Dark mode
+        // must fade with black so content disappears into the black canvas.
+        val veilColor = if (edgeColor.luminance() < .5f) Color.Black else edgeColor
         drawRect(
             brush = Brush.verticalGradient(
-                colors = listOf(edgeColor.copy(alpha = .96f), edgeColor.copy(alpha = .62f), Color.Transparent),
+                colors = listOf(veilColor.copy(alpha = .94f), veilColor.copy(alpha = .54f), Color.Transparent),
                 startY = 0f,
                 endY = height.toPx(),
             ),
@@ -114,7 +118,7 @@ fun RefugePullToRefresh(
     Box(
         modifier = modifier
             .nestedScroll(connection)
-            .refugeTopEdgeFade(edgeColor, 34.dp),
+            .refugeTopEdgeFade(edgeColor, 24.dp),
     ) {
         Box(
             Modifier

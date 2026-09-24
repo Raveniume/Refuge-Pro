@@ -7,9 +7,12 @@ import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material.Text
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -24,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -58,8 +62,10 @@ import com.refuge.next.data.ProductionTranslationRepository
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.design.LocalRefugeTranslationEnabled
 import com.refuge.next.material.RefugeScene
-import com.refuge.next.material.PageGlassScope
+import com.refuge.next.material.LocalRootNavigationOverlay
+import com.refuge.next.material.RootNavigationOverlay
 import com.refuge.next.material.LocalOpticalGlassEnabled
+import com.refuge.next.material.LocalRemoteArtworkEnabled
 import com.refuge.next.motion.RefugeRouteTransition
 import com.refuge.next.navigation.LocalRootScrollRegistry
 import com.refuge.next.navigation.RootScrollRegistry
@@ -77,6 +83,8 @@ import com.refuge.next.screens.RootBottomNav
 import com.refuge.next.screens.StoreUpgradePurchaseScreen
 import com.refuge.next.screens.HangarOwnedCcuApplyScreen
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -98,19 +106,40 @@ private fun productionRouteOrder(route: Int): Int = when (route) {
 
 @Composable
 fun RefugeApp() {
+    var mounted by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // Commit a minimal frame before constructing the repository graph. The
+        // Android splash screen can then exit independently of route startup.
+        withFrameNanos { }
+        mounted = true
+    }
+    if (!mounted) {
+        Box(Modifier.fillMaxSize().background(Color.Black))
+    } else {
+        RefugeAppContent()
+    }
+}
+
+@Composable
+private fun RefugeAppContent() {
     val context = LocalContext.current
     val settingsRepository = remember(context) { PreferencesSettingsRepository(context) }
     var settings by remember(settingsRepository) { mutableStateOf(settingsRepository.load()) }
     val userStatus = remember(context) { UserStatusSource(context) }
     val auth = remember(context) { RsiAuthDataSource(context) }
     var authenticated by remember(auth) { mutableStateOf(auth.session()?.isAuthenticated == true) }
+    var startupReady by remember(auth) { mutableStateOf(auth.session()?.isAuthenticated != true) }
     val isDark = settings.darkTheme
     val presence = userStatus.presence
     val isOnline = presence != UserPresence.INVISIBLE
     var showPresencePicker by remember { mutableStateOf(false) }
+    // Page sheets are rendered inside the route content. The root navigation
+    // keeps its layout position, but yields its paint layer while a sheet is
+    // open so it cannot appear above the sheet body.
+    var rootNavigationVisible by remember { mutableStateOf(true) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var rootTab by remember { mutableIntStateOf(0) }
-    var rootNavVisible by remember { mutableStateOf(true) }
+    var showStoreUpgrade by remember { mutableStateOf(false) }
     var selectedOwnedCcuId by remember { mutableStateOf<Long?>(null) }
     val view = LocalView.current
     SideEffect {
@@ -173,7 +202,10 @@ fun RefugeApp() {
             // Let the first cached frame reach the compositor before the
             // authenticated profile refresh starts competing for CPU/IO.
             withFrameNanos { }
-            runCatching { profileRepository.profile() }.onSuccess { sharedProfile = it }
+            delay(900)
+            withContext(Dispatchers.IO) {
+                runCatching { profileRepository.profile() }
+            }.onSuccess { sharedProfile = it }
         }
     }
     val fallbackUtilityRepository = remember(cacheSource) { ProductionUtilityRepository(cacheSource) }
@@ -196,25 +228,48 @@ fun RefugeApp() {
         // can therefore render a real local frame immediately when RSI is
         // unavailable, while their repositories refresh in the background.
         cacheSource.warmCachesInBackground(R.drawable.m80_hero, R.drawable.ship_placeholder)
-        launch { com.refuge.next.data.ShipReferenceCatalog.shared(context).prepare() }
+        withFrameNanos { }
+        delay(350)
+        withContext(Dispatchers.IO) { runCatching { com.refuge.next.data.ShipReferenceCatalog.shared(context).prepare() } }
         val loadouts = com.refuge.next.data.ErkulLoadoutRepository.shared(context)
-        launch { runCatching { loadouts.preload("LIVE") } }
-        // Warm both Erkul branches while the root content is being composed;
-        // switching LIVE/PTU later then reads the complete local snapshot.
-        launch { runCatching { loadouts.preload("PTU") } }
-        launch { runCatching { terminalRepository.items() } }
+        delay(500)
+        withContext(Dispatchers.IO) { runCatching { loadouts.preload("LIVE") } }
+        delay(500)
+        // Keep PTU and the full terminal index in the startup queue so they do
+        // not compete with the first visible page's image and glass shaders.
+        withContext(Dispatchers.IO) { runCatching { loadouts.preload("PTU") } }
+        delay(900)
+        withContext(Dispatchers.IO) { runCatching { terminalRepository.items() } }
+    }
+    LaunchedEffect(authenticated) {
+        if (authenticated && !startupReady) {
+            // Compose a minimal authenticated frame first. The full Hangar
+            // route contains the largest text/image tree and can then enter
+            // after the window has reported its first draw.
+            withFrameNanos { }
+            delay(900)
+            startupReady = true
+        }
     }
     LaunchedEffect(authenticated) {
         if (authenticated) {
+            withFrameNanos { }
+            // Let the cached route and its first visible artwork settle before
+            // authenticated refreshes begin competing for CPU and disk IO.
+            delay(3200)
             // Keep the persisted avatar choice aligned with Spectrum after a
             // process restart. A failed request remains queued in
             // UserStatusSource and is retried on the next authenticated start.
             launch { runCatching { userStatus.syncToRsi(auth) } }
-            launch { runCatching { repository.inventory() } }
-            launch { runCatching { storeRepository.products() } }
-            launch { runCatching { buybackRepository.items() } }
-            launch { runCatching { hangarLogRepository.entries() } }
-            launch { runCatching { utilityRepository.groups() } }
+            withContext(Dispatchers.IO) { runCatching { repository.inventory() } }
+            delay(400)
+            withContext(Dispatchers.IO) { runCatching { storeRepository.products() } }
+            delay(400)
+            withContext(Dispatchers.IO) { runCatching { buybackRepository.items() } }
+            delay(400)
+            withContext(Dispatchers.IO) { runCatching { hangarLogRepository.entries() } }
+            delay(400)
+            withContext(Dispatchers.IO) { runCatching { utilityRepository.groups() } }
         }
     }
 
@@ -227,17 +282,14 @@ fun RefugeApp() {
             // frame keeps shader/image compilation from sharing the first
             // traversal with the upgrade refresh.
             withFrameNanos { }
-            runCatching { ccuRepository.ships() }
-            runCatching { ccuRepository.owned() }
-        }
-    }
-    LaunchedEffect(authenticated, ccuPurchaseRepository) {
-        if (authenticated) {
+            delay(2200)
+            withContext(Dispatchers.IO) { runCatching { ccuRepository.ships() } }
+            withContext(Dispatchers.IO) { runCatching { ccuRepository.owned() } }
+            delay(500)
             // Prime the purchase sheet while the user is browsing the root
             // pages; opening it renders the last snapshot first and then
             // replaces it with the latest read-only catalogue.
-            withFrameNanos { }
-            runCatching { ccuPurchaseRepository.catalog() }
+            withContext(Dispatchers.IO) { runCatching { ccuPurchaseRepository.catalog() } }
         }
     }
 
@@ -246,7 +298,6 @@ fun RefugeApp() {
     BackHandler(enabled = selectedTab !in productionRootRoutes) {
         selectedTab = rootTab
     }
-    LaunchedEffect(selectedTab) { rootNavVisible = true }
 
     val themeReveal = remember { Animatable(0f) }
     val appScope = rememberCoroutineScope()
@@ -280,9 +331,24 @@ fun RefugeApp() {
     val palette = if (isDark) RefugeColors.dark else RefugeColors.light
     val routeStateHolder = rememberSaveableStateHolder()
     val rootScrollRegistry = remember { RootScrollRegistry() }
-    val opticalGlassReady = true
+    var opticalGlassReady by remember { mutableStateOf(false) }
+    var remoteArtworkReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // Let the first cached frame settle before compiling the backdrop graph.
+        // Liquid controls are enabled immediately after the first frame; this
+        // avoids the emulator's OpenGL render-thread stall during cold start.
+        withFrameNanos { }
+        // Backdrop shader compilation is intentionally staged after the first
+        // cached route traversal. This keeps the launch surface responsive on
+        // Android emulators while preserving liquid glass once the page is
+        // stable.
+        delay(4200)
+        opticalGlassReady = true
+        remoteArtworkReady = true
+    }
     CompositionLocalProvider(
         LocalOpticalGlassEnabled provides opticalGlassReady,
+        LocalRemoteArtworkEnabled provides remoteArtworkReady,
         LocalRootScrollRegistry provides rootScrollRegistry,
         com.refuge.next.design.LocalRefugeTranslation provides translationRepository,
         LocalRefugeTranslationEnabled provides settings.translationEnabled,
@@ -301,35 +367,51 @@ fun RefugeApp() {
                     onAuthenticated = { authenticated = true },
                     onClose = {},
                 )
+            } else if (!startupReady) {
+                Box(
+                    Modifier.fillMaxSize().systemBarsPadding(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("我的机库", color = palette.text)
+                }
             } else {
                 val navigate: (Int) -> Unit = { route ->
-                    if (route == selectedTab) {
+                    rootNavigationVisible = true
+                    if (route == 9) {
+                        // Keep the store route mounted so its category, search,
+                        // and scroll state remain intact beneath the purchase sheet.
+                        showStoreUpgrade = true
+                    } else if (route == selectedTab) {
                         appScope.launch { rootScrollRegistry.scrollToTop(route) }
                     } else {
                         if (route in productionRootRoutes) rootTab = route
                         selectedTab = route
                     }
                 }
-                // The official LiquidBottomTabs port must survive route changes.
-                // Keeping it above the route tree preserves the moving lens,
-                // drag velocity and fast-tap continuity instead of rebuilding
-                // the navbar on every destination.
-                PageGlassScope(
-                    backdrop = backdrop,
-                    content = {
-                        // Keep route switches in one Compose tree. The
-                        // transition owns only the incoming page and uses a
-                        // clipped layout offset, so the backdrop graph is not
-                        // duplicated while the page slides into place.
-                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-                          val route = selectedTab
-                          RefugeRouteTransition(
-                              targetState = route,
-                              order = ::productionRouteOrder,
-                              modifier = Modifier.fillMaxSize(),
-                          ) { animatedRoute ->
-                            routeStateHolder.SaveableStateProvider(animatedRoute) {
-                              RefugeContent(
+                CompositionLocalProvider(
+                    LocalRootNavigationOverlay provides RootNavigationOverlay(selectedTab to rootNavigationVisible) { pageBackdrop ->
+                        if (rootNavigationVisible && selectedTab in productionRootRoutes) {
+                            RootBottomNav(
+                                pageBackdrop,
+                                isDark,
+                                if (selectedTab in productionRootRoutes) selectedTab else rootTab,
+                                navigate,
+                            )
+                        }
+                    },
+                ) {
+                    // Each root screen owns its page capture. Its navigation
+                    // overlay is drawn above that capture, while sheets that
+                    // follow the page scope naturally cover both layers.
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                      val route = selectedTab
+                      RefugeRouteTransition(
+                          targetState = route,
+                          order = ::productionRouteOrder,
+                          modifier = Modifier.fillMaxSize(),
+                      ) { animatedRoute ->
+                        routeStateHolder.SaveableStateProvider(animatedRoute) {
+                          RefugeContent(
                                 selectedTab = animatedRoute,
                                 onNavigate = navigate,
                                 onOpenDesignLab = { /* Hangar overflow is intentionally handled in-page. */ },
@@ -366,39 +448,43 @@ fun RefugeApp() {
                                 rootTab = rootTab,
                                 settingsRepository = settingsRepository,
                                 cacheManifest = cacheManifest,
-                                onTerminalOverlayVisibilityChanged = { rootNavVisible = it },
-                              )
-                            }
-                          }
+                                onTerminalOverlayVisibilityChanged = { visible -> rootNavigationVisible = visible },
+                                onOpenStoreUpgrade = { showStoreUpgrade = true },
+                          )
                         }
-                        if (showPresencePicker) {
-                            PresencePickerSheet(
-                                backdrop = backdrop,
-                                palette = palette,
-                                selected = presence,
-                                onSelected = {
-                                    userStatus.set(it)
-                                    showPresencePicker = false
-                                    // The local indicator is immediate; the
-                                    // official Spectrum update continues in
-                                    // the background and is retried if needed.
-                                    appScope.launch { runCatching { userStatus.syncToRsi(auth) } }
-                                },
-                                onDismiss = { showPresencePicker = false },
-                            )
-                        }
-                    },
-                    overlay = { pageBackdrop ->
-                        if (selectedTab in productionRootRoutes && rootNavVisible && !showPresencePicker) {
-                            RootBottomNav(
-                                pageBackdrop,
-                                isDark,
-                                if (selectedTab in productionRootRoutes) selectedTab else rootTab,
-                                navigate,
-                            )
-                        }
-                    },
-                )
+                      }
+                      if (showStoreUpgrade && rootTab == 1) {
+                          StoreUpgradePurchaseScreen(
+                              backdrop = backdrop,
+                              palette = palette,
+                              isDark = isDark,
+                              rootTab = rootTab,
+                              onNavigate = { showStoreUpgrade = false },
+                              onClose = { showStoreUpgrade = false },
+                              auth = auth,
+                              purchaseRepository = ccuPurchaseRepository,
+                              hangarRepository = repository,
+                              translationRepository = translationRepository,
+                              presence = presence,
+                              avatarUrl = sharedProfile.avatarUrl,
+                              onAvatarClick = { showPresencePicker = true },
+                          )
+                      }
+                    }
+                    if (showPresencePicker) {
+                        PresencePickerSheet(
+                            backdrop = backdrop,
+                            palette = palette,
+                            selected = presence,
+                            onSelected = {
+                                userStatus.set(it)
+                                showPresencePicker = false
+                                appScope.launch { runCatching { userStatus.syncToRsi(auth) } }
+                            },
+                            onDismiss = { showPresencePicker = false },
+                        )
+                    }
+                }
             }
             if (themeReveal.value > 0f) {
                 Canvas(Modifier.fillMaxSize()) {
@@ -445,6 +531,7 @@ private fun RefugeContent(
     settingsRepository: SettingsRepository,
     cacheManifest: com.refuge.next.data.ProductionCacheManifest,
     onTerminalOverlayVisibilityChanged: (Boolean) -> Unit,
+    onOpenStoreUpgrade: () -> Unit,
 ) {
       when (selectedTab) {
         0 -> HangarScreen(
@@ -475,7 +562,7 @@ private fun RefugeContent(
             isDark = isDark,
             selectedBottomTab = selectedTab,
             onNavigate = onNavigate,
-            onOpenCcu = { onNavigate(9) },
+            onOpenCcu = onOpenStoreUpgrade,
             isOnline = isOnline,
             presence = presence,
             avatarUrl = avatarUrl,

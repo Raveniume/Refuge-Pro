@@ -141,6 +141,7 @@ fun StoreUpgradePurchaseScreen(
     isDark: Boolean,
     rootTab: Int,
     onNavigate: (Int) -> Unit,
+    onClose: (() -> Unit)? = null,
     auth: RsiAuthDataSource,
     purchaseRepository: CcuPurchaseRepository,
     hangarRepository: com.refuge.next.data.HangarRepository,
@@ -176,13 +177,14 @@ fun StoreUpgradePurchaseScreen(
     var quoteError by remember { mutableStateOf<String?>(null) }
     var sourceLoading by remember { mutableStateOf(false) }
     var sourceError by remember { mutableStateOf<String?>(null) }
+    var sourceFallback by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     val guard = remember { SafeMutationGuard() }
 
     fun previousStage() {
         query = ""
         when (stage) {
-            UpgradeStage.TARGET -> onNavigate(rootTab)
+            UpgradeStage.TARGET -> (onClose ?: { onNavigate(rootTab) }).invoke()
             UpgradeStage.SKU -> { stage = UpgradeStage.TARGET; sku = null; source = null }
             UpgradeStage.SOURCE -> { stage = UpgradeStage.SKU; source = null }
             UpgradeStage.REVIEW -> { stage = UpgradeStage.SOURCE; source = null }
@@ -228,6 +230,7 @@ fun StoreUpgradePurchaseScreen(
     LaunchedEffect(sku?.id, target?.id, purchaseRepository, sourceAttempt) {
         source = null
         sourceError = null
+        sourceFallback = false
         val selectedSku = sku ?: run {
             sourceIds = emptySet()
             sourceLoading = false
@@ -245,9 +248,18 @@ fun StoreUpgradePurchaseScreen(
         sourceIds = purchaseRepository.cachedSourceIds(selectedTarget.id)
         sourceLoading = sourceIds.isEmpty()
         runCatching { purchaseRepository.sourceIds(selectedTarget.id) }
-            .onSuccess { refreshed -> sourceIds = refreshed }
+            .onSuccess { refreshed ->
+                if (refreshed.isNotEmpty()) {
+                    sourceIds = refreshed
+                } else {
+                    // RSI can answer with no ids while the local catalogue is
+                    // still usable. Keep the picker populated silently.
+                    sourceFallback = true
+                }
+            }
             .onFailure { failure ->
                 sourceError = failure.message ?: "可升级来源读取失败"
+                sourceFallback = true
             }
         sourceLoading = false
     }
@@ -284,11 +296,11 @@ fun StoreUpgradePurchaseScreen(
             }
             .toList()
     }
-    val sourceChoices = remember(catalog, sourceIds, target?.id, query, sourceError) {
+    val sourceChoices = remember(catalog, sourceIds, target?.id, query, sourceError, sourceFallback) {
         val sourceUniverse = if (sourceIds.isNotEmpty()) {
             catalog.asSequence().filter { it.id in sourceIds }
-        } else if (sourceError != null) {
-            // Keep the cached catalogue useful while RSI is unavailable.
+        } else if (sourceFallback) {
+            // Keep the local catalogue useful while RSI is unavailable.
             catalog.asSequence()
         } else {
             emptySequence()
@@ -308,7 +320,7 @@ fun StoreUpgradePurchaseScreen(
         backdrop = backdrop,
         palette = palette,
         title = "购买舰船升级",
-        onDismiss = { onNavigate(rootTab) },
+        onDismiss = { (onClose ?: { onNavigate(rootTab) }).invoke() },
         leadingAction = { actionBackdrop ->
             com.refuge.next.material.RefugeCircularHeaderButton(
                 backdrop = actionBackdrop,
@@ -325,6 +337,10 @@ fun StoreUpgradePurchaseScreen(
         actionOverContent = true,
         actionBottomPadding = 12.dp,
         transparentActionArea = false,
+        // This transaction surface is intentionally opaque. The store list
+        // must not ghost through prices or selector rows during the animation.
+        surfaceRefraction = false,
+        surfaceAlpha = 1f,
         contentScrollable = false,
         action = { actionBackdrop ->
             OfficialLiquidButtonPort(
@@ -408,6 +424,7 @@ fun StoreUpgradePurchaseScreen(
                                 sku = null
                                 source = null
                                 sourceIds = emptySet()
+                                sourceFallback = false
                                 notice = null
                                 query = ""
                                 stage = UpgradeStage.SKU
@@ -442,6 +459,8 @@ fun StoreUpgradePurchaseScreen(
                                 ) {
                                     sku = option
                                     source = null
+                                    sourceIds = emptySet()
+                                    sourceFallback = false
                                     notice = null
                                     query = ""
                                     stage = UpgradeStage.SOURCE

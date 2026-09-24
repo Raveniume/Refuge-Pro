@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.*
 import androidx.compose.runtime.*
@@ -85,7 +86,18 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                                     Offset(4.dp.toPx(), size.height - (pip + 1) * (height + gap)), Size(size.width - 8.dp.toPx(), height), CornerRadius(3.dp.toPx()))
                             }
                         }
-                        Icon(glyphs[index], null, tint = if (value > 0) palette.accent else palette.textMuted, modifier = Modifier.size(22.dp))
+                        val allDisabled = members.isNotEmpty() && members.all { member -> active.none { it.path == member.path } }
+                        Icon(
+                            glyphs[index],
+                            contentDescription = if (allDisabled) "启用$group" else "停用$group",
+                            tint = if (allDisabled) palette.textMuted else palette.accent,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clickable(
+                                    enabled = members.isNotEmpty(),
+                                    onClick = { update(togglePowerGroup(draft, members, allDisabled)) },
+                                ),
+                        )
                         Text(group, style = RefugeTypography.caption(palette))
                     }
                 }

@@ -322,14 +322,19 @@ class RsiLiveHangarRepository(
 
     override fun cachedOwnedShips(): List<OwnedShip> {
         val snapshot = currentAccountInventory(memoryOnly = true)
-        val hydrated = snapshot ?: auth.currentAccountSnapshotKey()?.let { snapshots.peekOrLoad(it) }
+        // The first composition must never parse the account JSON on the
+        // Compose thread. `init` preloads this snapshot on IO; until it is
+        // ready, the bundled projection supplies the immediate frame.
+        val hydrated = snapshot
         return if (hydrated != null) resolveOwnedShips(hydrated) else fallback.cachedOwnedShips()
     }
 
     override fun cachedInventory(): List<HangarItem> {
         val accountKey = auth.currentAccountSnapshotKey()
         val snapshot = currentAccountInventory(memoryOnly = true)
-            ?: accountKey?.let { snapshots.peekOrLoad(it) }
+            // Disk hydration is performed by the repository preload job. A
+            // synchronous fallback here would block first draw on a large
+            // hangar snapshot and can trigger an Android input ANR.
         return snapshot ?: fallback.cachedInventory()
     }
 
@@ -892,7 +897,7 @@ class RsiLiveProfileRepository(
     override fun cachedProfile(): ProfileData {
         val session = auth.session() ?: return ProfileData()
         val accountKey = auth.currentAccountSnapshotKey()
-        val cached = accountKey?.let { profileFallback(it, snapshots.peekOrLoad(it)) } ?: ProfileData()
+        val cached = accountKey?.let { profileFallback(it, snapshots.peek(it)) } ?: ProfileData()
         return cached.copy(
             isAuthenticated = session.isAuthenticated,
         )
@@ -1210,7 +1215,7 @@ class RsiLiveBuybackRepository(
     }
 
     override fun cachedItems(): List<BuybackItem> = auth.currentAccountSnapshotKey()
-        ?.let(snapshots::peekOrLoad)
+        ?.let(snapshots::peek)
         ?.takeIf { it.isNotEmpty() }
         ?: fallback.cachedItems()
 
@@ -1413,7 +1418,7 @@ class RsiLiveHangarLogRepository(
     }
 
     override fun cachedEntries(): List<HangarLogEntry> = auth.currentAccountSnapshotKey()
-        ?.let(snapshots::peekOrLoad)
+        ?.let(snapshots::peek)
         ?.takeIf { it.isNotEmpty() }
         ?: fallback?.cachedEntries().orEmpty()
 

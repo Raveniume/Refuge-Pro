@@ -83,7 +83,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil3.compose.AsyncImage
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.R
@@ -191,8 +190,7 @@ fun HangarScreen(
 
     LaunchedEffect(showFilter, showSort, selectedDetail, showLogs, selectedSection) {
         onOverlayVisibilityChanged(
-            selectedSection != 2 &&
-                !showFilter && !showSort && selectedDetail == null && !showLogs,
+            !showFilter && !showSort && selectedDetail == null && !showLogs,
         )
     }
 
@@ -254,7 +252,11 @@ fun HangarScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+                // The refresh container owns the single edge veil. Applying a
+                // second veil here starts below the status-bar inset and
+                // darkens the avatar and header controls when the list is at
+                // rest.
+                modifier = Modifier.fillMaxSize().statusBarsPadding(),
                 state = listState,
                 contentPadding = PaddingValues(
                     start = RefugeSpacing.page,
@@ -358,6 +360,7 @@ fun HangarScreen(
                             backdrop = backdrop,
                             palette = palette,
                             modifier = Modifier.fillMaxWidth(),
+                            padding = PaddingValues(horizontal = 12.dp),
                             roundTop = index == 0,
                             roundBottom = index == visibleInventory.lastIndex,
                         ) {
@@ -682,12 +685,11 @@ private fun HangarRebuyRow(
             if (item.imageUrl.isNullOrBlank()) {
                 HangarImage(item.imageRes, "$displayTitle 图片", Modifier.size(88.dp))
             } else {
-                AsyncImage(
+                RefugeRemoteImage(
                     model = item.imageUrl,
+                    fallback = painterResource(item.imageRes),
                     contentDescription = "$displayTitle 图片",
                     contentScale = ContentScale.Crop,
-                    placeholder = painterResource(item.imageRes),
-                    error = painterResource(item.imageRes),
                     modifier = Modifier.size(88.dp).aspectRatio(1f).clip(refugeContinuousShape(RefugeRadius.image)),
                 )
             }
@@ -1069,16 +1071,19 @@ private fun Modifier.stackEdgeDistanceFade(
             val startY: Float
             val endY: Float
             val colors: List<Color>
+            // DstIn reads only alpha; the visible top veil uses the current
+            // canvas color in refugeTopEdgeFade.
+            val maskColor = Color.White
             if (fadeTop()) {
                 if (visibleStart >= size.height) return@drawWithContent
                 startY = visibleStart
                 endY = (visibleStart + fadeBandPx).coerceAtMost(size.height).coerceAtLeast(startY + 1f)
-                colors = listOf(Color.White.copy(alpha = edgeAlpha), Color.White)
+                colors = listOf(maskColor.copy(alpha = edgeAlpha), maskColor)
             } else {
                 if (visibleEnd <= 0f) return@drawWithContent
                 endY = visibleEnd
                 startY = (visibleEnd - fadeBandPx).coerceAtLeast(0f).coerceAtMost(endY - 1f)
-                colors = listOf(Color.White, Color.White.copy(alpha = edgeAlpha))
+                colors = listOf(maskColor, maskColor.copy(alpha = edgeAlpha))
             }
             drawRect(
                 Brush.verticalGradient(
@@ -1129,7 +1134,7 @@ internal fun OwnedShipHero(
                     modifier = Modifier.size(imageSize).aspectRatio(1f).clip(refugeContinuousShape(RefugeRadius.image)),
                 )
             }
-            Spacer(Modifier.width(RefugeSpacing.md))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(translatedShipName(ship.name), style = RefugeTypography.title(palette).copy(fontSize = 18.sp, lineHeight = 23.sp))
                 Text(
@@ -1177,7 +1182,7 @@ private fun HangarListHeader(
         RefugeCompactUtilityPill(
             backdrop = backdrop,
             palette = palette,
-            icon = RefugeIcons.sort,
+            icon = if (newestFirst) RefugeIcons.sortDescending else RefugeIcons.sortAscending,
             label = if (newestFirst) "排序：最新" else "排序：最早",
             onClick = onSort,
         )
@@ -1231,16 +1236,15 @@ private fun HangarInventoryRow(
             if (item.displayImageUrl.isNullOrBlank()) {
                 HangarImage(item.imageRes, "$displayTitle 图片", Modifier.size(88.dp))
             } else {
-                AsyncImage(
+                RefugeRemoteImage(
                     model = item.displayImageUrl,
+                    fallback = painterResource(item.imageRes),
                     contentDescription = "$displayTitle 图片",
                     contentScale = ContentScale.Crop,
-                    placeholder = painterResource(item.imageRes),
-                    error = painterResource(item.imageRes),
                     modifier = Modifier.size(88.dp).aspectRatio(1f).clip(refugeContinuousShape(RefugeRadius.image)),
                 )
             }
-            Spacer(Modifier.width(RefugeSpacing.md))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.height(88.dp).fillMaxWidth()) {
                 Text(
                     displayTitle,
@@ -1249,32 +1253,38 @@ private fun HangarInventoryRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.weight(1f))
-                Row(
-                    Modifier.fillMaxWidth().height(36.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                    Row(
+                        Modifier.fillMaxWidth().height(36.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                     Row(
                         Modifier.weight(1f).fillMaxHeight(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(item.price, style = RefugeTypography.value(palette), maxLines = 1, softWrap = false)
-                        Spacer(Modifier.width(RefugeSpacing.sm))
                         Text(
-                            remember(item.date) {
-                                runCatching { java.time.LocalDate.parse(item.date,
-                                    java.time.format.DateTimeFormatter.ofPattern("yyyy年MM月dd日")).toString() }
-                                    .getOrDefault(item.date.ifBlank { "—" })
-                            },
-                            style = RefugeTypography.caption(palette),
+                            item.price,
+                            style = RefugeTypography.value(palette),
                             maxLines = 1,
                             softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.width(44.dp),
+                        )
+                        Spacer(Modifier.width(RefugeSpacing.xs))
+                        Text(
+                            hangarDisplayDate(item.date),
+                            style = RefugeTypography.caption(palette).copy(fontSize = 11.sp, lineHeight = 15.sp),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip,
                             modifier = Modifier.weight(1f),
                         )
                     }
                     Row(
-                        Modifier.width(108.dp).fillMaxHeight(),
-                        horizontalArrangement = Arrangement.spacedBy(0.dp),
+                        // Three compact actions keep independent hit targets while the
+                        // date column receives every remaining pixel. This
+                        // preserves the complete yyyy-MM-dd value on compact
+                        // screens instead of clipping it to "2026-".
+                        Modifier.width(90.dp).fillMaxHeight(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         val gifted = item.status.equals("Gifted", true)
@@ -1291,12 +1301,29 @@ private fun HangarInventoryRow(
                 Modifier
                     .align(Alignment.BottomEnd)
                     .fillMaxWidth()
-                    .padding(start = 104.dp)
+                    .padding(start = 100.dp)
                     .height(1.dp)
                     .background(palette.divider),
             )
         }
     }
+}
+
+private fun hangarDisplayDate(raw: String): String {
+    val value = raw.trim()
+    if (value.isBlank()) return "—"
+    val iso = Regex("^(\\d{4}-\\d{2}-\\d{2})").find(value)?.groupValues?.get(1)
+    if (iso != null) return iso
+    val chinese = Regex("^(\\d{4})年(\\d{1,2})月(\\d{1,2})日").find(value)
+    if (chinese != null) {
+        return "%04d-%02d-%02d".format(
+            java.util.Locale.US,
+            chinese.groupValues[1].toInt(),
+            chinese.groupValues[2].toInt(),
+            chinese.groupValues[3].toInt(),
+        )
+    }
+    return value
 }
 
 @Composable
@@ -1465,8 +1492,7 @@ private fun HangarDetailContent(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.Top) {
-            AsyncImage(model = detail.imageUrl, placeholder = painterResource(detail.imageRes),
-                error = painterResource(detail.imageRes), fallback = painterResource(detail.imageRes),
+            RefugeRemoteImage(model = detail.imageUrl, fallback = painterResource(detail.imageRes),
                 contentDescription = detail.title, contentScale = ContentScale.Crop,
                 modifier = Modifier.size(120.dp).clip(refugeContinuousShape(10.dp)))
             Spacer(Modifier.width(12.dp))
@@ -1483,8 +1509,7 @@ private fun HangarDetailContent(
         DetailDivider(palette)
         if (detail.isUpgrade) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = detail.imageUrl,
-                    placeholder = painterResource(detail.imageRes), error = painterResource(detail.imageRes),
+                RefugeRemoteImage(model = detail.imageUrl, fallback = painterResource(detail.imageRes),
                     contentDescription = null, contentScale = ContentScale.Crop,
                     modifier = Modifier.size(120.dp, 80.dp).clip(refugeContinuousShape(10.dp)))
                 Spacer(Modifier.width(12.dp))
@@ -1819,12 +1844,11 @@ private fun DetailIncludedRow(
                     modifier = Modifier.size(120.dp, 80.dp).clip(refugeContinuousShape(10.dp)),
                 )
             } else {
-                AsyncImage(
+                RefugeRemoteImage(
                     model = imageUrl,
+                    fallback = painterResource(imageRes),
                     contentDescription = "$title 图片",
                     contentScale = ContentScale.Crop,
-                    placeholder = painterResource(imageRes),
-                    error = painterResource(imageRes),
                     modifier = Modifier.size(120.dp, 80.dp).clip(refugeContinuousShape(10.dp)),
                 )
             }
@@ -1903,7 +1927,7 @@ private fun InventoryAction(
 ) {
     Box(
         Modifier
-            .size(36.dp)
+            .size(30.dp)
             .clickable(enabled = enabled, onClick = onClick)
             .semantics {
                 role = Role.Button

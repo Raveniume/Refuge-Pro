@@ -92,7 +92,7 @@ fun RefugeGlassSurface(
         padding = padding,
         surface = fill,
         surfaceAlpha = fill.alpha,
-        edgeAlpha = if (palette.background.luminance() < .5f) .16f else .24f,
+        edgeAlpha = 0f,
         content = content,
     )
 }
@@ -158,7 +158,6 @@ fun RefugeQuietControl(
             modifier
                 .clip(shape)
                 .background(palette.glass.copy(alpha = if (pressed) .18f else .12f))
-                .border(1.dp, palette.outline.copy(alpha = .24f), shape)
                 .semantics {
                     role = Role.Button
                     if (contentDescription != null) this.contentDescription = contentDescription
@@ -208,6 +207,7 @@ fun RefugeCompactUtilityPill(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    visualHeight: Dp = 34.dp,
 ) {
     RefugeCompactLiquidPill(
         backdrop = backdrop,
@@ -216,6 +216,7 @@ fun RefugeCompactUtilityPill(
         label = label,
         onClick = onClick,
         modifier = modifier,
+        visualHeight = visualHeight,
     )
 }
 

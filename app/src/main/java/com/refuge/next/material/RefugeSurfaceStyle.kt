@@ -33,13 +33,14 @@ internal fun Modifier.refugeContentMaterial(
                 SurfaceShadow(
                     radius = 10.dp,
                     offset = DpOffset(0.dp, 3.dp),
-                    color = Color.Black.copy(alpha = if (isDark) .22f else .12f),
+                    // A strong black drop shadow reads as a hard outline on
+                    // the black app canvas. Keep only a quiet elevation cue.
+                    color = Color.Black.copy(alpha = if (isDark) .07f else .08f),
                 ),
-            ) else Modifier,
+        ) else Modifier,
         )
         .clip(shape)
         .background(fill)
-        .border(.5.dp, if (isDark) Color.White.copy(alpha = .075f) else Color.Black.copy(alpha = .085f), shape)
 }
 
 internal object RefugeGlassStyle {
@@ -48,11 +49,11 @@ internal object RefugeGlassStyle {
     val controlShadow = Shadow(
         radius = 10.dp,
         offset = DpOffset(0.dp, 2.dp),
-        color = Color.Black.copy(alpha = .14f),
+        color = Color.Transparent,
     )
     val barShadow = Shadow(
         radius = 16.dp,
         offset = DpOffset(0.dp, 4.dp),
-        color = Color.Black.copy(alpha = .16f),
+        color = Color.Transparent,
     )
 }

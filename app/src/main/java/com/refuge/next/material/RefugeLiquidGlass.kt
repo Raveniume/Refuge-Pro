@@ -2,7 +2,6 @@ package com.refuge.next.material
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -34,7 +33,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -50,8 +48,6 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeTypography
@@ -84,7 +80,6 @@ fun RefugeLiquidGlass(
         // This branch intentionally avoids drawBackdrop/lens allocation.
         Box(
             modifier
-                .shadow(12.dp, shape)
                 .clip(shape)
                 .background(
                     Brush.verticalGradient(
@@ -94,22 +89,6 @@ fun RefugeLiquidGlass(
                             surface.copy(alpha = (surfaceAlpha + .12f).coerceAtMost(.48f)),
                         ),
                     ),
-                )
-                .then(
-                    if (edgeAlpha > 0f) Modifier.border(
-                        BorderStroke(
-                            1.dp,
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = (edgeAlpha + .22f).coerceAtMost(.72f)),
-                                    edgeColor.copy(alpha = edgeAlpha * .45f),
-                                    Color.White.copy(alpha = edgeAlpha * .8f),
-                                ),
-                            ),
-                        ),
-                        shape,
-                    )
-                    else Modifier
                 )
                 .padding(padding),
             contentAlignment = Alignment.Center,
@@ -138,21 +117,14 @@ fun RefugeLiquidGlass(
                 shadow = {
                     RefugeGlassStyle.controlShadow
                 },
-                innerShadow = {
-                    InnerShadow(radius = 5.dp + 4.dp * progress, alpha = .10f + progress * .08f)
-                },
+                // Avoid a dark inner rim around every glass control. The
+                // material is separated by blur, refraction and highlight.
+                innerShadow = null,
                 onDrawSurface = {
                     drawRect(surface.copy(alpha = surfaceAlpha + progress * .018f))
                 },
             )
             .clip(shape)
-            .then(
-                if (edgeAlpha > 0f) {
-                    Modifier.border(1.dp, edgeColor.copy(alpha = edgeAlpha), shape)
-                } else {
-                    Modifier
-                },
-            )
             .padding(padding),
         contentAlignment = Alignment.Center,
         content = content,
@@ -213,7 +185,9 @@ fun RefugeLiquidGlassButton(
         // modal actions read as flat transparent text.
         surface = surface,
         surfaceAlpha = surfaceAlpha,
-        edgeAlpha = if (palette.background.luminance() < .5f) edgeAlpha else edgeAlpha.coerceAtLeast(.20f),
+        // Light glass should read as a soft material edge, not a black
+        // one-pixel frame. Keep the stronger edge only for dark surfaces.
+        edgeAlpha = 0f,
         highlightAlpha = highlightAlpha,
         interactionProgress = progress,
         content = content,
@@ -284,7 +258,7 @@ fun RefugeLiquidGlassField(
                     blurRadius = 3.dp,
                     surface = palette.glassStrong,
                     surfaceAlpha = if (focused) .12f else .085f,
-                    edgeAlpha = if (focused) .10f else .06f,
+                    edgeAlpha = 0f,
                     highlightAlpha = .08f,
                     interactionProgress = progress,
                 ) {

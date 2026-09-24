@@ -25,4 +25,25 @@ class ShipIdentityTest {
         assertFalse(candidate.matchesOwnedShip(owned.copy(shipId = 23)))
         assertFalse(candidate.matchesOwnedShip(owned.copy(name = "北极星")))
     }
+
+    @Test fun seedSelectorKeepsOwnedAliasesAndOnlyOffersLowerPricedShips() {
+        val owned = CcuShip("hangar:123", "RSI Perseus", 80_000, 0, owned = true)
+        val catalogAlias = CcuShip("22", "Perseus", 80_000, 0)
+        val lower = CcuShip("lower", "Aurora MR", 25_000, 0)
+        val higher = CcuShip("higher", "Polaris", 100_000, 0)
+
+        assertEquals(listOf("lower", "hangar:123"), plannerStartOptions(higher, listOf(owned, catalogAlias, lower, higher)).map { it.id })
+        assertEquals(listOf("lower", "hangar:123", "higher"), distinctPlannerShips(listOf(owned, catalogAlias, lower, higher)).map { it.id })
+    }
+
+    @Test fun ownedSeedKeepsItsPaidValueWhenCatalogHasSameShipAtAnotherPrice() {
+        val owned = CcuShip("hangar:123", "RSI Perseus", 80_000, 0, owned = true, paidPrice = 45_000)
+        val catalog = CcuShip("22", "Perseus", 100_000, 0)
+
+        val options = distinctPlannerShips(listOf(owned, catalog))
+
+        assertEquals(1, options.size)
+        assertEquals("hangar:123", options.single().id)
+        assertEquals(45_000, options.single().paidPrice)
+    }
 }

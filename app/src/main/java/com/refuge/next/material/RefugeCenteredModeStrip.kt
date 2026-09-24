@@ -3,8 +3,6 @@ package com.refuge.next.material
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -20,8 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.graphics.luminance
 import com.kyant.backdrop.Backdrop
 import androidx.compose.ui.semantics.*
@@ -44,8 +40,7 @@ fun RefugeCenteredModeStrip(backdrop: Backdrop, palette: RefugePalette, labels: 
     // navbar expands on press and collapses after the drag/tap settles.
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    var pointerDown by remember { mutableStateOf(false) }
-    val expanded = pressed || pointerDown || state.isScrollInProgress
+    val expanded = pressed || state.isScrollInProgress
     val widthFraction by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (expanded) 1f else restingFraction.coerceIn(.55f, 1f),
         animationSpec = androidx.compose.animation.core.tween(180),
@@ -68,20 +63,8 @@ fun RefugeCenteredModeStrip(backdrop: Backdrop, palette: RefugePalette, labels: 
             .fillMaxWidth()
             .height(44.dp)
             .testTag("refuge-liquid-mode-selector")
-            // Observe the pointer at the outer track so a drag intercepted by
-            // LazyRow still expands the navbar immediately. The detector does
-            // not consume the event; LazyRow keeps its normal scroll behavior.
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    pointerDown = true
-                    var pressedNow = true
-                    while (pressedNow) {
-                        val event = awaitPointerEvent(PointerEventPass.Final)
-                        pressedNow = event.changes.any { it.pressed }
-                    }
-                    pointerDown = false
-                }
+            .semantics {
+                stateDescription = if (expanded) "expanded" else "collapsed"
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -97,9 +80,20 @@ fun RefugeCenteredModeStrip(backdrop: Backdrop, palette: RefugePalette, labels: 
                 contentPadding = PaddingValues(horizontal = sidePadding),
                 modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)), verticalAlignment = Alignment.CenterVertically) {
                 itemsIndexed(labels) { index, label ->
-                    Box(Modifier.width(cell).height(44.dp).semantics { role = Role.Tab; this.selected = selected == index }
+                    Box(Modifier.width(cell).height(44.dp).semantics {
+                        role = Role.Tab
+                        this.selected = selected == index
+                        contentDescription = label
+                    }
                         .clickable(interactionSource = interactionSource, indication = null) {
-                            scope.launch { state.animateScrollToItem(index); callback(index) }
+                            // Publish the selection immediately.  A quick series of
+                            // taps may cancel the previous scroll animation; the
+                            // selected tab must still follow the user's latest tap.
+                            callback(index)
+                            // A tap is a discrete selection. Updating the list
+                            // position synchronously keeps repeated taps usable
+                            // while the press animation is still settling.
+                            scope.launch { state.scrollToItem(index) }
                         }, contentAlignment = Alignment.Center) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                             icons.getOrNull(index)?.let { icon ->

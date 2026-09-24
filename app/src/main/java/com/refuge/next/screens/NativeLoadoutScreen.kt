@@ -18,7 +18,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.zIndex
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -35,12 +34,20 @@ import zone.ien.hig.MenuAction
 import zone.ien.hig.MenuPickerAction
 
 @Composable
-internal fun NativeLoadoutScreen(backdrop: LayerBackdrop, palette: RefugePalette, isDark: Boolean, onDismiss: () -> Unit) {
+internal fun NativeLoadoutScreen(
+    backdrop: LayerBackdrop,
+    palette: RefugePalette,
+    isDark: Boolean,
+    initialShipId: String? = null,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     val repository = remember { ErkulLoadoutRepository.shared(context) }
     var branch by rememberSaveable { mutableStateOf("LIVE") }
     var catalog by remember { mutableStateOf(repository.cachedCatalog(branch)) }
-    var shipId by rememberSaveable { mutableStateOf(repository.cachedCatalog(branch)?.ships?.firstOrNull()?.optString("className").orEmpty()) }
+    var shipId by rememberSaveable(initialShipId) {
+        mutableStateOf(initialShipId ?: repository.cachedCatalog(branch)?.ships?.firstOrNull()?.optString("className").orEmpty())
+    }
     var ship by remember { mutableStateOf(catalog?.let { repository.cachedShip(it, shipId) }) }
     var buildSlot by rememberSaveable { mutableIntStateOf(0) }
     var draft by remember { mutableStateOf(JSONObject()) }
@@ -53,18 +60,38 @@ internal fun NativeLoadoutScreen(backdrop: LayerBackdrop, palette: RefugePalette
     var notice by remember { mutableStateOf<String?>(null) }
     var compare by rememberSaveable { mutableStateOf(false) }
     var showPerformance by rememberSaveable { mutableStateOf(false) }
+
+    fun normalizeShipIdentity(value: String?): String = value.orEmpty()
+        .trim()
+        .lowercase(Locale.ROOT)
+        .replace('_', ' ')
+        .replace('-', ' ')
+        .replace(Regex("\\s+"), " ")
+
+    fun JSONObject.matchesShipIdentity(identity: String?): Boolean {
+        val key = normalizeShipIdentity(identity)
+        if (key.isBlank()) return false
+        val candidates = listOf(optString("className"), optString("name"), itemName())
+        return candidates.map(::normalizeShipIdentity).any {
+            it == key || it.replace(" ", "") == key.replace(" ", "")
+        }
+    }
+
+    fun resolveShipId(value: String?, source: ErkulCatalog?): String? = source?.ships
+        ?.firstOrNull { it.matchesShipIdentity(value) }
+        ?.optString("className")
+        ?.takeIf(String::isNotBlank)
     LaunchedEffect(branch, attempt) {
         error = null
         // Publish the disk snapshot first. The editor must stay usable when
         // RSI/Erkul is unavailable; the network refresh replaces this frame
         // only after the local data is already on screen.
-        runCatching { repository.catalog(branch) }
+            runCatching { repository.catalog(branch) }
             .onSuccess { loaded ->
                 catalog = loaded
                 busy = false
-                if (loaded.ships.none { it.optString("className") == shipId }) {
-                    shipId = loaded.ships.firstOrNull()?.optString("className").orEmpty()
-                }
+                shipId = resolveShipId(shipId, loaded)
+                    ?: loaded.ships.firstOrNull()?.optString("className").orEmpty()
             }
             .onFailure { failure ->
                 if (catalog == null) error = failure.message ?: "目录载入失败"
@@ -72,9 +99,8 @@ internal fun NativeLoadoutScreen(backdrop: LayerBackdrop, palette: RefugePalette
         runCatching { repository.catalog(branch, refresh = true) }
             .onSuccess { loaded ->
                 catalog = loaded
-                if (loaded.ships.none { it.optString("className") == shipId }) {
-                    shipId = loaded.ships.firstOrNull()?.optString("className").orEmpty()
-                }
+                shipId = resolveShipId(shipId, loaded)
+                    ?: loaded.ships.firstOrNull()?.optString("className").orEmpty()
             }
             .onFailure { failure ->
                 if (catalog == null) error = failure.message ?: "目录载入失败"
@@ -83,7 +109,10 @@ internal fun NativeLoadoutScreen(backdrop: LayerBackdrop, palette: RefugePalette
     }
     LaunchedEffect(catalog, shipId) {
         val current = catalog ?: return@LaunchedEffect
-        val summary = current.ships.firstOrNull { it.optString("className") == shipId } ?: return@LaunchedEffect
+        val summary = current.ships.firstOrNull { it.optString("className") == shipId }
+            ?: current.ships.firstOrNull { it.matchesShipIdentity(shipId) }
+            ?: return@LaunchedEffect
+        if (summary.optString("className") != shipId) shipId = summary.optString("className")
         busy = true; error = null
         repository.cachedShip(current, shipId)?.let { ship = it; busy = false }
         try { ship = repository.ship(current, summary) }
@@ -119,14 +148,15 @@ internal fun NativeLoadoutScreen(backdrop: LayerBackdrop, palette: RefugePalette
         contentScrollable = false,
         contentUnderHandle = true,
         modifier = Modifier.zIndex(5f),
+        surfaceRefraction = false,
+        surfaceAlpha = 1f,
     ) { modalBackdrop ->
-            val canvasColor = if (palette.background.luminance() < .5f) androidx.compose.ui.graphics.Color.Black else palette.background
-            Column(Modifier.fillMaxWidth().background(canvasColor).systemBarsPadding().testTag("native-loadout")) {
+            Column(Modifier.fillMaxWidth().background(palette.contentSurface).systemBarsPadding().testTag("native-loadout")) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.back, "返回", onDismiss)
+                    RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
                     Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f).padding(start = 8.dp))
                     Box {
-                        RefugeHeaderActionBar(backdrop, palette, listOf(
+                        RefugeHeaderActionBar(modalBackdrop, palette, listOf(
                             RefugeFloatingAction(RefugeIcons.refresh, "重置配装", { update(JSONObject()) }),
                             RefugeFloatingAction(RefugeIcons.more, "更多操作", { menu = "more" }),
                         ))
@@ -197,25 +227,50 @@ internal fun NativeLoadoutScreen(backdrop: LayerBackdrop, palette: RefugePalette
                                 }
                             }
                         }
-                        slots.filter { it.port.obj("flags").optBoolean("editable") }.groupBy(::erkulSlotGroup).forEach { (group, groupSlots) ->
+                        // Keep the complete factory tree visible. Fixed mounts are
+                        // part of the stock configuration and must not look like
+                        // empty slots simply because they cannot be replaced.
+                        slots.groupBy(::erkulSlotGroup).forEach { (group, groupSlots) ->
                             item { Text(group, style = RefugeTypography.title(palette)) }
                             items(groupSlots, key = { it.path }) { slot ->
+                                val editable = slot.port.obj("flags").optBoolean("editable") &&
+                                    !slot.port.obj("flags").optBoolean("uneditable")
                                 RefugeLightweightGlassSurface(
                                     palette,
                                     Modifier.fillMaxWidth(),
-                                    onClick = { picker = slot.path },
+                                    onClick = if (editable) ({ picker = slot.path }) else null,
+                                    enabled = editable,
                                     contentDescription = "更换 ${erkulPortLabel(slot)}",
                                     padding = PaddingValues(12.dp),
                                 ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Text(erkulPortLabel(slot), style = RefugeTypography.caption(palette))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                                                Text(translatedGameItemName(slot.item?.itemName() ?: "空挂点", slot.item?.optString("className")),
-                                                    style = RefugeTypography.title(palette))
-                                                Text("S${slot.port.optInt("minSize")}–S${slot.port.optInt("maxSize")} · 点击更换", style = RefugeTypography.caption(palette))
-                                            }
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        Icon(
+                                            loadoutSlotIcon(slot),
+                                            contentDescription = null,
+                                            tint = if (editable) palette.accent else palette.textMuted,
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(erkulPortLabel(slot), style = RefugeTypography.caption(palette))
+                                            Text(
+                                                translatedGameItemName(slot.item?.itemName() ?: "空挂点", slot.item?.optString("className")),
+                                                style = RefugeTypography.title(palette),
+                                            )
+                                            Text(
+                                                "S${slot.port.optInt("minSize")}–S${slot.port.optInt("maxSize")} · ${if (editable) "点击更换" else "原厂组件"}",
+                                                style = RefugeTypography.caption(palette),
+                                            )
                                         }
+                                        Icon(
+                                            if (editable) RefugeIcons.chevron else RefugeIcons.visibilityOff,
+                                            contentDescription = null,
+                                            tint = palette.textMuted,
+                                            modifier = Modifier.size(18.dp),
+                                        )
                                     }
                                 }
                             }
@@ -290,8 +345,26 @@ internal fun NativeLoadoutScreen(backdrop: LayerBackdrop, palette: RefugePalette
 /** Compatibility entry retained for isolated rendering fixtures. */
 @Composable
 internal fun NativeLoadoutScreen(palette: RefugePalette, isDark: Boolean, onDismiss: () -> Unit) {
-    NativeLoadoutScreen(rememberLayerBackdrop(), palette, isDark, onDismiss)
+    NativeLoadoutScreen(
+        backdrop = rememberLayerBackdrop(),
+        palette = palette,
+        isDark = isDark,
+        onDismiss = onDismiss,
+    )
 }
+
+private fun loadoutSlotIcon(slot: ErkulSlot): androidx.compose.ui.graphics.vector.ImageVector =
+    when (slot.item?.optString("type") ?: slot.port.objects("accepts").firstOrNull()?.optString("type")) {
+        "WeaponGun", "Turret", "Missile", "MissileLauncher", "BombLauncher", "Bomb" -> ShipSymbols.weapons
+        "Shield", "ShieldController" -> ShipSymbols.shield
+        "PowerPlant" -> ShipSymbols.power
+        "Cooler" -> ShipSymbols.cooler
+        "QuantumDrive", "JumpDrive", "FlightController" -> ShipSymbols.quantum
+        "Radar" -> ShipSymbols.radar
+        "LifeSupport" -> ShipSymbols.life
+        "Engine" -> ShipSymbols.engine
+        else -> ShipSymbols.loadout
+    }
 
 @Composable
 private fun LoadoutCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop, palette: RefugePalette, title: String, subtitle: String, imageUrl: String? = null, onClick: () -> Unit) {

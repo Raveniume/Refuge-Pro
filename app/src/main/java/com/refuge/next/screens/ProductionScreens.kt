@@ -41,6 +41,8 @@ import com.refuge.next.design.translatedShipName
 import com.refuge.next.design.translatedGameItemName
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -176,7 +178,9 @@ fun PresencePickerSheet(
         onDismiss = onDismiss,
         // Presence is a compact picker. A fixed content-sized sheet keeps the
         // profile page visible instead of opening a full-height modal.
-        sheetHeight = 320.dp,
+        // Five rows plus the handle/title need roughly 250 dp. Keeping the
+        // picker compact leaves the profile header and page context visible.
+        sheetHeight = 268.dp,
     ) { _ ->
         UserPresence.entries.forEach { presence ->
             Row(
@@ -277,7 +281,26 @@ fun TerminalScreen(
     var selectedItem by remember { mutableStateOf<TerminalItem?>(null) }
     var showLoadout by rememberSaveable { mutableStateOf(false) }
     var loadoutShipId by rememberSaveable { mutableStateOf<String?>(null) }
-    val loadoutShip = items.firstOrNull { it.id == loadoutShipId }
+    fun normalizedIdentity(value: String?): String = value.orEmpty()
+        .trim()
+        .lowercase()
+        .replace('_', ' ')
+        .replace('-', ' ')
+        .replace(Regex("\\s+"), " ")
+
+    fun TerminalItem.matchesLoadoutIdentity(identity: String?): Boolean {
+        val key = normalizedIdentity(identity)
+        if (key.isBlank()) return false
+        return listOf(id, className, name)
+            .map(::normalizedIdentity)
+            .any { it == key || it.replace(" ", "") == key.replace(" ", "") }
+    }
+
+    // Terminal ids are UUIDs in the RSI snapshot while Erkul uses className.
+    // Resolve all supported identities before falling back to the first ship;
+    // otherwise a className passed from the row is silently replaced by the
+    // first vehicle in the catalogue.
+    val loadoutShip = items.firstOrNull { it.category == TerminalCategory.VEHICLES && it.matchesLoadoutIdentity(loadoutShipId) }
     // Strings/maps are saved with this root route, including empty slots. Keep
     // each vessel's draft when closing the sheet or visiting another root tab.
     var loadouts by rememberSaveable { mutableStateOf(hashMapOf<String, HashMap<String, String>>()) }
@@ -316,8 +339,9 @@ fun TerminalScreen(
             }
     }
     LaunchedEffect(items) {
-        if (loadoutShipId !in items.map { it.id }) {
-            loadoutShipId = items.firstOrNull { it.category == TerminalCategory.VEHICLES }?.id
+        val vehicles = items.filter { it.category == TerminalCategory.VEHICLES }
+        if (vehicles.none { it.matchesLoadoutIdentity(loadoutShipId) }) {
+            loadoutShipId = vehicles.firstOrNull()?.id
         }
     }
     val category = TerminalCategory.entries[categoryIndex]
@@ -359,7 +383,15 @@ fun TerminalScreen(
                             backdrop,
                             palette,
                             listOf(
-                                RefugeFloatingAction(RefugeIcons.loadout, "改船", { showLoadout = true }),
+                                RefugeFloatingAction(RefugeIcons.loadout, "改船", {
+                                    // Use the first currently visible vehicle in
+                                    // the terminal list. The repository order is
+                                    // a source order and can begin with another
+                                    // hull than the row the user is looking at.
+                                    visible.firstOrNull { it.category == TerminalCategory.VEHICLES }
+                                        ?.let { loadoutShipId = it.id }
+                                    showLoadout = true
+                                }),
                                 RefugeFloatingAction(RefugeIcons.search, "搜索", { showSearch = !showSearch }),
                             ),
                         )
@@ -418,7 +450,7 @@ fun TerminalScreen(
                     Spacer(Modifier.weight(1f))
                     RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.filter, "筛选", { showFilter = true })
                     Spacer(Modifier.width(RefugeSpacing.xs))
-                    RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.sort, if (sortDescending) "排序：Z-A" else "排序：默认", { sortDescending = !sortDescending })
+                    RefugeCompactUtilityPill(backdrop, palette, if (sortDescending) RefugeIcons.sortDescending else RefugeIcons.sortAscending, if (sortDescending) "排序：Z-A" else "排序：默认", { sortDescending = !sortDescending })
                 }
             }
             if (loading && items.isEmpty()) {
@@ -444,7 +476,10 @@ fun TerminalScreen(
                             palette = palette,
                             item = item,
                             isLast = index == visible.lastIndex,
-                            onClick = { selectedItem = item },
+                            onClick = {
+                                if (item.category == TerminalCategory.VEHICLES) loadoutShipId = item.id
+                                selectedItem = item
+                            },
                         )
                     }
                 }
@@ -457,7 +492,13 @@ fun TerminalScreen(
 
     selectedItem?.let { TerminalDetailSheet(backdrop, palette, it) { selectedItem = null } }
     if (showLoadout) {
-        NativeLoadoutScreen(backdrop = backdrop, palette = palette, isDark = isDark, onDismiss = { showLoadout = false })
+        NativeLoadoutScreen(
+            backdrop = backdrop,
+            palette = palette,
+            isDark = isDark,
+            initialShipId = loadoutShip?.className ?: loadoutShip?.id,
+            onDismiss = { showLoadout = false },
+        )
         /* Legacy terminal loadout remains compiled for migration previews. */
         /*
         TerminalLoadoutSheet(
@@ -1492,8 +1533,6 @@ fun CcuScreen(
         }.onSuccess { (loadedShips, loadedOwned) ->
             ships = loadedShips
             owned = loadedOwned
-            if (seed?.id !in loadedShips.map { it.id }) seed = null
-            if (target?.id !in loadedShips.map { it.id }) target = null
         }.onFailure { loadError = it.message ?: "CCU 目录读取失败" }
         loading = false
     }
@@ -1513,18 +1552,18 @@ fun CcuScreen(
         }
     }
     val allPlannerShips = remember(ships, ownedShipOptions) {
-        (ownedShipOptions + ships)
-            .distinctBy { it.id.ifBlank(it::normalizedAlias) }
-            .sortedBy { it.purchasePrice }
+        distinctPlannerShips(ownedShipOptions + ships)
     }
     val targetCatalog = remember(ships, ownedShipOptions) {
         ships.filterNot { candidate -> ownedShipOptions.any { it.sameIdentityAs(candidate) } }
     }
     val availableTargets = remember(seed, targetCatalog) { seed?.let { eligibleTargetShips(it, targetCatalog) } ?: targetCatalog }
-    val availableStarts = remember(target, allPlannerShips) {
-        target?.let { destination -> allPlannerShips.filter { it.purchasePrice < destination.purchasePrice } } ?: allPlannerShips
-    }
-    LaunchedEffect(targetCatalog) {
+    val availableStarts = remember(target, allPlannerShips) { plannerStartOptions(target, allPlannerShips) }
+    LaunchedEffect(allPlannerShips, targetCatalog) {
+            if (seed != null && allPlannerShips.none { it.sameIdentityAs(seed!!) }) {
+                seed = null
+                calculated = false
+            }
         if (target != null && targetCatalog.none { it.sameIdentityAs(target!!) }) target = null
     }
     LaunchedEffect(seed, target) { calculated = false }
@@ -1641,22 +1680,16 @@ fun HangarUpgradePanel(
         loading = false
     }
     val ships = remember(catalog, ownedSeeds) {
-        (ownedSeeds + catalog)
-            .distinctBy { it.id.ifBlank(it::normalizedAlias) }
-            .sortedBy { it.purchasePrice }
+        distinctPlannerShips(ownedSeeds + catalog)
     }
     val targetCatalog = remember(catalog, ownedSeeds) {
-        catalog
-            .distinctBy { it.id.ifBlank(it::normalizedAlias) }
+        distinctPlannerShips(catalog)
             .filterNot { candidate -> ownedSeeds.any { ownedShip -> candidate.sameIdentityAs(ownedShip) } }
-            .sortedBy { it.purchasePrice }
     }
     val availableTargets = remember(start, targetCatalog) {
         start?.let { current -> targetCatalog.filter { it.purchasePrice > current.purchasePrice } } ?: targetCatalog
     }
-    val availableStarts = remember(target, ships) {
-        target?.let { destination -> ships.filter { it.purchasePrice < destination.purchasePrice } } ?: ships
-    }
+    val availableStarts = remember(target, ships) { plannerStartOptions(target, ships) }
     LaunchedEffect(targetCatalog) {
         if (target != null && targetCatalog.none { it.sameIdentityAs(target!!) }) target = null
     }
@@ -1983,8 +2016,19 @@ private fun ShipSelectorSheet(
     onSelected: (CcuShip) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    val visibleShips = remember(ships, query) {
-        ships.filter { query.isBlank() || it.name.contains(query.trim(), ignoreCase = true) }
+    val translation = com.refuge.next.design.LocalRefugeTranslation.current
+    var localizedNames by remember { mutableStateOf(emptyMap<String, String>()) }
+    LaunchedEffect(ships, translation) {
+        localizedNames = withContext(Dispatchers.IO) {
+            ships.associate { it.id to translation?.translate(it.name).orEmpty() }
+        }
+    }
+    val visibleShips = remember(ships, query, localizedNames) {
+        val normalizedQuery = query.trim()
+        ships.filter {
+            normalizedQuery.isBlank() || it.name.contains(normalizedQuery, ignoreCase = true) ||
+                localizedNames[it.id].orEmpty().contains(normalizedQuery, ignoreCase = true)
+        }
             .sortedWith(compareByDescending<CcuShip> { it.owned }.thenBy { it.purchasePrice })
     }
     RefugeLiquidSheet(
@@ -1993,6 +2037,11 @@ private fun ShipSelectorSheet(
         title = title,
         onDismiss = onDismiss,
         sheetHeight = 760.dp,
+        // Ship selection is a focused upgrade decision. Keep the content
+        // surface opaque so the planner behind it cannot ghost through rows or
+        // make the list look disabled while the sheet is settling.
+        surfaceRefraction = false,
+        surfaceAlpha = 1f,
         // The selector owns its LazyColumn so the sheet must not wrap it in a
         // second verticalScroll. This keeps large RSI catalogues virtualized.
         contentScrollable = false,
@@ -2444,6 +2493,17 @@ internal fun TerminalItem.terminalSpecificationSections(): List<TerminalSpecific
         if (source.isNotEmpty()) add(TerminalSpecificationSection("来源", source))
     }
 }
+
+internal fun distinctPlannerShips(ships: Iterable<CcuShip>): List<CcuShip> = buildList<CcuShip> {
+    ships.forEach { candidate ->
+        if (none { it.sameIdentityAs(candidate) }) add(candidate)
+    }
+}.sortedBy { it.purchasePrice }
+
+internal fun plannerStartOptions(target: CcuShip?, ships: Iterable<CcuShip>): List<CcuShip> =
+    distinctPlannerShips(ships).filter { candidate ->
+        target == null || (candidate.purchasePrice < target.purchasePrice && !candidate.sameIdentityAs(target))
+    }
 
 private fun translatedWikiValue(value: String): String = when (value.trim().lowercase()) {
     "spacecraft" -> "飞船"

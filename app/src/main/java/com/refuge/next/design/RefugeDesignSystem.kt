@@ -61,13 +61,13 @@ object RefugeColors {
     )
 
     val light = RefugePalette(
+        // Match the iOS grouped-background relationship: the page is a
+        // visibly tinted system group and content surfaces remain white.
         background = Color(0xFFF2F2F7),
         backgroundEdge = Color(0xFFE5E5EA),
         backgroundLight = Color(0xFFFFFFFF),
-        contentSurface = Color.White,
-        // Slightly tinted elevated surfaces stay distinct from the grouped
-        // canvas while preserving a neutral iOS light appearance.
-        contentSurfaceStrong = Color(0xFFFBFBFD),
+        contentSurface = Color(0xFFFFFFFF),
+        contentSurfaceStrong = Color(0xFFEFEFF4),
         glass = Color.White.copy(alpha = .54f),
         glassStrong = Color.White.copy(alpha = .70f),
         glassSelection = Color.Black.copy(alpha = .075f),
@@ -79,8 +79,8 @@ object RefugeColors {
         positive = Color(0xFF087B51),
         warning = Color(0xFF9A6700),
         error = Color(0xFFFF3B30),
-        divider = Color(0xFF3C3C43).copy(alpha = .30f),
-        outline = Color(0xFF3C3C43).copy(alpha = .30f),
+        divider = Color(0xFF3C3C43).copy(alpha = .24f),
+        outline = Color(0xFF3C3C43).copy(alpha = .26f),
         scrim = Color.Black.copy(alpha = .34f),
     )
 }
