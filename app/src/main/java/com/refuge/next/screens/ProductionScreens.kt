@@ -597,77 +597,102 @@ private fun TerminalLoadoutSheet(
     val ports = remember(vessel) { vessel?.ports.orEmpty().filter { com.refuge.next.data.terminalPortCategory(it) != null } }
     val selectedIds = overrides.mapValues { it.value.takeIf(String::isNotEmpty) }
     val stats = remember(vessel, overrides, catalog) { vessel?.let { com.refuge.next.data.calculateTerminalPortPerformance(it, selectedIds, catalog) } }
-    RefugeLiquidSheet(backdrop, palette, "改船 / 配装", onDismiss, sheetHeight = 780.dp) { modalBackdrop ->
-        LoadoutOption(palette, vessel?.let { translatedGameItemName(it.name, it.className) } ?: "选择舰船", "", vessel != null) {
-            activePort = null
-            onOpenPicker(TerminalCategory.VEHICLES)
-        }
-        if (loading) Text("正在读取原厂挂点与性能…", style = RefugeTypography.caption(palette))
-        Text("配装预览 · " + (vessel?.sourceVersion ?: "版本未知"), style = RefugeTypography.headline(palette))
-        RefugeContentSurface(palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(12.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth()) {
-                    LoadoutMetric(palette, "总质量 kg", stats?.massTotalKg?.cleanNumber() ?: "—")
-                    LoadoutMetric(palette, "护盾容量", stats?.shieldHp?.cleanNumber() ?: "—")
-                    LoadoutMetric(palette, "货舱 SCU", stats?.cargoScu?.cleanNumber() ?: "—")
-                }
-                Row(Modifier.fillMaxWidth()) {
-                    LoadoutMetric(palette, "供电段", stats?.powerGeneration?.cleanNumber() ?: "—")
-                    LoadoutMetric(palette, "冷却段", stats?.coolingGeneration?.cleanNumber() ?: "—")
-                    LoadoutMetric(palette, "驾驶员 DPS", stats?.pilotDps?.cleanNumber() ?: "—")
-                }
-            }
-        }
-        if (!loading && ports.isEmpty()) {
-            Text("尚无完整挂点数据，无法验证配装。", style = RefugeTypography.body(palette))
-            LoadoutOption(palette, "重新读取", "获取舰船详情", false) { attempt++ }
-        }
-        ports.forEach { port ->
-            val id = if (overrides.containsKey(port.id)) overrides[port.id] else port.equippedItemId
-            val equipped = catalog[id] ?: port.equippedItem?.takeIf { it.id == id }
-            val editable = com.refuge.next.data.terminalPortCanEdit(port)
-            Text(port.id.substringAfter(':').replace('/', ' '), style = RefugeTypography.caption(palette))
-            LoadoutOption(
-                palette, equipped?.let { translatedGameItemName(it.name, it.className) } ?: if (id.isNullOrEmpty()) "空槽" else "组件资料缺失",
-                listOfNotNull(com.refuge.next.data.terminalPortCategory(port)?.label, port.minSize?.let { "S" + it },
-                    if (editable) "点击更换" else "固定组件 / 保留装配结构").joinToString(" · "),
-                overrides.containsKey(port.id),
-            ) { if (editable && !loading) { activePort = port; onOpenPicker(com.refuge.next.data.terminalPortCategory(port)!!) } }
-            equipped?.performance?.let { p ->
-                val values = listOfNotNull(p.burstDps?.let { "单件爆发 DPS " + it.cleanNumber() },
-                    p.sustainedDps?.takeIf { equipped.category == TerminalCategory.SHIP_COMPONENTS }?.let { "单件持续 DPS " + it.cleanNumber() },
-                    p.shieldHp?.let { "容量 " + it.cleanNumber() }, p.quantumSpeed?.let { "量子速度 " + it.cleanNumber() + " m/s" })
-                if (values.isNotEmpty()) Text(values.joinToString(" · "), style = RefugeTypography.caption(palette))
-            }
-        }
-        if (overrides.isNotEmpty()) LoadoutOption(palette, "恢复原厂配装", "清除本舰船的本地更改", false) { onOverridesChanged(emptyMap()) }
-        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+    val pickerPort = activePort
+    val pickerOptions = remember(items, picker, pickerPort, search, vessel?.sourceVersion) {
+        if (picker == null) emptyList()
+        else items.filter { option ->
+            (if (picker == TerminalCategory.VEHICLES) option.category == picker else pickerPort != null && com.refuge.next.data.terminalPortAccepts(pickerPort, option, vessel?.sourceVersion)) &&
+                (search.isBlank() || option.name.contains(search, true) || option.manufacturer.contains(search, true) || option.className.orEmpty().contains(search, true))
+        }.sortedBy { it.name }
     }
-    if (picker != null) {
-        val port = activePort
-        val options = remember(items, picker, port, search, vessel?.sourceVersion) {
-            items.filter { option ->
-                (if (picker == TerminalCategory.VEHICLES) option.category == picker else port != null && com.refuge.next.data.terminalPortAccepts(port, option, vessel?.sourceVersion)) &&
-                    (search.isBlank() || option.name.contains(search, true) || option.manufacturer.contains(search, true) || option.className.orEmpty().contains(search, true))
-            }.sortedBy { it.name }
-        }
-        RefugeLiquidSheet(backdrop, palette, if (picker == TerminalCategory.VEHICLES) "选择舰船" else "更换组件", onClosePicker,
-            sheetHeight = 760.dp, contentScrollable = false) {
-            androidx.compose.material.TextField(value = search, onValueChange = { search = it },
-                label = { Text("搜索名称 / 制造商") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Text("匹配 " + options.size + " 项", style = RefugeTypography.caption(palette))
-            if (picker != TerminalCategory.VEHICLES && port != null) {
-                LoadoutOption(palette, "恢复此槽原厂组件", "仅修改本地预览", false) { onOverridesChanged(overrides - port.id); onClosePicker() }
-                LoadoutOption(palette, "卸下此槽组件", "保留空槽", false) { onOverridesChanged(overrides + (port.id to "")); onClosePicker() }
+    // Keep one sheet and one backdrop capture for the whole loadout flow.
+    // Replacing nested sheets on Android 15 can recurse through RenderThread.
+    RefugeLiquidSheet(
+        backdrop = backdrop,
+        palette = palette,
+        title = if (picker == null) "改船 / 配装" else if (picker == TerminalCategory.VEHICLES) "选择舰船" else "更换组件",
+        onDismiss = if (picker == null) onDismiss else onClosePicker,
+        sheetHeight = if (picker == null) 780.dp else 760.dp,
+        contentScrollable = picker == null,
+        surfaceRefraction = false,
+        surfaceAlpha = 1f,
+        leadingAction = { modalBackdrop ->
+            RefugeCircularHeaderButton(
+                modalBackdrop,
+                palette,
+                RefugeIcons.back,
+                "返回",
+                if (picker == null) onDismiss else onClosePicker,
+            )
+        },
+    ) { modalBackdrop ->
+        if (picker == null) {
+            LoadoutOption(palette, vessel?.let { translatedGameItemName(it.name, it.className) } ?: "选择舰船", "", vessel != null) {
+                activePort = null
+                onOpenPicker(TerminalCategory.VEHICLES)
+            }
+            if (loading) Text("正在读取原厂挂点与性能…", style = RefugeTypography.caption(palette))
+            Text("配装预览 · " + (vessel?.sourceVersion ?: "版本未知"), style = RefugeTypography.headline(palette))
+            RefugeContentSurface(palette, Modifier.fillMaxWidth(), radius = RefugeRadius.panel, padding = PaddingValues(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth()) {
+                        LoadoutMetric(palette, "总质量 kg", stats?.massTotalKg?.cleanNumber() ?: "—")
+                        LoadoutMetric(palette, "护盾容量", stats?.shieldHp?.cleanNumber() ?: "—")
+                        LoadoutMetric(palette, "货舱 SCU", stats?.cargoScu?.cleanNumber() ?: "—")
+                    }
+                    Row(Modifier.fillMaxWidth()) {
+                        LoadoutMetric(palette, "供电段", stats?.powerGeneration?.cleanNumber() ?: "—")
+                        LoadoutMetric(palette, "冷却段", stats?.coolingGeneration?.cleanNumber() ?: "—")
+                        LoadoutMetric(palette, "驾驶员 DPS", stats?.pilotDps?.cleanNumber() ?: "—")
+                    }
+                }
+            }
+            if (!loading && ports.isEmpty()) {
+                Text("尚无完整挂点数据，无法验证配装。", style = RefugeTypography.body(palette))
+                LoadoutOption(palette, "重新读取", "获取舰船详情", false) { attempt++ }
+            }
+            ports.forEach { port ->
+                val id = if (overrides.containsKey(port.id)) overrides[port.id] else port.equippedItemId
+                val equipped = catalog[id] ?: port.equippedItem?.takeIf { it.id == id }
+                val editable = com.refuge.next.data.terminalPortCanEdit(port)
+                Text(port.id.substringAfter(':').replace('/', ' '), style = RefugeTypography.caption(palette))
+                LoadoutOption(
+                    palette, equipped?.let { translatedGameItemName(it.name, it.className) } ?: if (id.isNullOrEmpty()) "空槽" else "组件资料缺失",
+                    listOfNotNull(com.refuge.next.data.terminalPortCategory(port)?.label, port.minSize?.let { "S" + it },
+                        if (editable) "点击更换" else "固定组件 / 保留装配结构").joinToString(" · "),
+                    overrides.containsKey(port.id),
+                ) { if (editable && !loading) { activePort = port; onOpenPicker(com.refuge.next.data.terminalPortCategory(port)!!) } }
+                equipped?.performance?.let { p ->
+                    val values = listOfNotNull(p.burstDps?.let { "单件爆发 DPS " + it.cleanNumber() },
+                        p.sustainedDps?.takeIf { equipped.category == TerminalCategory.SHIP_COMPONENTS }?.let { "单件持续 DPS " + it.cleanNumber() },
+                        p.shieldHp?.let { "容量 " + it.cleanNumber() }, p.quantumSpeed?.let { "量子速度 " + it.cleanNumber() + " m/s" })
+                    if (values.isNotEmpty()) Text(values.joinToString(" · "), style = RefugeTypography.caption(palette))
+                }
+            }
+            if (overrides.isNotEmpty()) LoadoutOption(palette, "恢复原厂配装", "清除本舰船的本地更改", false) { onOverridesChanged(emptyMap()) }
+            RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
+        } else {
+            ReferenceSearchField(
+                backdrop = modalBackdrop,
+                isDark = isDark,
+                value = search,
+                onValueChange = { search = it },
+                searchIcon = RefugeIcons.search,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("匹配 " + pickerOptions.size + " 项", style = RefugeTypography.caption(palette))
+            if (picker != TerminalCategory.VEHICLES && pickerPort != null) {
+                LoadoutOption(palette, "恢复此槽原厂组件", "仅修改本地预览", false) { onOverridesChanged(overrides - pickerPort.id); onClosePicker() }
+                LoadoutOption(palette, "卸下此槽组件", "保留空槽", false) { onOverridesChanged(overrides + (pickerPort.id to "")); onClosePicker() }
             }
             LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (options.isEmpty()) item { Text("没有匹配组件；仅显示尺寸、类型、标签和版本可验证的选项。", style = RefugeTypography.body(palette)) }
-                items(options, key = { it.id }) { option ->
+                if (pickerOptions.isEmpty()) item { Text("没有匹配组件；仅显示尺寸、类型、标签和版本可验证的选项。", style = RefugeTypography.body(palette)) }
+                items(pickerOptions, key = { it.id }) { option ->
                     LoadoutOption(palette, translatedGameItemName(option.name, option.className),
                         listOfNotNull(translatedShipName(option.manufacturer), option.size?.let { "S" + it }).joinToString(" · "),
-                        option.id == if (picker == TerminalCategory.VEHICLES) ship?.id else (overrides[port?.id] ?: port?.equippedItemId)) {
+                        option.id == if (picker == TerminalCategory.VEHICLES) ship?.id else (overrides[pickerPort?.id] ?: pickerPort?.equippedItemId)) {
                         if (picker == TerminalCategory.VEHICLES) onShipSelected(option)
-                        else if (port != null) onOverridesChanged(overrides + (port.id to option.id))
+                        else if (pickerPort != null) onOverridesChanged(overrides + (pickerPort.id to option.id))
                         onClosePicker()
                     }
                 }
@@ -2187,12 +2212,16 @@ internal fun ShipSelectorSheet(
                     .height(536.dp),
             ) {
                 val viewportHeight = 536.dp
-                RefugeStandardGlassSurface(
-                    backdrop = modalBackdrop,
-                    palette = palette,
-                    modifier = Modifier.fillMaxWidth().height(viewportHeight),
-                    radius = RefugeRadius.panel,
-                    padding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                // The selector sheet is already an opaque glass surface. A
+                // second backdrop capture around its LazyColumn can capture
+                // the sheet itself on Android 15 and recurse in libhwui.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(viewportHeight)
+                        .clip(refugeContinuousShape(RefugeRadius.panel))
+                        .background(palette.contentSurfaceStrong)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
                 ) {
                     LazyColumn(
                         Modifier.fillMaxSize(),
@@ -2397,6 +2426,9 @@ private fun TerminalDetailSheet(backdrop: LayerBackdrop, palette: RefugePalette,
         onDismiss = onDismiss,
         sheetHeight = estimatedHeight,
         respectTopSafeArea = true,
+        leadingAction = { modalBackdrop ->
+            RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
+        },
         // The sheet reserves the action rail in its scroll viewport. This
         // keeps the final specification row readable above “完成”.
         actionOverContent = true,

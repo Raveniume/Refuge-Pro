@@ -62,6 +62,7 @@ import com.refuge.next.design.RefugeTypography
 import com.refuge.next.design.translatedShipName
 import com.refuge.next.design.refugeContinuousShape
 import com.refuge.next.material.RefugeCompactUtilityPill
+import com.refuge.next.material.RefugeCircularHeaderButton
 import com.refuge.next.material.PageGlassScope
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeFloatingAction
@@ -647,6 +648,9 @@ private fun StoreProductSheet(
         title = translatedShipName(product.title),
         onDismiss = onDismiss,
         sheetHeight = 720.dp,
+        leadingAction = { modalBackdrop ->
+            RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
+        },
         // Keep the action row floating over the live sheet content. The
         // content already reserves its final 76 dp, so no opaque rail is
         // inserted beneath the Liquid Glass button.
@@ -787,6 +791,9 @@ private fun StoreCartSheet(
         title = "购物车",
         onDismiss = onDismiss,
         sheetHeight = 720.dp,
+        leadingAction = { modalBackdrop ->
+            RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
+        },
         actionOverContent = true,
         actionBottomPadding = 12.dp,
         transparentActionArea = false,

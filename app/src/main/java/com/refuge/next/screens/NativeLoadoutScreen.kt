@@ -140,6 +140,7 @@ internal fun NativeLoadoutScreen(
     val slots = remember(ship, catalog, draft) { if (ship != null && catalog != null) resolveErkulSlots(ship!!, catalog!!, draft.obj("overrides")) else emptyList() }
     val metrics = remember(ship, slots, draft) { ship?.let { calculateErkulMetrics(it, slots, draft) } }
     val stock = remember(ship, catalog) { if (ship != null && catalog != null) calculateErkulMetrics(ship!!, resolveErkulSlots(ship!!, catalog!!, JSONObject()), JSONObject()) else null }
+    val currentCatalog = catalog
     BackHandler { if (picker != null) picker = null else onDismiss() }
     // Keep the editor in the activity composition. A platform Dialog creates
     // a second window and removes the live page during its opening frame.
@@ -148,9 +149,11 @@ internal fun NativeLoadoutScreen(
         palette = palette,
         title = "",
         onDismiss = onDismiss,
-        leadingAction = { modalBackdrop ->
-            RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
-        },
+        leadingAction = if (picker == null) {
+            { modalBackdrop ->
+                RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
+            }
+        } else null,
         sheetHeight = 760.dp,
         contentScrollable = false,
         contentUnderHandle = true,
@@ -158,7 +161,8 @@ internal fun NativeLoadoutScreen(
         surfaceRefraction = false,
         surfaceAlpha = 1f,
     ) { modalBackdrop ->
-            Column(Modifier.fillMaxSize().testTag("native-loadout")) {
+            Box(Modifier.fillMaxSize().testTag("native-loadout")) {
+            Column(Modifier.fillMaxSize()) {
                 // The circular back control is anchored to the sheet corner.
                 // Reserve its horizontal footprint so the title never paints
                 // underneath the control while the sheet enters or settles.
@@ -343,6 +347,31 @@ internal fun NativeLoadoutScreen(
                     })
                 }
             }
+            if (picker != null && currentCatalog != null) {
+                val activeSlot = slots.firstOrNull { it.path == picker }
+                val pickerMode = picker
+                NativeLoadoutPicker(
+                    modalBackdrop,
+                    palette,
+                    isDark,
+                    currentCatalog,
+                    activeSlot,
+                    pickerMode == "ship",
+                    onDismiss = { picker = null },
+                    onPick = { selected ->
+                        if (pickerMode == "ship") {
+                            selected?.optString("className")?.takeIf { it.isNotBlank() }?.let { shipId = it }
+                        } else if (activeSlot != null) {
+                            val overrides = JSONObject(draft.obj("overrides").toString())
+                            overrides.keys().asSequence().filter { it.startsWith(activeSlot.path + "/") }.toList().forEach { overrides.remove(it) }
+                            overrides.put(activeSlot.path, selected?.optString("className") ?: "")
+                            update(JSONObject(draft.toString()).put("overrides", overrides))
+                        }
+                        picker = null
+                    },
+                )
+            }
+            }
             if (showPerformance && ship != null && metrics != null) {
                 LoadoutPerformanceSheet(
                     backdrop = backdrop,
@@ -381,18 +410,6 @@ internal fun NativeLoadoutScreen(
                 Box(Modifier.fillMaxSize().padding(bottom = 32.dp), contentAlignment = Alignment.BottomCenter) {
                     Text(message, style = RefugeTypography.body(palette), modifier = Modifier.background(palette.contentSurface).padding(12.dp))
                 }
-            }
-            val currentCatalog = catalog
-            if (picker != null && currentCatalog != null) {
-                val activeSlot = slots.firstOrNull { it.path == picker }
-                NativeLoadoutPicker(backdrop, palette, isDark, currentCatalog, activeSlot, picker == "ship", onDismiss = { picker = null }, onPick = { selected ->
-                    if (picker == "ship") shipId = selected!!.getString("className") else if (activeSlot != null) {
-                        val overrides = JSONObject(draft.obj("overrides").toString())
-                        overrides.keys().asSequence().filter { it.startsWith(activeSlot.path + "/") }.toList().forEach { overrides.remove(it) }
-                        overrides.put(activeSlot.path, selected?.optString("className") ?: "")
-                        update(JSONObject(draft.toString()).put("overrides", overrides))
-                    }
-                })
             }
         }
     }
@@ -523,14 +540,30 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
     val classes = remember(all) { all.map { it.obj("i18n").optString("class") }.filter { it.isNotBlank() }.distinct().sorted() }
     val visible = remember(all, query, manufacturer, selectedClass) { all.filter { (query.isBlank() || it.itemName().contains(query,true) || translation?.translateGameItem(it.itemName())?.contains(query, true) == true) &&
         (manufacturer.isBlank() || maker(it) == manufacturer) && (selectedClass.isBlank() || it.obj("i18n").optString("class") == selectedClass) }.sortedBy { it.itemName() } }
-    RefugeLiquidSheet(backdrop, palette, if (ships) "选择舰船" else "更换组件", onDismiss, sheetHeight = 780.dp, contentScrollable = false, dismissSignal = dismissSignal) { modalBackdrop ->
+    // This is a page inside the existing loadout sheet. Keeping it in the
+    // same opaque surface avoids nested backdrop captures on Android 15,
+    // while preserving the sheet's handle, continuous corner and dismissal
+    // animation.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .zIndex(50f)
+            .background(palette.contentSurfaceStrong)
+            .padding(horizontal = 16.dp),
+    ) {
+        Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.back, "返回", onDismiss)
+                Spacer(Modifier.width(12.dp))
+                Text(if (ships) "选择舰船" else "更换组件", style = RefugeTypography.title(palette))
+            }
         zone.ien.hig.CupertinoSearchTextField(value = query, onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth(), textStyle = RefugeTypography.body(palette),
             placeholder = { Text("搜索舰船或组件", style = RefugeTypography.caption(palette)) }, cancelButton = null)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.weight(1f)) {
                 RefugeCompactUtilityPill(
-                    modalBackdrop, palette, RefugeIcons.filter,
+                    backdrop, palette, RefugeIcons.filter,
                     manufacturer.ifBlank { "全部厂商" },
                     onClick = { manufacturerMenu = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -538,7 +571,7 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
                 zone.ien.hig.CupertinoDropdownMenu(
                     expanded = manufacturerMenu,
                     onDismissRequest = { manufacturerMenu = false },
-                    backdrop = modalBackdrop,
+                    backdrop = backdrop,
                     containerColor = palette.contentSurfaceStrong,
                     width = 240.dp,
                 ) {
@@ -556,7 +589,7 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
             }
             if (classes.isNotEmpty()) Box(Modifier.weight(1f)) {
                 RefugeCompactUtilityPill(
-                    modalBackdrop, palette, RefugeIcons.filter,
+                    backdrop, palette, RefugeIcons.filter,
                     selectedClass.ifBlank { "全部类别" },
                     onClick = { classMenu = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -564,7 +597,7 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
                 zone.ien.hig.CupertinoDropdownMenu(
                     expanded = classMenu,
                     onDismissRequest = { classMenu = false },
-                    backdrop = modalBackdrop,
+                    backdrop = backdrop,
                     containerColor = palette.contentSurfaceStrong,
                     width = 240.dp,
                 ) {
@@ -588,6 +621,7 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
                 LoadoutCard(backdrop, palette, item.itemName(), listOf(maker(item), item.number("size")?.let { "S${it.toInt()}" }.orEmpty(), item.optString("grade"), item.obj("i18n").optString("class")).filter { it.isNotBlank() }.joinToString(" · "),
                     imageUrl = if (ships) rememberShipReference(item.itemName())?.images?.firstOrNull() else null) { onPick(item); dismissSignal++ }
             }
+        }
         }
     }
 }

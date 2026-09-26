@@ -105,17 +105,33 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                             }
                         }
                         val allDisabled = members.isNotEmpty() && members.all { member -> active.none { it.path == member.path } }
-                        Icon(
-                            glyphs[index],
-                            contentDescription = if (allDisabled) "启用$group" else "停用$group",
-                            tint = if (allDisabled) palette.textMuted else palette.accent,
-                            modifier = Modifier
-                                .size(22.dp)
+                        // Keep the glyph visually compact while giving the
+                        // power toggle the same 44 dp target as every other
+                        // native control. This makes tapping a group reliable
+                        // on a phone without changing the Erkul geometry.
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .semantics {
+                                    role = Role.Button
+                                    contentDescription = if (allDisabled) "启用$group" else "停用$group"
+                                    if (members.isEmpty()) disabled()
+                                }
                                 .clickable(
                                     enabled = members.isNotEmpty(),
+                                    interactionSource = null,
+                                    indication = null,
                                     onClick = { update(togglePowerGroup(draft, members, allDisabled)) },
                                 ),
-                        )
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                glyphs[index],
+                                contentDescription = null,
+                                tint = if (allDisabled) palette.textMuted else palette.accent,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
                         Text(group, style = RefugeTypography.caption(palette))
                     }
                 }

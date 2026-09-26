@@ -1358,6 +1358,27 @@ private fun hangarDisplayDate(raw: String): String {
     return value
 }
 
+private fun String.cleanHangarDescription(): String {
+    val normalized = trim().replace(Regex("\\s+"), " ")
+    if (normalized.isBlank()) return ""
+    val lower = normalized.lowercase(java.util.Locale.ROOT)
+    if (lower in setOf(
+            "description",
+            "descriptions",
+            "upgrade upgraded",
+            "upgrades upgraded",
+            "item upgraded",
+            "items upgraded",
+            "pledge upgraded",
+        )
+    ) return ""
+    if (normalized.startsWith("<") && normalized.endsWith(">")) return ""
+    return normalized
+}
+
+private fun HangarIncludedItem.isGeneratedDescription(): Boolean =
+    subtitle.cleanHangarDescription().isBlank() && kind.cleanHangarDescription().isBlank()
+
 @Composable
 private fun HangarDetailSheet(
     backdrop: LayerBackdrop,
@@ -1372,8 +1393,10 @@ private fun HangarDetailSheet(
     initialPage: HangarDetailPage = HangarDetailPage.DETAIL,
 ) {
     var page by remember(detail) { mutableStateOf(initialPage) }
-    val included = detail.includedEntries.distinctBy { Triple(it.title, it.kind, it.subtitle) }
-    val plainIncluded = detail.includedItems.filter { text ->
+    val included = detail.includedEntries
+        .filterNot { it.isGeneratedDescription() }
+        .distinctBy { Triple(it.title, it.kind, it.subtitle) }
+    val plainIncluded = detail.includedItems.map { it.cleanHangarDescription() }.filter { text ->
         text.isNotBlank() && included.none { it.title.equals(text.trim(), true) }
     }.distinct()
     val pageHeight = when (page) {
@@ -1395,13 +1418,13 @@ private fun HangarDetailSheet(
         actionBottomPadding = 36.dp,
         actionOverContent = true,
         contentUnderHandle = true,
-        leadingAction = if (page == HangarDetailPage.DETAIL) null else { modalBackdrop ->
+        leadingAction = { modalBackdrop ->
             RefugeCircularHeaderButton(
                 backdrop = modalBackdrop,
                 palette = palette,
                 icon = RefugeIcons.back,
                 contentDescription = "返回详情",
-                onClick = { page = HangarDetailPage.DETAIL },
+                onClick = if (page == HangarDetailPage.DETAIL) onDismiss else { { page = HangarDetailPage.DETAIL } },
             )
         },
         transparentActionArea = false,
@@ -1558,7 +1581,7 @@ private fun HangarDetailContent(
         } else {
             included.forEach { item ->
                 DetailIncludedRow(palette, detail.imageRes, item.title, item.imageUrl,
-                    item.subtitle.ifBlank { item.kind }, item.value)
+                    item.subtitle.cleanHangarDescription().ifBlank { item.kind }, item.value)
             }
             if (included.isNotEmpty() && plainIncluded.isNotEmpty()) DetailDivider(palette)
             plainIncluded.forEach { Text(translatedShipName(it.trim()), style = RefugeTypography.body(palette)) }

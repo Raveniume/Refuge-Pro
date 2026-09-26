@@ -442,7 +442,7 @@ private fun RefugeAppContent() {
                               // pixels remain transparent around the bar, and
                               // an in-flow sheet naturally covers the bar in
                               // place during its presentation.
-                              .zIndex(pageLayerZ),
+                          .zIndex(if (pageOverlayActive) 3f else 1f),
                       ) { animatedRoute ->
                         routeStateHolder.SaveableStateProvider(animatedRoute) {
                           RefugeContent(
@@ -490,7 +490,11 @@ private fun RefugeAppContent() {
                         }
                       }
                       }
-                      if (selectedTab in productionRootRoutes) {
+                      // Keep the bar after the route for the normal content
+                      // layer. An active sheet raises the route to z=3 while
+                      // the bar drops to z=1, so the sheet covers it without
+                      // changing the backdrop capture topology.
+                      if (selectedTab != 8) {
                           RootBottomNav(
                               backdrop = rootNavigationBackdrop,
                               isDark = isDark,

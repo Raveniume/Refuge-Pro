@@ -51,7 +51,14 @@ fun <T> RefugeRouteTransition(
                     animationSpec = tween(180),
                     targetOffsetX = { width -> if (forward) -width / 12 else width / 12 },
                 ) + fadeOut(tween(140))
-                (enter togetherWith exit).using(SizeTransform(clip = false))
+                // AnimatedContent keeps both pages alive during the transition.
+                // Raise the incoming page above the outgoing page explicitly;
+                // otherwise the glass/backdrop layer of the old route can win
+                // the draw order and leave the bottom tab selected on a stale
+                // page after the animation settles.
+                (enter togetherWith exit)
+                    .using(SizeTransform(clip = false))
+                    .also { it.targetContentZIndex = 1f }
             }
         },
         label = "root-route-transition",
