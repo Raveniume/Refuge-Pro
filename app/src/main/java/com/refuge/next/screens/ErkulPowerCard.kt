@@ -3,7 +3,6 @@ package com.refuge.next.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
@@ -56,9 +55,14 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                         Column { Text(label, style = RefugeTypography.caption(palette)); Text(String.format(java.util.Locale.US, "%,.0f", value), style = RefugeTypography.headline(palette)) }
                     }
                 }
-                val coolingRatio = if (metrics.cooling > 0) (metrics.coolingUsed / metrics.cooling).coerceIn(0.0, 1.0).toFloat() else 0f
+                // Keep the label truthful when a build exceeds its cooling
+                // capacity. Only the visual bar is capped at its track end.
+                val coolingRatio = if (metrics.cooling > 0) {
+                    (metrics.coolingUsed / metrics.cooling).coerceAtLeast(0.0).toFloat()
+                } else 0f
                 Text("散热负载  ${(coolingRatio * 100).roundToInt()}%", style = RefugeTypography.caption(palette))
-                LinearProgressIndicator(coolingRatio, Modifier.fillMaxWidth().height(4.dp), palette.accent, palette.glassStrong)
+                LinearProgressIndicator(coolingRatio.coerceAtMost(1f), Modifier.fillMaxWidth().height(4.dp),
+                    if (coolingRatio > 1f) palette.error else palette.accent, palette.glassStrong)
                 aim?.let { Text("瞄准辅助  ${it.roundToInt()} m", style = RefugeTypography.caption(palette)) }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -75,8 +79,6 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                             setProgress { onChange(it.roundToInt()); true }
                         }.pointerInput(group, maximum, chartMaximum) {
                             detectTapGestures { pos -> if (maximum > 0) onChange(((1f - pos.y / size.height) * chartMaximum).roundToInt().coerceIn(0, maximum)) }
-                        }.pointerInput(group, maximum, chartMaximum) {
-                            detectVerticalDragGestures { change, _ -> change.consume(); if (maximum > 0) onChange(((1f - change.position.y / size.height) * chartMaximum).roundToInt().coerceIn(0, maximum)) }
                         }) {
                             val count = maximum.coerceAtLeast(1)
                             val gap = 3.dp.toPx()

@@ -57,10 +57,13 @@ fun PageGlassScope(
         Box(modifier.fillMaxSize()) {
             content()
             val pageBackdrop = LocalPageContentBackdrop.current ?: backdrop
-            overlay(pageBackdrop)
             LocalRootNavigationOverlay.current?.let { navigation ->
                 androidx.compose.runtime.key(navigation.key) { navigation.content(pageBackdrop) }
             }
+            // Keep the root navigation mounted in its original place. In-flow
+            // sheets are composed by the page after this scope and therefore
+            // paint over the bar during their Cupertino transition.
+            overlay(pageBackdrop)
         }
         return
     }
@@ -90,11 +93,14 @@ fun PageGlassScope(
                 content()
             }
         }
-        overlay(backdrop)
         LocalRootNavigationOverlay.current?.let { navigation ->
             val glassBackdrop = navigationBackdrop ?: backdrop
             androidx.compose.runtime.key(navigation.key) { navigation.content(glassBackdrop) }
         }
+        // Page-owned sheets and detail overlays are later siblings of this
+        // scope. Drawing the navigation before the page overlay keeps the bar
+        // present without allowing it to paint over an open sheet.
+        overlay(backdrop)
     }
 }
 

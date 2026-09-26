@@ -61,12 +61,12 @@ object RefugeColors {
     )
 
     val light = RefugePalette(
-        // Match the iOS grouped-background relationship: the page is a
-        // visibly tinted system group and content surfaces remain white.
-        background = Color.White,
+        // iOS grouped-background hierarchy: the page is the tinted system
+        // group and cards/list surfaces remain white.
+        background = Color(0xFFF2F2F7),
         backgroundEdge = Color(0xFFE5E5EA),
         backgroundLight = Color(0xFFFFFFFF),
-        contentSurface = Color(0xFFF7F7F9),
+        contentSurface = Color(0xFFFFFFFF),
         contentSurfaceStrong = Color(0xFFEFEFF4),
         glass = Color.White.copy(alpha = .54f),
         glassStrong = Color.White.copy(alpha = .70f),

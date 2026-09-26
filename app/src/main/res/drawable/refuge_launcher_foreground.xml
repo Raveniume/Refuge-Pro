@@ -1,6 +1,7 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <!-- A quiet navigation mark: an orbital ring and a four-point star. -->
-    <path android:fillColor="#D9F3FF" android:pathData="M54,18 A36,36 0,1 0,54 90 A36,36 0,1 0,54 18 M54,24 A30,30 0,1 1,54 84 A30,30 0,1 1,54 24"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M54,29 L59,47 L78,54 L59,61 L54,79 L49,61 L30,54 L49,47 Z"/>
-    <path android:fillColor="#58BCF6" android:pathData="M54,39 L57,51 L69,54 L57,57 L54,69 L51,57 L39,54 L51,51 Z"/>
+    <!-- Simple ship silhouette; no glow, bevel or decorative border. -->
+    <path android:fillColor="#F7FAFF" android:pathData="M54,16 C44,26 32,47 25,73 C24,78 29,81 34,78 L54,66 L74,78 C79,81 84,78 83,73 C76,47 64,26 54,16 Z"/>
+    <path android:fillColor="#58C7FF" android:pathData="M54,30 L63,51 L54,62 L45,51 Z"/>
+    <path android:fillColor="#102439" android:pathData="M54,38 L59,51 L54,56 L49,51 Z"/>
+    <path android:fillColor="#F7FAFF" android:pathData="M32,72 L45,64 L40,76 Z M76,72 L63,64 L68,76 Z"/>
 </vector>

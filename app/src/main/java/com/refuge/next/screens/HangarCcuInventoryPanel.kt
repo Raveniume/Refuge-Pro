@@ -20,6 +20,7 @@ internal fun HangarCcuInventoryPanel(
     backdrop: LayerBackdrop, palette: RefugePalette, isDark: Boolean,
     ccuRepository: CcuRepository, refreshKey: Int, ownedSeeds: List<CcuShip>,
     repository: HangarRepository, inventory: List<HangarItem>, onOpenOwnedCcu: (Long) -> Unit,
+    onShipSelector: (ShipSelectorRequest) -> Unit,
 ) {
     var showInventory by remember { mutableStateOf(false) }
     var snapshot by remember(repository) { mutableStateOf(inventory) }
@@ -36,7 +37,8 @@ internal fun HangarCcuInventoryPanel(
     }
     val owned = remember(snapshot) { snapshot.filter { it.isUpgrade } }
     HangarUpgradePanel(backdrop, palette, isDark, ccuRepository, refreshKey, ownedSeeds,
-        onOwnedInventory = { showInventory = true }, inventoryCount = owned.sumOf { it.quantity })
+        onOwnedInventory = { showInventory = true }, onShipSelector = onShipSelector,
+        inventoryCount = owned.sumOf { it.quantity })
     if (showInventory) {
         val translation = LocalRefugeTranslation.current
         val visible = remember(owned, query, sort, eligibleOnly, translation) {

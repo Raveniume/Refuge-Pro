@@ -27,6 +27,7 @@ import com.kyant.shapes.RoundedCornerStyle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.consumePositionChange
@@ -84,8 +85,10 @@ fun RefugeLiquidSheet(
     contentUnderHandle: Boolean = false,
     transparentActionArea: Boolean = false,
     surfaceRefraction: Boolean = true,
-    surfaceAlpha: Float = .86f,
+    surfaceAlpha: Float = 1f,
     contentScrollable: Boolean = true,
+    /** Increment to run the Cupertino dismissal animation from content. */
+    dismissSignal: Int = 0,
     leadingAction: (@Composable (Backdrop) -> Unit)? = null,
     action: (@Composable (Backdrop) -> Unit)? = null,
     content: @Composable ColumnScope.(LayerBackdrop) -> Unit,
@@ -140,6 +143,9 @@ fun RefugeLiquidSheet(
                     }
                     onDismiss()
                 }
+            }
+            LaunchedEffect(dismissSignal) {
+                if (dismissSignal > 0) dismissWithAnimation()
             }
             // System Back follows the same Cupertino dismissal path as the
             // scrim and drag handle, so the page remains visible throughout
@@ -255,6 +261,7 @@ fun RefugeLiquidSheet(
                                     )
                                 } else {
                                     Modifier
+                                        .shadow(24.dp, shape, clip = false)
                                         .clip(shape)
                                         .background(palette.contentSurface)
                                 },
@@ -302,7 +309,10 @@ fun RefugeLiquidSheet(
                         Box(
                             Modifier
                                 .fillMaxWidth()
-                                .weight(1f, fill = false)
+                                // Give nested LazyColumn content a real viewport. A
+                                // wrap-content box measures loadout and selector rows
+                                // as one child, removing fling velocity on a swipe.
+                                .weight(1f, fill = true)
                                 .heightIn(max = contentMaxHeight)
                                 .testTag("sheet-scroll-viewport")
                                 .then(if (contentScrollable) Modifier.verticalScroll(contentScroll) else Modifier),

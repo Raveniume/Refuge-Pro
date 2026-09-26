@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeTypography
+import com.refuge.next.reference.OfficialLiquidSegmentedPort
 
 /** Retain the original glass segmented navigation for existing page call sites. */
 @Composable
@@ -79,90 +80,53 @@ private fun RefugeTwoOptionSelector(
     modifier: Modifier,
 ) {
     val selected = selectedIndex.coerceIn(0, 1)
-    val shape = RoundedCornerShape(22.dp)
-    RefugeLiquidGlass(
+    OfficialLiquidSegmentedPort(
+        selectedIndex = selected,
+        onSelected = onSelected,
         backdrop = backdrop,
-        palette = palette,
-        modifier = modifier.height(44.dp),
-        radius = 22.dp,
-        surface = palette.contentSurfaceStrong,
-        surfaceAlpha = .20f,
-    ) {
-        Row(
-            Modifier.fillMaxSize().padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            labels.take(2).forEachIndexed { index, label ->
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(shape)
-                        .semantics {
-                            role = Role.Tab
-                            this.selected = selected == index
-                            contentDescription = label
-                        }
-                        .clickable(
-                            interactionSource = null,
-                            indication = null,
-                            role = Role.Tab,
-                            onClick = { onSelected(index) },
-                        ),
-                    contentAlignment = Alignment.Center,
+        tabsCount = 2,
+        isDark = palette.background.luminance() < .5f,
+        modifier = modifier.testTag("mode-track"),
+        outerHeight = 48.dp,
+    ) { _, select ->
+        labels.take(2).forEachIndexed { index, label ->
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .semantics {
+                        role = Role.Tab
+                        this.selected = selected == index
+                        contentDescription = label
+                    }
+                    .clickable(
+                        interactionSource = null,
+                        indication = null,
+                        role = Role.Tab,
+                        onClick = { select(index) },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
                 ) {
-                    if (selected == index) {
-                        val selectedAlpha by androidx.compose.animation.core.animateFloatAsState(
-                            targetValue = .16f,
-                            animationSpec = androidx.compose.animation.core.tween(180),
-                            label = "two-option-selection-alpha-$index",
+                    icons.getOrNull(index)?.let { icon ->
+                        Icon(
+                            icon,
+                            contentDescription = null,
+                            tint = if (selected == index) palette.accent else palette.textSecondary,
+                            modifier = Modifier.size(18.dp),
                         )
-                        // Keep the selected half inside the parent optical
-                        // surface. Sampling the same backdrop again here
-                        // creates a nested RenderNode feedback tree; on the
-                        // emulator that can overflow RenderThread while the
-                        // route changes. A tinted inset is the same visual
-                        // language as the HIG segmented control and keeps the
-                        // two-option selector stable during navigation.
-                        Box(
-                            Modifier
-                                .matchParentSize()
-                                .testTag("mode-lens")
-                                .clip(shape)
-                                .background(
-                                    palette.accent.copy(
-                                        alpha = selectedAlpha * if (palette.background.luminance() < .5f) 1f else .62f,
-                                    ),
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = palette.accent.copy(alpha = .16f),
-                                    shape = shape,
-                                ),
-                        )
+                        Spacer(Modifier.width(6.dp))
                     }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                    ) {
-                        icons.getOrNull(index)?.let { icon ->
-                            Icon(
-                                icon,
-                                contentDescription = null,
-                                tint = if (selected == index) palette.accent else palette.textSecondary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                        }
-                        Text(
-                            label,
-                            style = RefugeTypography.body(palette).copy(
-                                color = if (selected == index) palette.accent else palette.textSecondary,
-                            ),
-                            maxLines = 1,
-                        )
-                    }
+                    Text(
+                        label,
+                        style = RefugeTypography.body(palette).copy(
+                            color = if (selected == index) palette.accent else palette.textSecondary,
+                        ),
+                        maxLines = 1,
+                    )
                 }
             }
         }

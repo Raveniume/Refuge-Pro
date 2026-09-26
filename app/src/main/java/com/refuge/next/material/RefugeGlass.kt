@@ -207,7 +207,7 @@ fun RefugeCompactUtilityPill(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    visualHeight: Dp = 34.dp,
+    visualHeight: Dp = 32.dp,
 ) {
     RefugeCompactLiquidPill(
         backdrop = backdrop,

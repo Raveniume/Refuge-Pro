@@ -122,6 +122,16 @@ internal fun togglePowerGroup(draft: JSONObject, members: List<PowerConsumer>, d
     return next
 }
 
+/** Toggle one installed component without changing its saved power allocation. */
+internal fun togglePowerSlot(draft: JSONObject, path: String, disable: Boolean): JSONObject {
+    val next = JSONObject(draft.toString())
+    val disabled = next.strings("disabled").toMutableSet()
+    if (disable) disabled.add(path) else disabled.removeAll { it == path || it.startsWith("$path/") }
+    if (disabled.isEmpty()) next.remove("disabled")
+    else next.put("disabled", org.json.JSONArray(disabled.toList().sorted()))
+    return next
+}
+
 internal fun powerOutputRatio(item: JSONObject, supplied: Int): Double {
     val demand = resourceUnits(item, false, "Power")
     if (demand <= 0) return 1.0

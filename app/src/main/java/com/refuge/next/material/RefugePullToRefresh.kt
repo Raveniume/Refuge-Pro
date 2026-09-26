@@ -96,7 +96,10 @@ fun RefugePullToRefresh(
                 val shouldRefresh = pullDistance >= thresholdPx && !latestRefreshing
                 pullDistance = 0f
                 if (shouldRefresh) latestRefresh()
-                return if (shouldRefresh) Velocity.Zero else available
+                // Let the LazyColumn consume ordinary flings. Returning the
+                // available velocity here swallowed inertia whenever the pull
+                // threshold was not reached.
+                return Velocity.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {

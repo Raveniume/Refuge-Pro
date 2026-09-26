@@ -19,6 +19,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.refuge.next.data.*
@@ -125,9 +129,9 @@ internal fun NativeLoadoutScreen(
         // Components are active by default. Older drafts may still contain
         // the removed disabled list; ignore it so every installed component
         // participates in the simulated metrics.
-        draft = JSONObject(repository.loadDraft(branch, current.version, shipId, buildSlot).toString()).apply {
-            remove("disabled")
-        }
+        // Keep the factory snapshot enabled by default, while preserving a
+        // user's explicit component toggles when the draft is reopened.
+        draft = JSONObject(repository.loadDraft(branch, current.version, shipId, buildSlot).toString())
     }
     fun update(next: JSONObject) {
         draft = next
@@ -154,7 +158,7 @@ internal fun NativeLoadoutScreen(
         surfaceRefraction = false,
         surfaceAlpha = 1f,
     ) { modalBackdrop ->
-            Column(Modifier.fillMaxWidth().testTag("native-loadout")) {
+            Column(Modifier.fillMaxSize().testTag("native-loadout")) {
                 // The circular back control is anchored to the sheet corner.
                 // Reserve its horizontal footprint so the title never paints
                 // underneath the control while the sheet enters or settles.
@@ -176,7 +180,11 @@ internal fun NativeLoadoutScreen(
                         }
                     }
                 }
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyColumn(
+                    Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
                     item {
                         val reference = rememberShipReference(ship?.itemName().orEmpty())
                         RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), onClick = { picker = "ship" }, contentDescription = "选择舰船", padding = PaddingValues(14.dp)) {
@@ -235,7 +243,28 @@ internal fun NativeLoadoutScreen(
                         // Keep the complete factory tree visible. Fixed mounts are
                         // part of the stock configuration and must not look like
                         // empty slots simply because they cannot be replaced.
-                        slots.groupBy(::erkulSlotGroup).forEach { (group, groupSlots) ->
+                        // The catalog contains decorative paint hardpoints with
+                        // no installed item and no accepted component type.
+                        // They are not usable loadout rows and made a stock
+                        // ship look empty. Keep real factory items and real
+                        // configurable ports only.
+                        val displaySlots = slots.filter { slot ->
+                            // Erkul exposes paint, doors, fuel plumbing and
+                            // maneuver hardware as hardpoints too. They are
+                            // part of the raw vehicle tree, but are not
+                            // user-facing loadout controls. Keeping them in
+                            // this list makes a stock ship look full of empty
+                            // mounts and hides the actual component tree.
+                            val hiddenType = slot.item?.optString("type").orEmpty() in setOf(
+                                "Door", "FuelTank", "FuelIntake", "QuantumFuelTank",
+                                "ManneuverThruster", "Thruster", "Paints", "CargoGrid",
+                            )
+                            if (hiddenType) false
+                            else slot.item != null || catalog?.components?.values?.any { candidate ->
+                                erkulSlotAccepts(slot, candidate)
+                            } == true
+                        }
+                        displaySlots.groupBy(::erkulSlotGroup).forEach { (group, groupSlots) ->
                             item { Text(group, style = RefugeTypography.title(palette)) }
                             items(groupSlots, key = { it.path }) { slot ->
                                 val editable = slot.port.obj("flags").optBoolean("editable") &&
@@ -270,12 +299,34 @@ internal fun NativeLoadoutScreen(
                                                 style = RefugeTypography.caption(palette),
                                             )
                                         }
-                                        Icon(
-                                            if (editable) RefugeIcons.chevron else RefugeIcons.visibilityOff,
-                                            contentDescription = null,
-                                            tint = palette.textMuted,
-                                            modifier = Modifier.size(18.dp),
-                                        )
+                                        val disabled = draft.strings("disabled").any {
+                                            it == slot.path || slot.path.startsWith("$it/")
+                                        }
+                                        if (slot.item != null) {
+                                            IconButton(
+                                                onClick = {
+                                                    update(togglePowerSlot(draft, slot.path, disable = !disabled))
+                                                },
+                                                modifier = Modifier.size(40.dp).semantics {
+                                                    role = Role.Button
+                                                    contentDescription = if (disabled) "启用 ${erkulPortLabel(slot)}" else "停用 ${erkulPortLabel(slot)}"
+                                                },
+                                            ) {
+                                                Icon(
+                                                    if (disabled) RefugeIcons.visibilityOff else RefugeIcons.visibility,
+                                                    contentDescription = null,
+                                                    tint = if (disabled) palette.textMuted else palette.accent,
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                        } else {
+                                            Icon(
+                                                if (editable) RefugeIcons.chevron else RefugeIcons.visibilityOff,
+                                                contentDescription = null,
+                                                tint = palette.textMuted,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -341,7 +392,6 @@ internal fun NativeLoadoutScreen(
                         overrides.put(activeSlot.path, selected?.optString("className") ?: "")
                         update(JSONObject(draft.toString()).put("overrides", overrides))
                     }
-                    picker = null
                 })
             }
         }
@@ -466,13 +516,14 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
     var selectedClass by remember { mutableStateOf("") }
     var manufacturerMenu by remember { mutableStateOf(false) }
     var classMenu by remember { mutableStateOf(false) }
+    var dismissSignal by remember { mutableIntStateOf(0) }
     val all = remember(catalog, slot, ships) { if (ships) catalog.ships else catalog.components.values.filter { slot != null && erkulSlotAccepts(slot, it) } }
     fun maker(item: JSONObject) = item.optString("manufacturerName").ifBlank { item.obj("manufacturer").optString("className") }
     val manufacturers = remember(all) { all.map(::maker).filter { it.isNotBlank() }.distinct().sorted() }
     val classes = remember(all) { all.map { it.obj("i18n").optString("class") }.filter { it.isNotBlank() }.distinct().sorted() }
     val visible = remember(all, query, manufacturer, selectedClass) { all.filter { (query.isBlank() || it.itemName().contains(query,true) || translation?.translateGameItem(it.itemName())?.contains(query, true) == true) &&
         (manufacturer.isBlank() || maker(it) == manufacturer) && (selectedClass.isBlank() || it.obj("i18n").optString("class") == selectedClass) }.sortedBy { it.itemName() } }
-    RefugeLiquidSheet(backdrop, palette, if (ships) "选择舰船" else "更换组件", onDismiss, sheetHeight = 780.dp, contentScrollable = false) { modalBackdrop ->
+    RefugeLiquidSheet(backdrop, palette, if (ships) "选择舰船" else "更换组件", onDismiss, sheetHeight = 780.dp, contentScrollable = false, dismissSignal = dismissSignal) { modalBackdrop ->
         zone.ien.hig.CupertinoSearchTextField(value = query, onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth(), textStyle = RefugeTypography.body(palette),
             placeholder = { Text("搜索舰船或组件", style = RefugeTypography.caption(palette)) }, cancelButton = null)
@@ -532,10 +583,10 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
         }
         Text("${visible.size} 个" + if (ships) "舰船" else "兼容组件", style = RefugeTypography.caption(palette))
         LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!ships) item { LoadoutCard(backdrop, palette, "卸下组件", "", onClick = { onPick(null) }) }
+            if (!ships) item { LoadoutCard(backdrop, palette, "卸下组件", "", onClick = { onPick(null); dismissSignal++ }) }
             items(visible, key = { it.getString("className") }) { item ->
                 LoadoutCard(backdrop, palette, item.itemName(), listOf(maker(item), item.number("size")?.let { "S${it.toInt()}" }.orEmpty(), item.optString("grade"), item.obj("i18n").optString("class")).filter { it.isNotBlank() }.joinToString(" · "),
-                    imageUrl = if (ships) rememberShipReference(item.itemName())?.images?.firstOrNull() else null) { onPick(item) }
+                    imageUrl = if (ships) rememberShipReference(item.itemName())?.images?.firstOrNull() else null) { onPick(item); dismissSignal++ }
             }
         }
     }

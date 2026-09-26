@@ -25,6 +25,8 @@ internal fun FacetFilterSheet(
     val optionCount = if (group == null) groups.size else 1 + groups[group].orEmpty().size
     val compactHeight = (if (group == null) 170 else 150 + optionCount * 46).dp.coerceIn(300.dp, 620.dp)
     RefugeLiquidSheet(backdrop, palette, if (group == null) title else group!!, onDismiss, sheetHeight = compactHeight,
+        surfaceRefraction = false,
+        surfaceAlpha = 1f,
         actionOverContent = true,
         leadingAction = if (group != null) ({ local ->
             RefugeCircularHeaderButton(local, palette, RefugeIcons.back, "返回筛选", { group = null })

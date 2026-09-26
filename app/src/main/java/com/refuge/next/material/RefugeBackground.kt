@@ -49,10 +49,10 @@ fun RefugeScene(
             LocalGlassControlSurface provides if (palette.background.luminance() < .5f) {
                 Color.White.copy(alpha = .12f)
             } else {
-                // A white canvas still needs a distinct optical layer. The
-                // neutral system-gray tint keeps the lens readable without
-                // turning the control into an opaque card.
-                Color(0xFFECECF1).copy(alpha = .84f)
+                // The grouped background is tinted; controls use a white
+                // optical layer so their hierarchy remains visible in light
+                // mode without a dark border.
+                Color.White.copy(alpha = .66f)
             },
         ) {
             CupertinoTheme(colorScheme = if (palette.background.luminance() < .5f)

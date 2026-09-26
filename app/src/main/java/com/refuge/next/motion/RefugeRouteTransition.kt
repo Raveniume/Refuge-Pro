@@ -7,6 +7,8 @@ import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -30,22 +32,27 @@ fun <T> RefugeRouteTransition(
     targetState: T,
     modifier: Modifier = Modifier,
     order: (T) -> Int = { it.hashCode() },
+    animate: (from: T, to: T) -> Boolean = { _, _ -> true },
     content: @Composable (T) -> Unit,
 ) {
     AnimatedContent(
         targetState = targetState,
         modifier = modifier.clipToBounds(),
         transitionSpec = {
-            val forward = order(targetState) >= order(initialState)
-            val enter = slideInHorizontally(
-                animationSpec = tween(220),
-                initialOffsetX = { width -> if (forward) width / 10 else -width / 10 },
-            ) + fadeIn(tween(180))
-            val exit = slideOutHorizontally(
-                animationSpec = tween(180),
-                targetOffsetX = { width -> if (forward) -width / 12 else width / 12 },
-            ) + fadeOut(tween(140))
-            (enter togetherWith exit).using(SizeTransform(clip = false))
+            if (!animate(initialState, targetState)) {
+                EnterTransition.None togetherWith ExitTransition.None
+            } else {
+                val forward = order(targetState) >= order(initialState)
+                val enter = slideInHorizontally(
+                    animationSpec = tween(220),
+                    initialOffsetX = { width -> if (forward) width / 10 else -width / 10 },
+                ) + fadeIn(tween(180))
+                val exit = slideOutHorizontally(
+                    animationSpec = tween(180),
+                    targetOffsetX = { width -> if (forward) -width / 12 else width / 12 },
+                ) + fadeOut(tween(140))
+                (enter togetherWith exit).using(SizeTransform(clip = false))
+            }
         },
         label = "root-route-transition",
     ) { route ->

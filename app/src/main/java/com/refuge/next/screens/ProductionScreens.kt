@@ -172,6 +172,7 @@ fun PresencePickerSheet(
     onSelected: (UserPresence) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var dismissSignal by remember { mutableIntStateOf(0) }
     RefugeLiquidSheet(
         backdrop = backdrop,
         palette = palette,
@@ -181,11 +182,27 @@ fun PresencePickerSheet(
         // profile page visible instead of opening a full-height modal.
         // Five rows plus the handle/title need roughly 250 dp. Keeping the
         // picker compact leaves the profile header and page context visible.
-        sheetHeight = 286.dp,
+        // Five options plus the handle, title and safe-area inset fit without
+        // requiring a second scroll gesture inside the status picker.
+        // Five 44 dp rows plus the handle/title fit in a compact sheet. The
+        // previous 390 dp height left a large empty tail and invited an
+        // unnecessary drag gesture on the status picker.
+        sheetHeight = 338.dp,
+        surfaceAlpha = 1f,
+        contentScrollable = false,
+        contentUnderHandle = true,
+        dismissSignal = dismissSignal,
     ) { _ ->
         UserPresence.entries.forEach { presence ->
             Row(
-                Modifier.fillMaxWidth().clickable { onSelected(presence) }.padding(horizontal = 6.dp, vertical = 4.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .height(42.dp)
+                    .clickable {
+                        onSelected(presence)
+                        dismissSignal++
+                    }
+                    .padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(10.dp).background(presenceColor(palette, presence), CircleShape))
@@ -374,7 +391,7 @@ fun TerminalScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.Top,
             state = listState,
@@ -854,6 +871,13 @@ fun ProfileScreen(
     var profileLoading by remember { mutableStateOf(!profileData.isAuthenticated) }
     var profileError by remember { mutableStateOf<String?>(null) }
     var loadAttempt by remember { mutableIntStateOf(0) }
+    val listState = com.refuge.next.navigation.rememberRootListState(4)
+    val refreshCallback = remember { { loadAttempt++; Unit } }
+    val scrollRegistry = com.refuge.next.navigation.LocalRootScrollRegistry.current
+    DisposableEffect(Unit) {
+        scrollRegistry?.registerRefresh(4, refreshCallback)
+        onDispose { scrollRegistry?.unregisterRefresh(4, refreshCallback) }
+    }
     LaunchedEffect(initialProfile) {
         if (initialProfile.isAuthenticated) profileData = initialProfile
     }
@@ -889,10 +913,10 @@ fun ProfileScreen(
         backdrop = backdrop,
         content = {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
-            state = com.refuge.next.navigation.rememberRootListState(4),
+            state = listState,
         ) {
             item {
                 ProductionHeader(
@@ -1175,7 +1199,7 @@ fun ToolsScreen(
         backdrop = backdrop,
         content = {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
         ) {
@@ -1406,7 +1430,7 @@ fun SettingsScreen(
         backdrop = backdrop,
         content = {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.lg),
         ) {
@@ -1588,7 +1612,7 @@ fun CcuScreen(
         backdrop = backdrop,
         content = {
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = RefugeSpacing.page, top = RefugeSpacing.lg, end = RefugeSpacing.page, bottom = RefugeSpacing.rootNavigation),
             verticalArrangement = Arrangement.spacedBy(RefugeSpacing.md),
         ) {
@@ -1644,15 +1668,15 @@ fun CcuScreen(
         },
         overlay = { _ -> },
     )
-    if (showSeed) ShipSelectorSheet(backdrop, palette, isDark, "选择起始舰船", availableStarts, onDismiss = { showSeed = false }) {
+    if (showSeed) ShipSelectorSheet(backdrop, palette, isDark, "选择起始舰船", availableStarts,
+        onDismiss = { showSeed = false }) {
         seed = it
         if (target != null && target!!.purchasePrice <= it.purchasePrice) target = null
-        showSeed = false
     }
-    if (showTarget) ShipSelectorSheet(backdrop, palette, isDark, "选择目标舰船", availableTargets, onDismiss = { showTarget = false }) {
+    if (showTarget) ShipSelectorSheet(backdrop, palette, isDark, "选择目标舰船", availableTargets,
+        onDismiss = { showTarget = false }) {
         target = it
         if (seed != null && seed!!.purchasePrice >= it.purchasePrice) seed = null
-        showTarget = false
     }
     if (showOwned) {
         OwnedCcuSheet(backdrop, palette, owned, onRemove = { removed -> owned = owned.filterNot { it.id == removed.id } }, onDismiss = { showOwned = false })
@@ -1661,7 +1685,7 @@ fun CcuScreen(
 
 /** Planner used by the Hangar segment; owned upgrades open separately. */
 @Composable
-fun HangarUpgradePanel(
+internal fun HangarUpgradePanel(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     isDark: Boolean,
@@ -1669,12 +1693,15 @@ fun HangarUpgradePanel(
     refreshKey: Int = 0,
     ownedSeeds: List<CcuShip>,
     onOwnedInventory: (() -> Unit)? = null,
+    onShipSelector: ((ShipSelectorRequest) -> Unit)? = null,
     inventoryCount: Int? = null,
 ) {
     var catalog by remember(ccuRepository) { mutableStateOf(ccuRepository.cachedShips()) }
     var owned by remember(ccuRepository) { mutableStateOf(ccuRepository.cachedOwned()) }
     var start by remember { mutableStateOf<CcuShip?>(null) }
     var target by remember { mutableStateOf<CcuShip?>(null) }
+    // Retained for the isolated planner fixture that does not provide the
+    // parent-level selector overlay.
     var showStart by remember { mutableStateOf(false) }
     var showTarget by remember { mutableStateOf(false) }
     var showOwned by remember { mutableStateOf(false) }
@@ -1690,6 +1717,9 @@ fun HangarUpgradePanel(
     val ships = remember(catalog, ownedSeeds) {
         distinctPlannerShips(ownedSeeds + catalog)
     }
+    // A CCU can only start from a ship in the player's hangar. The full
+    // catalogue remains available for the destination side of the planner.
+    val ownedStartShips = remember(ownedSeeds) { distinctPlannerShips(ownedSeeds) }
     val targetCatalog = remember(catalog, ownedSeeds) {
         distinctPlannerShips(catalog)
             .filterNot { candidate -> ownedSeeds.any { ownedShip -> candidate.sameIdentityAs(ownedShip) } }
@@ -1697,7 +1727,7 @@ fun HangarUpgradePanel(
     val availableTargets = remember(start, targetCatalog) {
         start?.let { current -> targetCatalog.filter { it.purchasePrice > current.purchasePrice } } ?: targetCatalog
     }
-    val availableStarts = remember(target, ships) { plannerStartOptions(target, ships) }
+    val availableStarts = remember(target, ownedStartShips) { plannerStartOptions(target, ownedStartShips) }
     LaunchedEffect(targetCatalog) {
         if (target != null && targetCatalog.none { it.sameIdentityAs(target!!) }) target = null
     }
@@ -1721,8 +1751,28 @@ fun HangarUpgradePanel(
                 onOwned = { onOwnedInventory?.invoke() ?: run { showOwned = true } },
                 start = start?.displayName(),
                 target = target?.displayName(),
-                onStart = { showStart = true },
-                onTarget = { showTarget = true },
+                onStart = {
+                    if (onShipSelector == null) showStart = true
+                    else onShipSelector(ShipSelectorRequest(
+                        title = "选择起始舰船",
+                        ships = availableStarts,
+                        emptyMessage = "没有低于目标原价的起始舰船",
+                    ) { selected ->
+                        start = selected
+                        if (target != null && target!!.purchasePrice <= selected.purchasePrice) target = null
+                    })
+                },
+                onTarget = {
+                    if (onShipSelector == null) showTarget = true
+                    else onShipSelector(ShipSelectorRequest(
+                        title = "选择目标舰船",
+                        ships = availableTargets,
+                        emptyMessage = "没有高于起始舰船原价的目标舰船",
+                    ) { selected ->
+                        target = selected
+                        if (start != null && start!!.purchasePrice >= selected.purchasePrice) start = null
+                    })
+                },
                 heading = "升级规划",
                 startLabel = "选择种子舰船",
                 targetLabel = "选择目标舰船",
@@ -1784,7 +1834,7 @@ fun HangarUpgradePanel(
             plan?.let { PlannedRoutePreview(palette, it) }
         }
     }
-    if (showStart) ShipSelectorSheet(
+    if (onShipSelector == null && showStart) ShipSelectorSheet(
         backdrop = backdrop,
         palette = palette,
         isDark = isDark,
@@ -1795,9 +1845,8 @@ fun HangarUpgradePanel(
     ) { selected ->
         start = selected
         if (target != null && target!!.purchasePrice <= selected.purchasePrice) target = null
-        showStart = false
     }
-    if (showTarget) ShipSelectorSheet(
+    if (onShipSelector == null && showTarget) ShipSelectorSheet(
         backdrop = backdrop,
         palette = palette,
         isDark = isDark,
@@ -1808,7 +1857,6 @@ fun HangarUpgradePanel(
     ) { selected ->
         target = selected
         if (start != null && start!!.purchasePrice >= selected.purchasePrice) start = null
-        showTarget = false
     }
     if (showOwned) {
         OwnedCcuSheet(
@@ -2012,8 +2060,15 @@ private fun RowScope.CostCell(
     }
 }
 
+internal data class ShipSelectorRequest(
+    val title: String,
+    val ships: List<CcuShip>,
+    val emptyMessage: String,
+    val onSelected: (CcuShip) -> Unit,
+)
+
 @Composable
-private fun ShipSelectorSheet(
+internal fun ShipSelectorSheet(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     isDark: Boolean,
@@ -2024,6 +2079,7 @@ private fun ShipSelectorSheet(
     onSelected: (CcuShip) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
+    var dismissSignal by remember { mutableIntStateOf(0) }
     val translation = com.refuge.next.design.LocalRefugeTranslation.current
     var localizedNames by remember { mutableStateOf(emptyMap<String, String>()) }
     LaunchedEffect(ships, translation) {
@@ -2045,9 +2101,11 @@ private fun ShipSelectorSheet(
         title = title,
         onDismiss = onDismiss,
         leadingAction = { modalBackdrop ->
-            RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
+            RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onClick = { dismissSignal++ })
         },
-        sheetHeight = 760.dp,
+        // Keep the selector compact enough to leave the underlying page
+        // legible while the virtualized list remains independently scrollable.
+        sheetHeight = 560.dp,
         // Ship selection is a focused upgrade decision. Keep the content
         // surface opaque so the planner behind it cannot ghost through rows or
         // make the list look disabled while the sheet is settling.
@@ -2056,6 +2114,7 @@ private fun ShipSelectorSheet(
         // The selector owns its LazyColumn so the sheet must not wrap it in a
         // second verticalScroll. This keeps large RSI catalogues virtualized.
         contentScrollable = false,
+        dismissSignal = dismissSignal,
     ) { modalBackdrop ->
         ReferenceSearchField(
             backdrop = modalBackdrop,
@@ -2082,9 +2141,9 @@ private fun ShipSelectorSheet(
                     // Keep the nested list bounded even while the sheet is
                     // being measured by Dialog. This prevents selector stalls
                     // on large RSI catalogues.
-                    .height(520.dp),
+                    .height(370.dp),
             ) {
-                val viewportHeight = 520.dp
+                val viewportHeight = 370.dp
                 RefugeStandardGlassSurface(
                     backdrop = modalBackdrop,
                     palette = palette,
@@ -2102,7 +2161,10 @@ private fun ShipSelectorSheet(
                             }
                             hangarShips.forEachIndexed { index, ship ->
                                 item(key = "hangar:$index:${ship.id}:${ship.name}") {
-                                    ShipSelectorRow(modalBackdrop, palette, ship, onSelected)
+                                    ShipSelectorRow(modalBackdrop, palette, ship) { selected ->
+                                        onSelected(selected)
+                                        dismissSignal++
+                                    }
                                 }
                             }
                         }
@@ -2112,7 +2174,10 @@ private fun ShipSelectorSheet(
                             }
                             availableShips.forEachIndexed { index, ship ->
                                 item(key = "catalog:$index:${ship.id}:${ship.name}") {
-                                    ShipSelectorRow(modalBackdrop, palette, ship, onSelected)
+                                    ShipSelectorRow(modalBackdrop, palette, ship) { selected ->
+                                        onSelected(selected)
+                                        dismissSignal++
+                                    }
                                 }
                             }
                         }
@@ -2297,13 +2362,16 @@ private fun TerminalDetailSheet(backdrop: LayerBackdrop, palette: RefugePalette,
         transparentActionArea = false,
         surfaceRefraction = false,
         action = { actionBackdrop ->
-            ReferenceLiquidButton(
-                backdrop = actionBackdrop,
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
-                minHeight = 52.dp,
-            ) {
-                Text("完成", style = RefugeTypography.title(palette))
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                ReferenceLiquidButton(
+                    backdrop = actionBackdrop,
+                    onClick = onDismiss,
+                    // Keep the single action floating above the final details.
+                    modifier = Modifier.width(144.dp),
+                    minHeight = 52.dp,
+                ) {
+                    Text("完成", style = RefugeTypography.title(palette))
+                }
             }
         },
     ) { _ ->
@@ -2692,7 +2760,7 @@ private fun TerminalFilterSheet(
     onTaggedChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, "终端筛选", onDismiss, sheetHeight = 300.dp, actionOverContent = true) { modalBackdrop ->
+    RefugeLiquidSheet(backdrop, palette, "终端筛选", onDismiss, sheetHeight = 300.dp, actionOverContent = true, surfaceRefraction = false, surfaceAlpha = 1f) { modalBackdrop ->
         SettingsToggleRow(modalBackdrop, palette, "仅显示有 USD 价格", if (pricedOnly) "开启" else "关闭", pricedOnly) { onPricedChanged(!pricedOnly) }
         SettingsToggleRow(modalBackdrop, palette, "仅显示有标签", if (taggedOnly) "开启" else "关闭", taggedOnly) { onTaggedChanged(!taggedOnly) }
         Spacer(Modifier.height(60.dp))

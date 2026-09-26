@@ -205,7 +205,9 @@ fun StoreScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().refugeTopEdgeFade(palette.background),
+            // The refresh container owns the single top fade. Keeping it
+            // outside statusBarsPadding prevents it from darkening the avatar.
+            modifier = Modifier.fillMaxSize().statusBarsPadding(),
             state = listState,
             contentPadding = PaddingValues(
                 start = RefugeSpacing.page,
@@ -869,6 +871,8 @@ private fun StoreSheetFrame(
         sheetHeight = sheetHeight,
         actionOverContent = true,
         transparentActionArea = false,
+        surfaceRefraction = false,
+        surfaceAlpha = 1f,
         action = { actionBackdrop ->
             ReferenceLiquidButton(
                 backdrop = actionBackdrop,

@@ -7,7 +7,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.*
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,6 +23,7 @@ import com.refuge.next.data.HangarReclaimResult
 import com.refuge.next.data.HangarRepository
 import com.refuge.next.design.*
 import com.refuge.next.reference.OfficialLiquidButtonPort
+import com.refuge.next.material.RefugeLiquidGlassField
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -75,22 +77,29 @@ internal fun HangarReclaimContent(
         Text("每件可回收价值 ${item.price} · 可回收数量 ${item.quantity}", style = RefugeTypography.body(palette))
         Text("确认后物品将转为商店信用点并从机库移除。此操作不可撤销。", style = RefugeTypography.secondary(palette))
         if (result == null) {
-            val colors = TextFieldDefaults.outlinedTextFieldColors(
-                textColor = palette.text, cursorColor = palette.accent,
-                focusedBorderColor = palette.accent, unfocusedBorderColor = palette.outline,
-                focusedLabelColor = palette.accent, unfocusedLabelColor = palette.textSecondary,
-            )
-            OutlinedTextField(quantity, { quantity = it; prepared = null; error = null },
-                label = { Text("回收数量（1–${item.quantity}）") },
+            RefugeLiquidGlassField(
+                value = quantity,
+                onValueChange = { quantity = it; prepared = null; error = null },
+                backdrop = backdrop,
+                palette = palette,
+                label = "回收数量（1–${item.quantity}）",
+                placeholder = "输入数量",
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                enabled = !busy && prepared == null, singleLine = true, colors = colors,
-                modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(password, { password = it; prepared = null; error = null },
-                label = { Text("当前 RSI 账户密码") },
+                enabled = !busy && prepared == null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            RefugeLiquidGlassField(
+                value = password,
+                onValueChange = { password = it; prepared = null; error = null },
+                backdrop = backdrop,
+                palette = palette,
+                label = "当前 RSI 账户密码",
+                placeholder = "输入密码",
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                enabled = !busy && prepared == null, singleLine = true, colors = colors,
-                modifier = Modifier.fillMaxWidth())
+                enabled = !busy && prepared == null,
+                modifier = Modifier.fillMaxWidth(),
+            )
             error?.let { Text(it, style = RefugeTypography.body(palette).copy(color = palette.error)) }
             prepared?.let { request ->
                 Text("即将回收 ${request.pledgeIds.size} 件：编号 ${request.pledgeIds.joinToString()}。请核对后确认。",

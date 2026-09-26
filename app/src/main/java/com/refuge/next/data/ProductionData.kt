@@ -197,22 +197,74 @@ class ProductionCcuRepository(
     private val m80Image: Int = com.refuge.next.R.drawable.m80_hero,
     private val fallbackImage: Int = com.refuge.next.R.drawable.ship_placeholder,
 ) : CcuRepository {
-    override fun cachedShips(): List<CcuShip> = source?.peekCcuShips(m80Image, fallbackImage).orEmpty()
+    override fun cachedShips(): List<CcuShip> = source?.peekCcuShips(m80Image, fallbackImage)
+        ?.takeIf { it.isNotEmpty() }
+        ?: offlineCcuShips(fallbackImage)
 
     override fun cachedOwned(): List<OwnedCcu> = source?.peekOwnedCcu().orEmpty()
 
     override suspend fun awaitCachedShips(): List<CcuShip> = withContext(Dispatchers.IO) {
-        source?.ccuShips(m80Image, fallbackImage).orEmpty()
+        source?.ccuShips(m80Image, fallbackImage).orEmpty().ifEmpty { offlineCcuShips(fallbackImage) }
     }
 
     override suspend fun ships(): List<CcuShip> = withContext(Dispatchers.IO) {
-        source?.ccuShips(m80Image, fallbackImage).orEmpty()
+        source?.ccuShips(m80Image, fallbackImage).orEmpty().ifEmpty { offlineCcuShips(fallbackImage) }
     }
 
     override suspend fun owned(): List<OwnedCcu> = withContext(Dispatchers.IO) {
         source?.ownedCcu().orEmpty()
     }
 }
+
+/**
+ * Small public fallback for the planner. RSI normally replaces this snapshot
+ * during the background refresh; keeping a real ship set here means the
+ * selector remains usable during a cold offline start instead of rendering an
+ * empty upgrade page. Prices are public MSRP cents and contain no account data.
+ */
+private fun offlineCcuShips(imageRes: Int): List<CcuShip> = listOf(
+    CcuShip("1", "Aurora Mk I ES", 2000, imageRes),
+    CcuShip("3", "Aurora Mk I LX", 3500, imageRes),
+    CcuShip("4", "Aurora Mk I MR", 3000, imageRes),
+    CcuShip("5", "Aurora Mk I CL", 4500, imageRes),
+    CcuShip("6", "Aurora Mk I LN", 4000, imageRes),
+    CcuShip("7", "300i", 6000, imageRes),
+    CcuShip("8", "315p", 6500, imageRes),
+    CcuShip("9", "325a", 7000, imageRes),
+    CcuShip("10", "350r", 12500, imageRes),
+    CcuShip("11", "F7C Hornet Mk I", 12500, imageRes),
+    CcuShip("13", "F7C-S Hornet Ghost Mk I", 14000, imageRes),
+    CcuShip("15", "F7C-M Super Hornet Mk I", 18000, imageRes),
+    CcuShip("16", "Freelancer", 11000, imageRes),
+    CcuShip("22", "M50", 10000, imageRes),
+    CcuShip("24", "Caterpillar", 33000, imageRes),
+    CcuShip("31", "Freelancer DUR", 13500, imageRes),
+    CcuShip("32", "Freelancer MAX", 15000, imageRes),
+    CcuShip("33", "Freelancer MIS", 17500, imageRes),
+    CcuShip("34", "Constellation Andromeda", 24000, imageRes),
+    CcuShip("35", "Constellation Aquila", 31000, imageRes),
+    CcuShip("36", "Constellation Phoenix", 35000, imageRes),
+    CcuShip("37", "Constellation Taurus", 20000, imageRes),
+    CcuShip("40", "Avenger Titan", 7500, imageRes),
+    CcuShip("41", "Avenger Warlock", 9000, imageRes),
+    CcuShip("42", "Avenger Stalker", 8000, imageRes),
+    CcuShip("43", "Avenger Renegade", 9000, imageRes),
+    CcuShip("45", "Cutlass Black", 11500, imageRes),
+    CcuShip("46", "Cutlass Blue", 17500, imageRes),
+    CcuShip("47", "Cutlass Red", 13500, imageRes),
+    CcuShip("48", "Cutlass Steel", 23500, imageRes),
+    CcuShip("49", "Gladius", 9000, imageRes),
+    CcuShip("50", "Gladius Valiant", 11000, imageRes),
+    CcuShip("51", "Vanguard Sentinel", 27500, imageRes),
+    CcuShip("52", "Vanguard Warden", 26500, imageRes),
+    CcuShip("53", "Vanguard Harbinger", 29000, imageRes),
+    CcuShip("54", "Vanguard Hoplite", 27000, imageRes),
+    CcuShip("55", "Prospector", 15500, imageRes),
+    CcuShip("56", "Mole", 31500, imageRes),
+    CcuShip("57", "Mercury Star Runner", 26000, imageRes),
+    CcuShip("58", "C2 Hercules", 40000, imageRes),
+    CcuShip("59", "890 Jump", 95000, imageRes),
+).sortedBy { it.purchasePrice }
 
 /** Read-only cache boundary for the store's authenticated CCU purchase flow. */
 interface CcuPurchaseRepository {

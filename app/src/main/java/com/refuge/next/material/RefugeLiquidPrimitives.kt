@@ -167,6 +167,12 @@ fun RefugeCircularHeaderButton(
         visualHeight = 44.dp,
         contentPadding = 0.dp,
         shape = buttonShape,
+        // A white glass layer on a white sheet loses its silhouette. Keep the
+        // shared continuous circle, but give it the elevated control surface
+        // so the concentric corner and hit target remain visible in both themes.
+        surfaceColor = palette.contentSurfaceStrong.copy(
+            alpha = if (palette.background.luminance() < .5f) .72f else .82f,
+        ),
         content = {
             androidx.compose.material.Icon(icon, contentDescription, tint = palette.text, modifier = Modifier.size(20.dp))
         },
@@ -493,7 +499,7 @@ fun RefugeCompactLiquidPill(
     modifier: Modifier = Modifier,
     // The legacy list controls are 44 dp tall. Keep their visual height
     // separate from the larger primary actions used inside sheets.
-    visualHeight: Dp = 34.dp,
+    visualHeight: Dp = 32.dp,
 ) {
     OfficialLiquidButtonPort(
         onClick = onClick,

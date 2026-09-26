@@ -124,6 +124,7 @@ import com.refuge.next.material.RefugeFloatingAction
 import com.refuge.next.material.RefugeFloatingActionGroup
 import com.refuge.next.material.RefugeHeaderActionBar
 import com.refuge.next.material.RefugeHeaderAvatar
+import com.refuge.next.material.RefugeCircularHeaderButton
 import com.refuge.next.material.RefugeLiquidIconButton
 import com.refuge.next.material.RefugeAnimatedSearch
 import com.refuge.next.material.RefugeLiquidGlassField
@@ -170,6 +171,7 @@ fun HangarScreen(
     var selectedDetail by remember { mutableStateOf<HangarDetail?>(null) }
     var initialDetailPage by remember { mutableStateOf(HangarDetailPage.DETAIL) }
     var showLogs by remember { mutableStateOf(false) }
+    var shipSelectorRequest by remember { mutableStateOf<ShipSelectorRequest?>(null) }
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -196,9 +198,9 @@ fun HangarScreen(
         onDispose { registry?.unregisterRefresh(0, refreshCallback) }
     }
 
-    LaunchedEffect(showFilter, showSort, selectedDetail, showLogs, selectedSection) {
+    LaunchedEffect(showFilter, showSort, selectedDetail, showLogs, selectedSection, shipSelectorRequest) {
         onOverlayVisibilityChanged(
-            !showFilter && !showSort && selectedDetail == null && !showLogs,
+            !showFilter && !showSort && selectedDetail == null && !showLogs && shipSelectorRequest == null,
         )
     }
 
@@ -456,6 +458,13 @@ fun HangarScreen(
                         repository = repository,
                         inventory = inventory,
                         onOpenOwnedCcu = onOpenOwnedCcu,
+                        onShipSelector = { request ->
+                            shipSelectorRequest = request.copy(
+                                onSelected = { selected ->
+                                    request.onSelected(selected)
+                                },
+                            )
+                        },
                         refreshKey = selectedSection,
                         ownedSeeds = ownedShips.mapNotNull { ship ->
                             parseHangarPrice(ship.paidValue)?.let { paid ->
@@ -555,6 +564,18 @@ fun HangarScreen(
             primaryLabel = "知道了",
             onDismiss = { pendingAction = null },
             onPrimary = { pendingAction = null },
+        )
+    }
+    shipSelectorRequest?.let { request ->
+        ShipSelectorSheet(
+            backdrop = backdrop,
+            palette = palette,
+            isDark = isDark,
+            title = request.title,
+            ships = request.ships,
+            emptyMessage = request.emptyMessage,
+            onDismiss = { shipSelectorRequest = null },
+            onSelected = request.onSelected,
         )
     }
 }
@@ -1374,6 +1395,15 @@ private fun HangarDetailSheet(
         actionBottomPadding = 36.dp,
         actionOverContent = true,
         contentUnderHandle = true,
+        leadingAction = if (page == HangarDetailPage.DETAIL) null else { modalBackdrop ->
+            RefugeCircularHeaderButton(
+                backdrop = modalBackdrop,
+                palette = palette,
+                icon = RefugeIcons.back,
+                contentDescription = "返回详情",
+                onClick = { page = HangarDetailPage.DETAIL },
+            )
+        },
         transparentActionArea = false,
         surfaceRefraction = false,
         action = if (page != HangarDetailPage.DETAIL) null else { modalBackdrop ->
@@ -1417,16 +1447,6 @@ private fun HangarDetailSheet(
             Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
                 if (currentPage != HangarDetailPage.DETAIL) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        StableDetailIconButton(
-                            backdrop = modalBackdrop,
-                            icon = RefugeIcons.back,
-                            contentDescription = "返回详情",
-                            onClick = { page = HangarDetailPage.DETAIL },
-                            modifier = Modifier.size(48.dp),
-                            palette = palette,
-                            iconSize = 20.dp,
-                        )
-                        Spacer(Modifier.width(RefugeSpacing.sm))
                         Text(
                             when (currentPage) {
                                 HangarDetailPage.LOG -> "机库日志"
@@ -1484,7 +1504,7 @@ private fun StableDetailIconButton(
         enablePressHighlight = true,
         visualHeight = 48.dp,
         contentPadding = 0.dp,
-        shape = CircleShape,
+        shape = refugeContinuousShape(24.dp),
         content = {
             Icon(
                 icon,
@@ -1577,8 +1597,12 @@ private fun HangarInlineLogContent(palette: RefugePalette, entries: List<HangarL
                 Spacer(Modifier.width(RefugeSpacing.md))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val displayEntry = entry.copy(
-                        name = translatedShipName(entry.name),
-                        reason = entry.reason?.let { translatedShipName(it) },
+                        name = translatedShipName(cleanLogText(entry.name)),
+                        reason = entry.reason?.let { translatedShipName(cleanLogText(it)) },
+                        target = entry.target?.let(::cleanLogText),
+                        source = entry.source?.let(::cleanLogText),
+                        operator = cleanLogText(entry.operator),
+                        rawContent = cleanLogText(entry.rawContent),
                     )
                     Text(displayEntry.localizedTitle(), style = RefugeTypography.headline(palette))
                     val description = displayEntry.localizedDescription()
@@ -1702,21 +1726,27 @@ private fun HangarInlineRecallContent(
     }
 }
 
-private fun HangarLogEntry.localizedTitle(): String = name.ifBlank { "机库项目" }
+private fun HangarLogEntry.localizedTitle(): String = cleanLogText(name).ifBlank { "机库项目" }
+
+private fun cleanLogText(value: String): String =
+    android.text.Html.fromHtml(value, android.text.Html.FROM_HTML_MODE_LEGACY)
+        .toString()
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
 private fun HangarLogEntry.localizedDescription(): String = when (type) {
-    "CREATED" -> "购买了 $name (#${target.orEmpty()})"
-    "RECLAIMED" -> "回收了 $name (#${target.orEmpty()})"
-    "CONSUMED" -> "消耗了 $name (#${target.orEmpty()})"
-    "APPLIED_UPGRADE" -> "使用 ${reason.orEmpty()} (#${source.orEmpty()}) 升级了 $name (#${target.orEmpty()})"
-    "BUYBACK" -> "回购了 $name (#${target.orEmpty()})"
-    "GIFT" -> "赠送了 $name (#${target.orEmpty()})"
-    "GIFT_CLAIMED" -> "$operator 领取了 $name (#${target.orEmpty()})"
-    "GIFT_CANCELLED" -> "取消赠送 $name (#${target.orEmpty()})"
-    "NAME_CHANGE" -> "将名称改为 ${reason.orEmpty()}"
-    "NAME_CHANGE_RECLAIMED" -> "取消名称 ${reason.orEmpty()}"
-    "GIVEAWAY" -> "获得了 $name (#${target.orEmpty()})"
-    else -> rawContent.ifBlank { name }
+    "CREATED" -> "购买了 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    "RECLAIMED" -> "回收了 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    "CONSUMED" -> "消耗了 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    "APPLIED_UPGRADE" -> "使用 ${cleanLogText(reason.orEmpty())} (#${cleanLogText(source.orEmpty())}) 升级了 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    "BUYBACK" -> "回购了 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    "GIFT" -> "赠送了 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    "GIFT_CLAIMED" -> "${cleanLogText(operator)} 领取了 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    "GIFT_CANCELLED" -> "取消赠送 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    "NAME_CHANGE" -> "将名称改为 ${cleanLogText(reason.orEmpty())}"
+    "NAME_CHANGE_RECLAIMED" -> "取消名称 ${cleanLogText(reason.orEmpty())}"
+    "GIVEAWAY" -> "获得了 ${cleanLogText(name)} (#${cleanLogText(target.orEmpty())})"
+    else -> cleanLogText(rawContent.ifBlank { name })
 }
 
 private fun HangarLogEntry.formattedTime(): String = if (timeMillis <= 0) "时间未知" else
@@ -1970,7 +2000,16 @@ private fun FilterSheet(
     onShipOnlyChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, "筛选舰库", onDismiss) { modalBackdrop ->
+    RefugeLiquidSheet(
+        backdrop = backdrop,
+        palette = palette,
+        title = "筛选舰库",
+        onDismiss = onDismiss,
+        sheetHeight = 336.dp,
+        surfaceRefraction = false,
+        surfaceAlpha = 1f,
+        actionOverContent = true,
+    ) { modalBackdrop ->
         Text("按项目类型和可用操作缩小清单", style = RefugeTypography.secondary(palette))
         listOf(
             "仅显示舰船" to shipOnly,

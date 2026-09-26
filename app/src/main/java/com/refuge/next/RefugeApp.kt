@@ -2,6 +2,7 @@ package com.refuge.next
 
 import android.app.Activity
 import android.animation.ValueAnimator
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -20,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -141,6 +143,8 @@ private fun RefugeAppContent() {
     var rootTab by remember { mutableIntStateOf(0) }
     var showStoreUpgrade by remember { mutableStateOf(false) }
     var selectedOwnedCcuId by remember { mutableStateOf<Long?>(null) }
+    var lastNavTapRoute by remember { mutableIntStateOf(-1) }
+    var lastNavTapAt by remember { mutableLongStateOf(0L) }
     val view = LocalView.current
     SideEffect {
         val window = (view.context as Activity).window
@@ -331,19 +335,14 @@ private fun RefugeAppContent() {
     val palette = if (isDark) RefugeColors.dark else RefugeColors.light
     val routeStateHolder = rememberSaveableStateHolder()
     val rootScrollRegistry = remember { RootScrollRegistry() }
-    var opticalGlassReady by remember { mutableStateOf(false) }
+    // The optical primitives include a safe fallback, so the first interactive
+    // frame should already use the same glass material as later frames.
+    var opticalGlassReady by remember { mutableStateOf(true) }
     var remoteArtworkReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        // Let the first cached frame settle before compiling the backdrop graph.
-        // Liquid controls are enabled immediately after the first frame; this
-        // avoids the emulator's OpenGL render-thread stall during cold start.
+        // Keep remote artwork staged after the cached frame. Do not delay the
+        // material pass: controls must not switch from flat to glass in place.
         withFrameNanos { }
-        // Backdrop shader compilation is intentionally staged after the first
-        // cached route traversal. This keeps the launch surface responsive on
-        // Android emulators while preserving liquid glass once the page is
-        // stable.
-        delay(4200)
-        opticalGlassReady = true
         remoteArtworkReady = true
     }
     CompositionLocalProvider(
@@ -382,14 +381,28 @@ private fun RefugeAppContent() {
                         // and scroll state remain intact beneath the purchase sheet.
                         showStoreUpgrade = true
                     } else if (route == selectedTab) {
-                        appScope.launch {
-                            if (rootScrollRegistry.isAtTop(route)) {
-                                rootScrollRegistry.triggerRefresh(route)
-                            } else {
-                                rootScrollRegistry.scrollToTop(route)
+                        // A stationary tap selects the current tab; the
+                        // legacy interaction is a deliberate double tap. The
+                        // second tap returns a scrolled page to its top, and a
+                        // second tap while already at the top performs the
+                        // page refresh. This keeps the bottom bar from
+                        // refreshing while the user is merely changing tabs.
+                        val now = SystemClock.uptimeMillis()
+                        val isDoubleTap = route == lastNavTapRoute && now - lastNavTapAt <= 360L
+                        lastNavTapRoute = route
+                        lastNavTapAt = if (isDoubleTap) 0L else now
+                        if (isDoubleTap) {
+                            appScope.launch {
+                                if (rootScrollRegistry.isAtTop(route)) {
+                                    rootScrollRegistry.triggerRefresh(route)
+                                } else {
+                                    rootScrollRegistry.scrollToTop(route)
+                                }
                             }
                         }
                     } else {
+                        lastNavTapRoute = -1
+                        lastNavTapAt = 0L
                         if (route in productionRootRoutes) rootTab = route
                         selectedTab = route
                     }
@@ -414,6 +427,13 @@ private fun RefugeAppContent() {
                       RefugeRouteTransition(
                           targetState = route,
                           order = ::productionRouteOrder,
+                          // Root destinations slide as pages. Secondary
+                          // routes and detail overlays are presented in place
+                          // so the shared bottom navigation never moves with
+                          // the page transition.
+                          animate = { from, to ->
+                              from in productionRootRoutes && to in productionRootRoutes
+                          },
                           modifier = Modifier.fillMaxSize(),
                       ) { animatedRoute ->
                         routeStateHolder.SaveableStateProvider(animatedRoute) {
@@ -454,7 +474,16 @@ private fun RefugeAppContent() {
                                 rootTab = rootTab,
                                 settingsRepository = settingsRepository,
                                 cacheManifest = cacheManifest,
-                                onTerminalOverlayVisibilityChanged = { visible -> rootNavigationVisible = visible },
+                                // Keep the root bar mounted in its original layout,
+                                // but let an in-flow sheet cover its paint layer.
+                                // Leaving this callback empty puts the bar above
+                                // the opaque selector sheet because the root
+                                // overlay is rendered after page content.
+                                // Sheets cover the bar through composition
+                                // order. Keep the navigation mounted so it
+                                // never disappears and reappears during a
+                                // modal transition.
+                                onTerminalOverlayVisibilityChanged = { },
                                 onOpenStoreUpgrade = { showStoreUpgrade = true },
                           )
                         }
@@ -488,7 +517,9 @@ private fun RefugeAppContent() {
                                 // Cupertino dismissal window before removing
                                 // the sheet from the composition.
                                 appScope.launch {
-                                    delay(160)
+                                    // Let the sheet finish its 150 ms Cupertino
+                                    // exit before removing it from composition.
+                                    delay(280)
                                     showPresencePicker = false
                                     runCatching { userStatus.syncToRsi(auth) }
                                 }
