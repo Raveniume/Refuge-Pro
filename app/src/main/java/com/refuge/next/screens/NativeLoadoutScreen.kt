@@ -151,7 +151,7 @@ internal fun NativeLoadoutScreen(
         leadingAction = { modalBackdrop ->
             RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
         },
-        sheetHeight = 780.dp,
+        sheetHeight = 760.dp,
         contentScrollable = false,
         contentUnderHandle = true,
         modifier = Modifier.zIndex(5f),
@@ -162,7 +162,7 @@ internal fun NativeLoadoutScreen(
                 // The circular back control is anchored to the sheet corner.
                 // Reserve its horizontal footprint so the title never paints
                 // underneath the control while the sheet enters or settles.
-                Row(Modifier.fillMaxWidth().padding(start = 64.dp, end = 16.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(start = 56.dp, end = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
                     Box {
                         RefugeHeaderActionBar(modalBackdrop, palette, listOf(

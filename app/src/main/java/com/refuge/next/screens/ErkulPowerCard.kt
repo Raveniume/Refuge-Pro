@@ -3,10 +3,8 @@ package com.refuge.next.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -65,15 +63,29 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                     if (coolingRatio > 1f) palette.error else palette.accent, palette.glassStrong)
                 aim?.let { Text("瞄准辅助  ${it.roundToInt()} m", style = RefugeTypography.caption(palette)) }
             }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.SpaceEvenly) {
+            // Keep every group visible on a compact phone. The previous fixed
+            // 48dp columns overflowed when a ship exposed eight groups, so the
+            // last pips and icon were clipped instead of being usable.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.Top,
+            ) {
                 groups.forEachIndexed { index, group ->
                     val members = power.consumers.filter { it.group == group }
                     val maximum = members.sumOf { it.maximum }
                     val value = members.sumOf { power.supplied(it.path) }
                     val onChange by rememberUpdatedState<(Int) -> Unit>({ update(setPowerGroup(power, draft, group, it)) })
-                    Column(Modifier.width(48.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(
+                        // Let the row divide the available width evenly. A
+                        // fixed 46dp cap made eight groups exceed a compact
+                        // phone and clipped the last power icon.
+                        Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Text(value.toString(), style = RefugeTypography.headline(palette))
-                        Canvas(Modifier.width(48.dp).height(144.dp).semantics {
+                        Canvas(Modifier.fillMaxWidth().height(144.dp).semantics {
                             contentDescription = "$group 电力"; stateDescription = "$value / $maximum 格"
                             progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), 0f..maximum.coerceAtLeast(1).toFloat(), maximum.coerceAtLeast(1) - 1)
                             setProgress { onChange(it.roundToInt()); true }
@@ -84,8 +96,12 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                             val gap = 3.dp.toPx()
                             val height = (size.height / chartMaximum - gap).coerceAtLeast(1f)
                             repeat(count) { pip ->
-                                drawRoundRect(if (pip < value) palette.accent else palette.text.copy(alpha = .08f),
-                                    Offset(4.dp.toPx(), size.height - (pip + 1) * (height + gap)), Size(size.width - 8.dp.toPx(), height), CornerRadius(3.dp.toPx()))
+                                drawRoundRect(
+                                    if (pip < value) palette.accent else palette.text.copy(alpha = .08f),
+                                    Offset(2.dp.toPx(), size.height - (pip + 1) * (height + gap)),
+                                    Size((size.width - 4.dp.toPx()).coerceAtLeast(1f), height),
+                                    CornerRadius(3.dp.toPx()),
+                                )
                             }
                         }
                         val allDisabled = members.isNotEmpty() && members.all { member -> active.none { it.path == member.path } }

@@ -146,7 +146,7 @@ fun RefugeLiquidGlassButton(
     surface: androidx.compose.ui.graphics.Color = palette.glassStrong,
     // Keep light-mode actions visibly separated from the grouped canvas so
     // labels remain readable even when the backdrop is plain white.
-    surfaceAlpha: Float = if (palette.background.luminance() < .5f) .065f else .16f,
+    surfaceAlpha: Float = if (palette.background.luminance() < .5f) .065f else .10f,
     refractionHeight: Dp = 12.dp,
     refractionAmount: Dp = 18.dp,
     blurRadius: Dp = 3.dp,

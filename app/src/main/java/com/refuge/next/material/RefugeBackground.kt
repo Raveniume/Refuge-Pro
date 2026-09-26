@@ -47,12 +47,18 @@ fun RefugeScene(
             // no artwork behind it. The blur and lens still sample the page;
             // this semantic fill supplies the accessible light-mode boundary.
             LocalGlassControlSurface provides if (palette.background.luminance() < .5f) {
-                Color.White.copy(alpha = .12f)
+                Color.White.copy(alpha = .10f)
             } else {
                 // The grouped background is tinted; controls use a white
                 // optical layer so their hierarchy remains visible in light
                 // mode without a dark border.
-                Color.White.copy(alpha = .66f)
+                // A thick white fill flattens the blur/lens in light mode.
+                // Keep a readable regular-glass veil while allowing the page
+                // content to remain visible through the material.
+                // Keep the light functional layer translucent enough for the
+                // backdrop blur and lens to remain visible over the grouped
+                // background. Content surfaces stay opaque elsewhere.
+                Color.White.copy(alpha = .20f)
             },
         ) {
             CupertinoTheme(colorScheme = if (palette.background.luminance() < .5f)

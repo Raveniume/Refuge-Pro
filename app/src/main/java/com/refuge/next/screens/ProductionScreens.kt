@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.compose.ui.res.painterResource
 import coil3.compose.AsyncImage
 import androidx.compose.ui.semantics.Role
@@ -101,6 +102,9 @@ import com.refuge.next.data.ToolDetail
 import com.refuge.next.data.DestructiveAction
 import com.refuge.next.data.SafeNoOpDestructiveActionExecutor
 import com.refuge.next.data.ProductionCacheManifest
+import com.refuge.next.data.AppRelease
+import com.refuge.next.data.GitHubUpdateRepository
+import com.refuge.next.data.isNewerRelease
 import com.refuge.next.data.formatUsd
 import com.refuge.next.design.RefugeIconSize
 import com.refuge.next.design.RefugePalette
@@ -221,6 +225,7 @@ fun BoxScope.RootBottomNav(
     isDark: Boolean,
     selected: Int,
     onNavigate: (Int) -> Unit,
+    coveredBySheet: Boolean = false,
 ) {
     val selectedIndex = rootTabs.indexOfFirst { it.route == selected }.coerceAtLeast(0)
     ReferenceLiquidBottomTabs(
@@ -232,6 +237,10 @@ fun BoxScope.RootBottomNav(
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
+            // The navigation surface is a fixed functional layer. Route
+            // content sits below it, while a sheet uses zIndex 1000 to cover
+            // it in place during presentation.
+            .zIndex(if (coveredBySheet) 1f else 2f)
             .padding(horizontal = 28.dp)
             .navigationBarsPadding()
             .padding(bottom = 8.dp),
@@ -1420,12 +1429,16 @@ fun SettingsScreen(
     avatarUrl: String?,
     onToggleOnline: () -> Unit,
 ) {
+    val context = LocalContext.current
     var showAbout by remember { mutableStateOf(false) }
     var cacheCleared by remember { mutableStateOf(false) }
     var clearingCache by remember { mutableStateOf(false) }
     var cacheError by remember { mutableStateOf<String?>(null) }
     val settingsScope = rememberCoroutineScope()
     var showLicense by remember { mutableStateOf(false) }
+    var release by remember { mutableStateOf<AppRelease?>(null) }
+    var updateState by remember { mutableStateOf("检查更新") }
+    val updateRepository = remember { GitHubUpdateRepository(context) }
     PageGlassScope(
         backdrop = backdrop,
         content = {
@@ -1479,6 +1492,33 @@ fun SettingsScreen(
                     SettingsActionRow(palette, "版本", BuildConfig.VERSION_NAME) { showAbout = true }
                     DividerLine(palette)
                     SettingsActionRow(palette, "开源协议", "GNU AGPLv3") { showLicense = true }
+                    DividerLine(palette)
+                    SettingsActionRow(palette, "检查更新", updateState) {
+                        if (updateState == "正在检查…" || updateState == "正在下载…") return@SettingsActionRow
+                        settingsScope.launch {
+                            updateState = "正在检查…"
+                            try {
+                                val latest = updateRepository.latestRelease()
+                                release = latest
+                                if (!isNewerRelease(latest.version, BuildConfig.VERSION_NAME)) {
+                                    updateState = "已是最新版本"
+                                } else if (latest.apkUrl == null) {
+                                    updateState = "发现 v${latest.version}（无 APK）"
+                                } else {
+                                    updateState = "正在下载…"
+                                    val apk = updateRepository.download(latest)
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.update-provider", apk)
+                                    context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(uri, "application/vnd.android.package-archive")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    })
+                                    updateState = "已准备安装 v${latest.version}"
+                                }
+                            } catch (_: Exception) {
+                                updateState = "检查失败，点击重试"
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1727,7 +1767,10 @@ internal fun HangarUpgradePanel(
     val availableTargets = remember(start, targetCatalog) {
         start?.let { current -> targetCatalog.filter { it.purchasePrice > current.purchasePrice } } ?: targetCatalog
     }
-    val availableStarts = remember(target, ownedStartShips) { plannerStartOptions(target, ownedStartShips) }
+    // Starting from a ship is a planning operation, so the selector must use
+    // the complete official catalogue. Owned entries remain marked in the
+    // picker, but unowned ships are valid planning seeds too.
+    val availableStarts = remember(target, ships) { plannerStartOptions(target, ships) }
     LaunchedEffect(targetCatalog) {
         if (target != null && targetCatalog.none { it.sameIdentityAs(target!!) }) target = null
     }
@@ -2105,7 +2148,7 @@ internal fun ShipSelectorSheet(
         },
         // Keep the selector compact enough to leave the underlying page
         // legible while the virtualized list remains independently scrollable.
-        sheetHeight = 560.dp,
+        sheetHeight = 720.dp,
         // Ship selection is a focused upgrade decision. Keep the content
         // surface opaque so the planner behind it cannot ghost through rows or
         // make the list look disabled while the sheet is settling.
@@ -2141,9 +2184,9 @@ internal fun ShipSelectorSheet(
                     // Keep the nested list bounded even while the sheet is
                     // being measured by Dialog. This prevents selector stalls
                     // on large RSI catalogues.
-                    .height(370.dp),
+                    .height(536.dp),
             ) {
-                val viewportHeight = 370.dp
+                val viewportHeight = 536.dp
                 RefugeStandardGlassSurface(
                     backdrop = modalBackdrop,
                     palette = palette,
@@ -2329,7 +2372,6 @@ private fun TerminalDetailSheet(backdrop: LayerBackdrop, palette: RefugePalette,
         }
         if (supplemental.isEmpty()) sections else sections + TerminalSpecificationSection("舰船规格", supplemental)
     }
-    val description = remember(item.description, reference) { item.readableTerminalDescription().ifBlank { reference?.description.orEmpty() } }
     val prices = remember(item.value, item.usd) {
         buildList {
             item.value.takeIf(::isTerminalValuePresent)?.let { add("游戏内价格" to it) }
@@ -2345,8 +2387,7 @@ private fun TerminalDetailSheet(backdrop: LayerBackdrop, palette: RefugePalette,
     val estimatedHeight = (
         430 +
             visibleRows.coerceAtMost(8) * 42 +
-            specificationSections.size * 34 +
-            if (description.isNotBlank()) 126 else 0
+            specificationSections.size * 34
         ).dp.coerceIn(620.dp, 780.dp)
 
     RefugeLiquidSheet(
@@ -2450,15 +2491,6 @@ TerminalRemoteImage(
                 TerminalSpecificationCard(palette, section.title, section.rows)
             }
 
-            if (description.isNotBlank()) {
-                TerminalDetailCard(palette, "介绍") {
-                    Text(
-                        translatedShipName(description),
-                        style = RefugeTypography.detailBody(palette),
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    )
-                }
-            }
             // The action is optically floating over the final content row;
             // leave only a transparent scroll tail for its hit area.
             Spacer(Modifier.height(64.dp))
@@ -2760,11 +2792,21 @@ private fun TerminalFilterSheet(
     onTaggedChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, "终端筛选", onDismiss, sheetHeight = 300.dp, actionOverContent = true, surfaceRefraction = false, surfaceAlpha = 1f) { modalBackdrop ->
+    RefugeLiquidSheet(
+        backdrop, palette, "终端筛选", onDismiss,
+        sheetHeight = 320.dp,
+        contentScrollable = false,
+        actionOverContent = true,
+        surfaceRefraction = false,
+        surfaceAlpha = 1f,
+        action = { local ->
+            ReferenceLiquidButton(local, onDismiss, modifier = Modifier.fillMaxWidth(), minHeight = 56.dp) {
+                Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
+            }
+        },
+    ) { modalBackdrop ->
         SettingsToggleRow(modalBackdrop, palette, "仅显示有 USD 价格", if (pricedOnly) "开启" else "关闭", pricedOnly) { onPricedChanged(!pricedOnly) }
         SettingsToggleRow(modalBackdrop, palette, "仅显示有标签", if (taggedOnly) "开启" else "关闭", taggedOnly) { onTaggedChanged(!taggedOnly) }
-        Spacer(Modifier.height(60.dp))
-        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
     }
 }
 

@@ -51,3 +51,18 @@ Thumbs.db
 # Local visual-QA dumps and generated helper artifacts are not release source.
 /qa/
 /classes.jar
+
+# Root-level local visual QA, emulator snapshots, and runtime diagnostics.
+# Product assets live below app/src and are intentionally unaffected.
+/*.png
+/*.jpg
+/*.jpeg
+/*.mp4
+/*.xml
+/*.json
+/*.bin
+/*.txt
+/*.jar
+/*.log
+/*.idsig
+/*.apk

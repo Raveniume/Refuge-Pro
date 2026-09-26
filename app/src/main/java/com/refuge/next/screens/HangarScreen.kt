@@ -761,7 +761,7 @@ private fun HangarHeader(
     onSearch: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().height(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RefugeHeaderAvatar(
@@ -2005,10 +2005,16 @@ private fun FilterSheet(
         palette = palette,
         title = "筛选舰库",
         onDismiss = onDismiss,
-        sheetHeight = 336.dp,
+        sheetHeight = 360.dp,
+        contentScrollable = false,
         surfaceRefraction = false,
         surfaceAlpha = 1f,
         actionOverContent = true,
+        action = { local ->
+            ReferenceLiquidButton(local, onDismiss, modifier = Modifier.fillMaxWidth(), minHeight = 52.dp) {
+                Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
+            }
+        },
     ) { modalBackdrop ->
         Text("按项目类型和可用操作缩小清单", style = RefugeTypography.secondary(palette))
         listOf(
@@ -2043,9 +2049,7 @@ private fun FilterSheet(
                 Text(label, style = RefugeTypography.body(palette))
             }
         }
-        RefugeGlassControl(modalBackdrop, palette, onDismiss, contentDescription = "完成筛选", modifier = Modifier.align(Alignment.End)) {
-            Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
-        }
+        Spacer(Modifier.height(64.dp))
     }
 }
 
@@ -2057,17 +2061,26 @@ private fun HangarSortSheet(
     onSelected: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, "排序舰库", onDismiss, sheetHeight = 248.dp) { modalBackdrop ->
+    RefugeLiquidSheet(
+        backdrop, palette, "排序舰库", onDismiss,
+        sheetHeight = 336.dp,
+        contentScrollable = false,
+        actionOverContent = true,
+        action = { local ->
+            ReferenceLiquidButton(local, onDismiss, modifier = Modifier.fillMaxWidth(), minHeight = 56.dp) {
+                Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
+            }
+        },
+    ) { modalBackdrop ->
         listOf("最新同步" to true, "最早同步" to false).forEach { (label, value) ->
             Row(
-                Modifier.fillMaxWidth().clickable { onSelected(value) },
+                Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { onSelected(value) },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(label, style = RefugeTypography.body(palette), modifier = Modifier.weight(1f))
                 if (newestFirst == value) Icon(RefugeIcons.check, null, tint = palette.accent, modifier = Modifier.size(RefugeIconSize.small))
             }
         }
-        RefugeCompactUtilityPill(modalBackdrop, palette, RefugeIcons.chevron, "完成", onDismiss, Modifier.align(Alignment.End))
     }
 }
 

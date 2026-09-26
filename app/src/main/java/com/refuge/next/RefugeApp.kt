@@ -31,6 +31,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -65,7 +66,8 @@ import com.refuge.next.design.RefugeColors
 import com.refuge.next.design.LocalRefugeTranslationEnabled
 import com.refuge.next.material.RefugeScene
 import com.refuge.next.material.LocalRootNavigationOverlay
-import com.refuge.next.material.RootNavigationOverlay
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
 import com.refuge.next.material.LocalOpticalGlassEnabled
 import com.refuge.next.material.LocalRemoteArtworkEnabled
 import com.refuge.next.motion.RefugeRouteTransition
@@ -136,12 +138,12 @@ private fun RefugeAppContent() {
     val isOnline = presence != UserPresence.INVISIBLE
     var showPresencePicker by remember { mutableStateOf(false) }
     // Page sheets are rendered inside the route content. The root navigation
-    // keeps its layout position, but yields its paint layer while a sheet is
-    // open so it cannot appear above the sheet body.
-    var rootNavigationVisible by remember { mutableStateOf(true) }
+    // keeps its layout position and the route layer rises above it while a
+    // sheet is open, so the bar is covered in place instead of disappearing.
     var selectedTab by remember { mutableIntStateOf(0) }
     var rootTab by remember { mutableIntStateOf(0) }
     var showStoreUpgrade by remember { mutableStateOf(false) }
+    var pageOverlayActive by remember { mutableStateOf(false) }
     var selectedOwnedCcuId by remember { mutableStateOf<Long?>(null) }
     var lastNavTapRoute by remember { mutableIntStateOf(-1) }
     var lastNavTapAt by remember { mutableLongStateOf(0L) }
@@ -375,7 +377,6 @@ private fun RefugeAppContent() {
                 }
             } else {
                     val navigate: (Int) -> Unit = { route ->
-                    rootNavigationVisible = true
                     if (route == 9) {
                         // Keep the store route mounted so its category, search,
                         // and scroll state remain intact beneath the purchase sheet.
@@ -401,29 +402,30 @@ private fun RefugeAppContent() {
                             }
                         }
                     } else {
+                        pageOverlayActive = false
                         lastNavTapRoute = -1
                         lastNavTapAt = 0L
                         if (route in productionRootRoutes) rootTab = route
                         selectedTab = route
                     }
                 }
-                CompositionLocalProvider(
-                    LocalRootNavigationOverlay provides RootNavigationOverlay(selectedTab to rootNavigationVisible) { pageBackdrop ->
-                        if (selectedTab in productionRootRoutes) {
-                            RootBottomNav(
-                                pageBackdrop,
-                                isDark,
-                                if (selectedTab in productionRootRoutes) selectedTab else rootTab,
-                                navigate,
-                            )
-                        }
-                    },
-                ) {
-                    // Each root screen owns its page capture. Its navigation
-                    // overlay is drawn above that capture, while sheets that
-                    // follow the page scope naturally cover both layers.
+                // The root bar is deliberately outside AnimatedContent. Each
+                // page used to draw its own copy through PageGlassScope, so a
+                // route transition briefly composed two bars and retained the
+                // outgoing page in the glass capture. Keeping one bar here
+                // makes the navigation surface stationary while only page
+                // content slides and fades.
+                CompositionLocalProvider(LocalRootNavigationOverlay provides null) {
                     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
                       val route = selectedTab
+                      val pageLayerZ = if (pageOverlayActive) 2f else 1f
+                      val rootNavigationBackdrop = rememberLayerBackdrop()
+                      androidx.compose.foundation.layout.Box(
+                          Modifier
+                              .fillMaxSize()
+                              .zIndex(pageLayerZ)
+                              .layerBackdrop(rootNavigationBackdrop),
+                      ) {
                       RefugeRouteTransition(
                           targetState = route,
                           order = ::productionRouteOrder,
@@ -434,7 +436,13 @@ private fun RefugeAppContent() {
                           animate = { from, to ->
                               from in productionRootRoutes && to in productionRootRoutes
                           },
-                          modifier = Modifier.fillMaxSize(),
+                          modifier = Modifier
+                              .fillMaxSize()
+                              // Keep the route above the fixed bar. Root page
+                              // pixels remain transparent around the bar, and
+                              // an in-flow sheet naturally covers the bar in
+                              // place during its presentation.
+                              .zIndex(pageLayerZ),
                       ) { animatedRoute ->
                         routeStateHolder.SaveableStateProvider(animatedRoute) {
                           RefugeContent(
@@ -474,19 +482,22 @@ private fun RefugeAppContent() {
                                 rootTab = rootTab,
                                 settingsRepository = settingsRepository,
                                 cacheManifest = cacheManifest,
-                                // Keep the root bar mounted in its original layout,
-                                // but let an in-flow sheet cover its paint layer.
-                                // Leaving this callback empty puts the bar above
-                                // the opaque selector sheet because the root
-                                // overlay is rendered after page content.
-                                // Sheets cover the bar through composition
-                                // order. Keep the navigation mounted so it
-                                // never disappears and reappears during a
-                                // modal transition.
-                                onTerminalOverlayVisibilityChanged = { },
+                                onTerminalOverlayVisibilityChanged = { clear ->
+                                    if (animatedRoute == selectedTab) pageOverlayActive = !clear
+                                },
                                 onOpenStoreUpgrade = { showStoreUpgrade = true },
                           )
                         }
+                      }
+                      }
+                      if (selectedTab in productionRootRoutes) {
+                          RootBottomNav(
+                              backdrop = rootNavigationBackdrop,
+                              isDark = isDark,
+                              selected = if (selectedTab in productionRootRoutes) selectedTab else rootTab,
+                              onNavigate = navigate,
+                              coveredBySheet = pageOverlayActive,
+                          )
                       }
                       if (showStoreUpgrade && rootTab == 1) {
                           StoreUpgradePurchaseScreen(

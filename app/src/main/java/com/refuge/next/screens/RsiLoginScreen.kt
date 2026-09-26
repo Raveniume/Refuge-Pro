@@ -122,12 +122,10 @@ fun RsiLoginScreen(
                 .padding(horizontal = RefugeSpacing.page),
             radius = 28.dp,
             padding = PaddingValues(22.dp),
-            surface = if (palette.background.luminance() < .5f) {
-                palette.contentSurfaceStrong
-            } else {
-                Color.White
-            },
-            surfaceAlpha = if (palette.background.luminance() < .5f) .58f else .82f,
+            surface = if (palette.background.luminance() < .5f) palette.contentSurfaceStrong else palette.glassStrong,
+            // Keep the backdrop, blur and lens visible in light mode. A near
+            // opaque white fill makes the login form look like a plain card.
+            surfaceAlpha = if (palette.background.luminance() < .5f) .58f else .44f,
             blurRadius = 12.dp,
             edgeAlpha = .04f,
             edgeColor = palette.outline,
@@ -229,8 +227,8 @@ fun RsiLoginScreen(
                     backdrop = backdrop,
                     palette = palette,
                     radius = 24.dp,
-                    surface = if (formReady && !loading) palette.accent else palette.contentSurfaceStrong,
-                    surfaceAlpha = if (formReady && !loading) .92f else .84f,
+                        surface = if (formReady && !loading) palette.accent else palette.glassStrong,
+                        surfaceAlpha = if (formReady && !loading) .72f else .30f,
                     edgeAlpha = if (formReady && !loading) .16f else .24f,
                     highlightAlpha = .10f,
                     onClick = {

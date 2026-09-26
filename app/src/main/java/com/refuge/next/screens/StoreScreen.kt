@@ -476,7 +476,7 @@ private fun StoreToolbar(
     onFilter: () -> Unit,
     onSort: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(count?.let { "$it 项" } ?: "同步中", style = RefugeTypography.caption(palette))
         Spacer(Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
@@ -597,7 +597,7 @@ private fun StoreFilterSheet(
     onWarbondChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    StoreSheetFrame(backdrop, palette, "筛选商品", onDismiss, sheetHeight = 350.dp) {
+    StoreSheetFrame(backdrop, palette, "筛选商品", onDismiss, sheetHeight = 372.dp) {
         Text("价格区间", style = RefugeTypography.secondary(palette))
         Row(horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
             listOf("全部", "0-100", "100-500", "500+").forEach { band ->
@@ -623,7 +623,7 @@ private fun StoreSortSheet(
     onSelected: (StoreSortOrder) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    StoreSheetFrame(backdrop, palette, "排序商品", onDismiss, sheetHeight = 268.dp) {
+    StoreSheetFrame(backdrop, palette, "排序商品", onDismiss, sheetHeight = 344.dp) {
         StoreSortOrder.entries.forEach { choice ->
             StoreChoiceRow(palette, choice.label, order == choice) { onSelected(choice) }
         }
@@ -713,7 +713,6 @@ private fun StoreProductSheet(
         }
         shipReference?.let { reference ->
             Text(translatedShipName(reference.manufacturer), style = RefugeTypography.headline(palette))
-            if (reference.description.isNotBlank()) Text(translatedShipName(reference.description), style = RefugeTypography.body(palette))
             Column(Modifier.fillMaxWidth().clip(refugeContinuousShape(16.dp)).background(palette.contentSurfaceStrong).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 reference.details.forEach { (label, value) ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -722,10 +721,6 @@ private fun StoreProductSheet(
                     }
                 }
             }
-        }
-        val plainDescription = remember(product.description) { displayStorefrontText(product.description) }
-        if (plainDescription.isNotBlank() && plainDescription != shipReference?.description) {
-            Text(translatedShipName(plainDescription), style = RefugeTypography.body(palette))
         }
         Spacer(Modifier.height(76.dp))
     }
@@ -873,6 +868,7 @@ private fun StoreSheetFrame(
         transparentActionArea = false,
         surfaceRefraction = false,
         surfaceAlpha = 1f,
+        contentScrollable = false,
         action = { actionBackdrop ->
             ReferenceLiquidButton(
                 backdrop = actionBackdrop,

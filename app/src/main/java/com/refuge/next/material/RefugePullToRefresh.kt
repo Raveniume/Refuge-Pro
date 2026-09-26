@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.animation.core.tween
+import kotlinx.coroutines.launch
 import kotlin.math.min
 
 fun Modifier.refugeTopEdgeFade(
@@ -78,12 +81,15 @@ fun RefugePullToRefresh(
     val density = LocalDensity.current
     val thresholdPx = with(density) { 72.dp.toPx() }
     val maxPullPx = with(density) { 112.dp.toPx() }
+    val scope = rememberCoroutineScope()
 
     fun atTop(): Boolean = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
     val connection = remember(listState) {
         object : NestedScrollConnection {
+            var settling = false
+
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput && available.y > 0f && atTop() && !latestRefreshing) {
+                if (source == NestedScrollSource.UserInput && available.y > 0f && atTop() && !latestRefreshing && !settling) {
                     // Dampen the stretch so the content remains anchored to the
                     // top edge while the indicator follows the finger.
                     pullDistance = (pullDistance + available.y * .55f).coerceIn(0f, maxPullPx)
@@ -93,9 +99,32 @@ fun RefugePullToRefresh(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
+                if (settling || pullDistance <= 0f) return Velocity.Zero
                 val shouldRefresh = pullDistance >= thresholdPx && !latestRefreshing
-                pullDistance = 0f
-                if (shouldRefresh) latestRefresh()
+                settling = true
+                val releaseDistance = pullDistance
+                scope.launch {
+                    if (shouldRefresh) {
+                        // Hold a stable, visible indicator while the request
+                        // starts. The caller clears it only after the refresh
+                        // state changes, so release never flashes away.
+                        androidx.compose.animation.core.Animatable(releaseDistance).animateTo(
+                            thresholdPx,
+                            tween(180),
+                        ) { pullDistance = value }
+                        // Keep the indicator pinned until the caller clears
+                        // isRefreshing. The state effect below owns the exit
+                        // animation, so a fast refresh response cannot make
+                        // the indicator flash away on release.
+                        latestRefresh()
+                    } else {
+                        androidx.compose.animation.core.Animatable(releaseDistance).animateTo(
+                            0f,
+                            tween(220),
+                        ) { pullDistance = value }
+                    }
+                    settling = false
+                }
                 // Let the LazyColumn consume ordinary flings. Returning the
                 // available velocity here swallowed inertia whenever the pull
                 // threshold was not reached.
@@ -105,16 +134,32 @@ fun RefugePullToRefresh(
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 // Some Compose versions dispatch the release only through the
                 // post-fling phase when the parent consumed the drag.
-                val shouldRefresh = pullDistance >= thresholdPx && !latestRefreshing
-                pullDistance = 0f
-                if (shouldRefresh) latestRefresh()
+                if (!settling && pullDistance > 0f) {
+                    val shouldRefresh = pullDistance >= thresholdPx && !latestRefreshing
+                    settling = true
+                    val releaseDistance = pullDistance
+                    scope.launch {
+                        if (shouldRefresh) {
+                            androidx.compose.animation.core.Animatable(releaseDistance).animateTo(thresholdPx, tween(180)) { pullDistance = value }
+                            latestRefresh()
+                        } else {
+                            androidx.compose.animation.core.Animatable(releaseDistance).animateTo(0f, tween(220)) { pullDistance = value }
+                        }
+                        settling = false
+                    }
+                }
                 return Velocity.Zero
             }
         }
     }
 
     LaunchedEffect(isRefreshing) {
-        if (isRefreshing) pullDistance = 0f
+        if (isRefreshing) {
+            pullDistance = thresholdPx
+        } else if (pullDistance > 0f && !connection.settling) {
+            val release = pullDistance
+            androidx.compose.animation.core.Animatable(release).animateTo(0f, tween(220)) { pullDistance = value }
+        }
     }
 
     val progress = (pullDistance / thresholdPx).coerceIn(0f, 1f)

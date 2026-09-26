@@ -279,9 +279,9 @@ fun RefugeLiquidSheet(
                     // Reserve only the measured controls and header. Fixed 220dp
                     // reservations clipped the body halfway down a detail sheet.
                     val actionReservation = if (action != null && !actionOverContent) actionRailHeight else 0.dp
-                    val headerReservation = 24.dp +
-                        (if (contentUnderHandle) 0.dp else 52.dp) +
-                        (if (title.isBlank()) 0.dp else 36.dp) +
+                    val headerReservation = 12.dp +
+                        (if (contentUnderHandle) 0.dp else 44.dp) +
+                        (if (title.isBlank()) 0.dp else 30.dp) +
                         (if (action == null) navigationBarInset else 0.dp)
                     val contentMaxHeight = (targetSheetHeight -
                         actionReservation - headerReservation).coerceAtLeast(120.dp)
@@ -291,8 +291,12 @@ fun RefugeLiquidSheet(
                             .padding(
                                 start = 18.dp,
                                 end = 18.dp,
-                                top = 12.dp,
-                                bottom = 12.dp + if (action == null) navigationBarInset else 0.dp,
+                                // A leading control is anchored to the sheet's
+                                // continuous corner. Reserve its vertical
+                                // footprint when there is no title row so it
+                                // cannot cover the first field or log text.
+                                top = if (leadingAction != null && title.isBlank()) 48.dp else 8.dp,
+                                bottom = 8.dp + if (action == null) navigationBarInset else 0.dp,
                             ),
                         verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
                     ) {
@@ -302,7 +306,12 @@ fun RefugeLiquidSheet(
                             }
                         }
                         if (title.isNotBlank()) {
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = if (leadingAction != null) 50.dp else 0.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 androidx.compose.material.Text(title, style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
                             }
                         }

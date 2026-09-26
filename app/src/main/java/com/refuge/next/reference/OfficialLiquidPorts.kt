@@ -315,10 +315,9 @@ private fun OfficialLiquidTabsCore(
         val containerColor = if (isDark) {
             Color(0xFF1C1C1E).copy(alpha = .34f)
         } else {
-        // The floating bottom bar needs a denser light surface than a compact
-        // segmented control. This keeps profile cards from ghosting through
-        // the labels while the backdrop blur still carries the glass effect.
-        Color(0xFFECECF1).copy(alpha = if (containerRespondsToGesture) .90f else .68f)
+        // Keep the regular material translucent in light mode. A near-opaque
+        // fill hides the backdrop and makes the tab bar look like a flat card.
+        Color(0xFFF8F8FA).copy(alpha = if (containerRespondsToGesture) .36f else .32f)
         }
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
         val density = LocalDensity.current
@@ -476,7 +475,7 @@ private fun OfficialLiquidTabsCore(
                     onDrawSurface = {
                         val progress = drag.pressProgress
                         drawRect(
-                            if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .065f),
+                            if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .13f),
                             alpha = 1f - progress,
                         )
                         drawRect(Color.Black.copy(alpha = .03f * progress))

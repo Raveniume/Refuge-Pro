@@ -28,6 +28,7 @@ data class RootNavigationOverlay(
 /** Root navigation is drawn after page content but before in-page modals. */
 val LocalRootNavigationOverlay = staticCompositionLocalOf<RootNavigationOverlay?> { null }
 
+
 // Only overlays outside the captured tree may consume this backdrop.
 // In-flow controls keep sampling their explicitly supplied lower layer.
 val LocalPageOverlayBackdrop = staticCompositionLocalOf<Backdrop?> { null }

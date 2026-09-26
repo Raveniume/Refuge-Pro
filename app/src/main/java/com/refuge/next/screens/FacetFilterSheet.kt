@@ -13,6 +13,7 @@ import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.refuge.next.data.FacetSelection
 import com.refuge.next.design.*
 import com.refuge.next.material.*
+import com.refuge.next.reference.ReferenceLiquidButton
 import zone.ien.hig.section.*
 
 @Composable
@@ -23,15 +24,20 @@ internal fun FacetFilterSheet(
 ) {
     var group by remember { mutableStateOf<String?>(null) }
     val optionCount = if (group == null) groups.size else 1 + groups[group].orEmpty().size
-    val compactHeight = (if (group == null) 170 else 150 + optionCount * 46).dp.coerceIn(300.dp, 620.dp)
+    val compactHeight = (if (group == null) 196 + groups.size * 48 else 154 + optionCount * 46).dp.coerceIn(300.dp, 700.dp)
     RefugeLiquidSheet(backdrop, palette, if (group == null) title else group!!, onDismiss, sheetHeight = compactHeight,
+        contentScrollable = false,
         surfaceRefraction = false,
         surfaceAlpha = 1f,
         actionOverContent = true,
         leadingAction = if (group != null) ({ local ->
             RefugeCircularHeaderButton(local, palette, RefugeIcons.back, "返回筛选", { group = null })
         }) else null,
-        action = { local -> RefugeCompactUtilityPill(local, palette, RefugeIcons.check, "完成", onDismiss, Modifier.fillMaxWidth()) }) { local ->
+        action = { local ->
+            ReferenceLiquidButton(local, onDismiss, modifier = Modifier.fillMaxWidth(), minHeight = 56.dp) {
+                Text("完成", style = RefugeTypography.body(palette).copy(color = palette.text))
+            }
+        }) { local ->
         BackHandler(group != null) { group = null }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("已选 ${selection.values.sumOf { it.size }} 项", style = RefugeTypography.caption(palette), modifier = Modifier.weight(1f))
@@ -56,6 +62,5 @@ internal fun FacetFilterSheet(
                 }
             }
         }
-        Spacer(Modifier.height(64.dp))
     }
 }

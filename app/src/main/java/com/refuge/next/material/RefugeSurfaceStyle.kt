@@ -44,16 +44,18 @@ internal fun Modifier.refugeContentMaterial(
 }
 
 internal object RefugeGlassStyle {
-    val controlHighlight = Highlight.Default.copy(alpha = .26f)
-    val barHighlight = Highlight.Default.copy(alpha = .22f)
+    val controlHighlight = Highlight.Default.copy(alpha = .20f)
+    val barHighlight = Highlight.Default.copy(alpha = .17f)
     val controlShadow = Shadow(
         radius = 10.dp,
         offset = DpOffset(0.dp, 2.dp),
-        color = Color.Transparent,
+        // A restrained shadow is part of the light glass separation. It is
+        // softer than an outline and keeps controls readable over F2F2F7.
+        color = Color.Black.copy(alpha = .14f),
     )
     val barShadow = Shadow(
         radius = 16.dp,
         offset = DpOffset(0.dp, 4.dp),
-        color = Color.Transparent,
+        color = Color.Black.copy(alpha = .16f),
     )
 }

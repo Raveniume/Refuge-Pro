@@ -171,7 +171,7 @@ fun RefugeCircularHeaderButton(
         // shared continuous circle, but give it the elevated control surface
         // so the concentric corner and hit target remain visible in both themes.
         surfaceColor = palette.contentSurfaceStrong.copy(
-            alpha = if (palette.background.luminance() < .5f) .72f else .82f,
+            alpha = if (palette.background.luminance() < .5f) .66f else .52f,
         ),
         content = {
             androidx.compose.material.Icon(icon, contentDescription, tint = palette.text, modifier = Modifier.size(20.dp))
@@ -467,7 +467,10 @@ fun RefugeHeaderActionBar(
         }
         actions.indices.forEach { index ->
             badges[index]?.takeIf { it > 0 }?.let { count ->
-                val rightEdge = widths.take(index + 1).fold(0.dp) { total, width -> total + width }
+                // Include the optical gap before every cell after the first;
+                // omitting it puts the badge one or two pixels inside the
+                // right edge and makes the connected toolbar look asymmetric.
+                val rightEdge = widths.take(index + 1).fold(0.dp) { total, width -> total + width } + 2.dp * index
                 Box(
                     Modifier.align(Alignment.TopStart).offset(x = rightEdge - 18.dp, y = 0.dp)
                         .zIndex(20f).size(18.dp).background(Color(0xFFFF8A00), CircleShape)

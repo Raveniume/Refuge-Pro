@@ -1,7 +1,7 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <!-- Simple ship silhouette; no glow, bevel or decorative border. -->
-    <path android:fillColor="#F7FAFF" android:pathData="M54,16 C44,26 32,47 25,73 C24,78 29,81 34,78 L54,66 L74,78 C79,81 84,78 83,73 C76,47 64,26 54,16 Z"/>
-    <path android:fillColor="#58C7FF" android:pathData="M54,30 L63,51 L54,62 L45,51 Z"/>
-    <path android:fillColor="#102439" android:pathData="M54,38 L59,51 L54,56 L49,51 Z"/>
-    <path android:fillColor="#F7FAFF" android:pathData="M32,72 L45,64 L40,76 Z M76,72 L63,64 L68,76 Z"/>
+    <path android:fillColor="#EAF4F6" android:pathData="M54,13 C46,23 41,39 39,57 L25,73 C22,77 24,82 29,82 L45,76 L47,93 L54,87 L61,93 L63,76 L79,82 C84,82 86,77 83,73 L69,57 C67,39 62,23 54,13 Z"/>
+    <path android:fillColor="#42D6C4" android:pathData="M54,31 C48,39 47,48 54,59 C61,48 60,39 54,31 Z"/>
+    <path android:fillColor="#102439" android:pathData="M54,38 C51,43 51,47 54,52 C57,47 57,43 54,38 Z"/>
+    <path android:fillColor="#75AFC2" android:pathData="M32,72 L43,65 L39,77 Z M76,72 L65,65 L69,77 Z"/>
+    <path android:fillColor="#FFB86B" android:pathData="M49,82 L53,79 L53,88 L49,91 Z M59,79 L63,82 L59,91 L55,88 Z"/>
 </vector>
