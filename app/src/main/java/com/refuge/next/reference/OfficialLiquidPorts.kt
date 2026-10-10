@@ -391,7 +391,11 @@ private fun OfficialLiquidTabsCore(
                     },
                     layerBlock = if (containerRespondsToGesture) {
                         {
-                            val progress = drag.pressProgress
+                            // The host surface responds to every press, including
+                            // a tap on a non-selected segment. The selected lens
+                            // keeps its own drag scale below, so both surfaces
+                            // swell together during a press.
+                            val progress = maxOf(drag.pressProgress, interactiveHighlight.progress)
                             val scale = lerp(1f, 1f + 16.dp.toPx() / size.width, progress)
                             scaleX = scale
                             scaleY = scale
@@ -402,6 +406,7 @@ private fun OfficialLiquidTabsCore(
                     },
                 )
                 .then(interactiveHighlight.modifier)
+                .then(interactiveHighlight.gestureModifier)
                 .height(outerHeight)
                 .fillMaxWidth()
                 .padding(4.dp),
@@ -434,13 +439,13 @@ private fun OfficialLiquidTabsCore(
                     backdrop = backdrop,
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
                     effects = {
-                        val progress = drag.pressProgress
+                        val progress = maxOf(drag.pressProgress, interactiveHighlight.progress)
                         vibrancy()
                         blur(8.dp.toPx())
                         lens(24.dp.toPx() * progress, 24.dp.toPx() * progress)
                     },
                     highlight = {
-                        Highlight.Default.copy(alpha = drag.pressProgress)
+                        Highlight.Default.copy(alpha = maxOf(drag.pressProgress, interactiveHighlight.progress))
                     },
                     onDrawSurface = { drawRect(containerColor) },
                 )
@@ -485,8 +490,10 @@ private fun OfficialLiquidTabsCore(
                     shadow = { Shadow(alpha = drag.pressProgress) },
                     innerShadow = { InnerShadow(radius = 8.dp * drag.pressProgress, alpha = drag.pressProgress) },
                     layerBlock = {
-                        scaleX = drag.scaleX
-                        scaleY = drag.scaleY
+                        val pressScale = maxOf(drag.pressProgress, interactiveHighlight.progress)
+                        val hostScale = lerp(1f, 1.2f, pressScale)
+                        scaleX = drag.scaleX * hostScale
+                        scaleY = drag.scaleY * hostScale
                         val velocity = drag.velocity / 10f
                         scaleX /= 1f - (velocity * .75f).fastCoerceIn(-.2f, .2f)
                         scaleY *= 1f - (velocity * .25f).fastCoerceIn(-.2f, .2f)

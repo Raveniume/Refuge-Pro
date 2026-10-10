@@ -4,8 +4,11 @@ import com.refuge.next.data.facetValue
 import com.refuge.next.data.terminalFacetKeys
 import com.refuge.next.data.accepts
 
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -195,6 +198,7 @@ fun PresencePickerSheet(
         surfaceAlpha = 1f,
         contentScrollable = false,
         contentUnderHandle = true,
+        titleTopPadding = 8.dp,
         dismissSignal = dismissSignal,
     ) { _ ->
         UserPresence.entries.forEach { presence ->
@@ -1100,9 +1104,13 @@ private fun ProfileAccountGroup(backdrop: LayerBackdrop, palette: RefugePalette,
         ) {
             Column {
                 AccountRow(palette, RefugeIcons.notification, "注册时间", profile.registerDate)
+                DividerLine(palette, Modifier.padding(horizontal = 2.dp))
                 AccountRow(palette, RefugeIcons.success, "UEC", profile.uec)
+                DividerLine(palette, Modifier.padding(horizontal = 2.dp))
                 AccountRow(palette, RefugeIcons.design, "REC", profile.rec)
+                DividerLine(palette, Modifier.padding(horizontal = 2.dp))
                 AccountRow(palette, RefugeIcons.store, "当前机库价值", profile.currentValue)
+                DividerLine(palette, Modifier.padding(horizontal = 2.dp))
                 AccountRow(palette, RefugeIcons.gift, "邀请码", profile.referralCode)
             }
         }
@@ -1533,14 +1541,34 @@ fun SettingsScreen(
                                     updateState = "正在下载…"
                                     val apk = updateRepository.download(latest)
                                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.update-provider", apk)
-                                    context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                                        !context.packageManager.canRequestPackageInstalls()
+                                    ) {
+                                        context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        })
+                                        updateState = "请允许安装更新后重试"
+                                        return@launch
+                                    }
+                                    context.startActivity(Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                                         setDataAndType(uri, "application/vnd.android.package-archive")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        addFlags(
+                                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                                Intent.FLAG_ACTIVITY_NEW_TASK,
+                                        )
+                                        clipData = ClipData.newRawUri("RefugeNext update", uri)
+                                        putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
                                     })
                                     updateState = "已准备安装 v${latest.version}"
                                 }
-                            } catch (_: Exception) {
-                                updateState = "检查失败，点击重试"
+                            } catch (error: Exception) {
+                                updateState = when {
+                                    error.message?.contains("没有 APK") == true -> "此版本没有 APK"
+                                    error.message?.contains("更新检查失败") == true -> "检查失败，点击重试"
+                                    else -> "更新失败，点击重试"
+                                }
                             }
                         }
                     }
@@ -2843,6 +2871,6 @@ private fun TerminalFilterSheet(
 }
 
 @Composable
-private fun DividerLine(palette: RefugePalette) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+private fun DividerLine(palette: RefugePalette, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().height(1.dp).background(palette.divider))
 }

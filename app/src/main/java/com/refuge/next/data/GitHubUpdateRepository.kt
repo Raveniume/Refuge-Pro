@@ -8,6 +8,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.util.zip.ZipFile
 import java.util.concurrent.TimeUnit
 
 internal data class AppRelease(
@@ -34,7 +35,10 @@ internal class GitHubUpdateRepository(context: Context) {
         client.newCall(request).execute().use { response ->
             check(response.isSuccessful) { "GitHub 更新检查失败（${response.code}）" }
             val payload = JSONObject(response.body?.string() ?: error("GitHub 返回内容为空"))
-            val version = payload.optString("tag_name").removePrefix("v")
+            val version = payload.optString("tag_name").trim().removePrefix("v").removePrefix("V")
+            require(version.matches(Regex("\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?"))) {
+                "Release 版本号无效"
+            }
             require(version.isNotBlank()) { "Release 没有版本号" }
             val pageUrl = payload.optString("html_url")
             require(pageUrl.startsWith("https://github.com/Raveniume/Refuge-Pro/releases/")) {
@@ -43,7 +47,12 @@ internal class GitHubUpdateRepository(context: Context) {
             val assets = payload.optJSONArray("assets")
             val apkUrl = (0 until (assets?.length() ?: 0))
                 .mapNotNull { assets?.optJSONObject(it) }
-                .firstOrNull { it.optString("name").endsWith(".apk", ignoreCase = true) }
+                .firstOrNull {
+                    val name = it.optString("name")
+                    name.endsWith(".apk", ignoreCase = true) &&
+                        (it.optString("content_type").isBlank() ||
+                            it.optString("content_type") == "application/vnd.android.package-archive")
+                }
                 ?.optString("browser_download_url")
                 ?.takeIf { it.startsWith("https://github.com/Raveniume/Refuge-Pro/releases/download/") }
             AppRelease(version, pageUrl, payload.optString("body"), apkUrl)
@@ -57,20 +66,22 @@ internal class GitHubUpdateRepository(context: Context) {
         }
         val directory = File(appContext.cacheDir, "updates").apply { mkdirs() }
         val target = File(directory, "refugenext-${release.version}.apk")
-        if (target.isFile && target.length() > 4 && target.inputStream().use { it.readNBytes(2).contentEquals(byteArrayOf(0x50, 0x4b)) }) {
+        if (target.isFile && target.isValidApk()) {
             return@withContext target
         }
         val temporary = File(directory, "${target.name}.part")
         try {
-            val request = Request.Builder().url(url).header("User-Agent", "RefugeNext-Android").build()
+            val request = Request.Builder()
+                .url(url)
+                .header("Accept", "application/octet-stream")
+                .header("User-Agent", "RefugeNext-Android")
+                .build()
             client.newCall(request).execute().use { response ->
                 check(response.isSuccessful) { "APK 下载失败（${response.code}）" }
                 val body = response.body ?: error("APK 响应为空")
                 body.byteStream().use { input -> FileOutputStream(temporary).use(input::copyTo) }
             }
-            require(temporary.length() > 4 && temporary.inputStream().use {
-                it.readNBytes(2).contentEquals(byteArrayOf(0x50, 0x4b))
-            }) { "下载文件不是有效的 APK" }
+            require(temporary.isValidApk()) { "下载文件不是有效的 APK" }
             if (target.exists()) target.delete()
             check(temporary.renameTo(target)) { "无法保存 APK 文件" }
             target
@@ -78,6 +89,13 @@ internal class GitHubUpdateRepository(context: Context) {
             temporary.delete()
         }
     }
+}
+
+private fun File.isValidApk(): Boolean {
+    if (!isFile || length() < 4) return false
+    return runCatching {
+        ZipFile(this).use { it.getEntry("AndroidManifest.xml") != null }
+    }.getOrDefault(false)
 }
 
 internal fun isNewerRelease(candidate: String, current: String): Boolean {

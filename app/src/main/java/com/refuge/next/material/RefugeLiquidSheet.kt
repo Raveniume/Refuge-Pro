@@ -87,6 +87,7 @@ fun RefugeLiquidSheet(
     surfaceRefraction: Boolean = true,
     surfaceAlpha: Float = 1f,
     contentScrollable: Boolean = true,
+    titleTopPadding: androidx.compose.ui.unit.Dp = 0.dp,
     /** Increment to run the Cupertino dismissal animation from content. */
     dismissSignal: Int = 0,
     leadingAction: (@Composable (Backdrop) -> Unit)? = null,
@@ -295,7 +296,7 @@ fun RefugeLiquidSheet(
                                 // continuous corner. Reserve its vertical
                                 // footprint when there is no title row so it
                                 // cannot cover the first field or log text.
-                                top = if (leadingAction != null && title.isBlank()) 48.dp else 8.dp,
+                                top = if (leadingAction != null && title.isBlank()) 48.dp else 8.dp + titleTopPadding,
                                 bottom = 8.dp + if (action == null) navigationBarInset else 0.dp,
                             ),
                         verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
