@@ -1,12 +1,15 @@
 package com.refuge.next.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -18,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.refuge.next.data.*
 import com.refuge.next.design.*
 import com.refuge.next.material.*
+import com.refuge.next.R
 import org.json.JSONObject
 import kotlin.math.*
 
@@ -40,7 +44,16 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
     val aim = radar?.let { (it.item!!.obj("radar").obj("aimAssist").number("distanceMaxAssignment") ?: 0.0) * powerOutputRatio(it.item, power.supplied(it.path)) }
     val groups = listOf("武器", "引擎", "护盾", "量子", "雷达", "维生", "散热") + if (power.consumers.any { it.group == "其他" }) listOf("其他") else emptyList()
     val chartMaximum = groups.maxOf { group -> power.consumers.filter { it.group == group }.sumOf { it.maximum } }.coerceAtLeast(1)
-    val glyphs = listOf(ShipSymbols.weapons, ShipSymbols.engine, ShipSymbols.shield, ShipSymbols.quantum, ShipSymbols.radar, ShipSymbols.life, ShipSymbols.cooler, ShipSymbols.power)
+    val glyphs = listOf(
+        R.drawable.erkul_power_weapons,
+        R.drawable.erkul_power_engines,
+        R.drawable.erkul_power_shields,
+        R.drawable.erkul_power_quantum_drives,
+        R.drawable.erkul_power_radars,
+        R.drawable.erkul_power_life_support,
+        R.drawable.erkul_power_coolers,
+        R.drawable.erkul_power_power_plant_output,
+    )
     RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -49,8 +62,23 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
             }
             if (showTelemetry) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    listOf("红外" to signatures[0], "电磁" to signatures[1], "截面 Z" to (ship.obj("vehicle").obj("crossSection").number("z") ?: 0.0)).forEach { (label, value) ->
-                        Column { Text(label, style = RefugeTypography.caption(palette)); Text(String.format(java.util.Locale.US, "%,.0f", value), style = RefugeTypography.headline(palette)) }
+                    listOf(
+                        Triple("红外", signatures[0], R.drawable.erkul_power_infra_red),
+                        Triple("电磁", signatures[1], R.drawable.erkul_power_electromagnetic),
+                        Triple("截面 Z", ship.obj("vehicle").obj("crossSection").number("z") ?: 0.0, R.drawable.erkul_power_cross_section),
+                    ).forEach { (label, value, icon) ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Image(
+                                painter = painterResource(icon),
+                                contentDescription = null,
+                                colorFilter = ColorFilter.tint(palette.accent),
+                                modifier = Modifier.size(19.dp),
+                            )
+                            Column {
+                                Text(label, style = RefugeTypography.caption(palette))
+                                Text(String.format(java.util.Locale.US, "%,.0f", value), style = RefugeTypography.headline(palette))
+                            }
+                        }
                     }
                 }
                 // Keep the label truthful when a build exceeds its cooling
@@ -125,10 +153,10 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(
-                                glyphs[index],
+                            Image(
+                                painter = painterResource(glyphs[index]),
                                 contentDescription = null,
-                                tint = if (allDisabled) palette.textMuted else palette.accent,
+                                colorFilter = ColorFilter.tint(if (allDisabled) palette.textMuted else palette.accent),
                                 modifier = Modifier.size(22.dp),
                             )
                         }

@@ -263,14 +263,13 @@ fun OfficialLiquidSegmentedPort(
         backdrop = backdrop,
         tabsCount = tabsCount,
         isDark = isDark,
-        // The reference tab lens intentionally overscans in a bottom bar. A
-        // compact top control has no such optical gutter, so keep every render
-        // layer inside one stable continuous capsule.
-        modifier = modifier.clip(Capsule(RoundedCornerStyle.Continuous)),
+        // Keep the caller's bounds intact. The official lens owns its capsule
+        // shape; clipping the whole host here cuts off the refractive edge.
+        modifier = modifier,
         outerHeight = outerHeight,
         selectedHeight = outerHeight - 8.dp,
-        pressedScale = 1.10f,
-        containerRespondsToGesture = false,
+        pressedScale = 78f / 56f,
+        containerRespondsToGesture = true,
         content = content,
     )
 }
@@ -312,32 +311,27 @@ private fun OfficialLiquidTabsCore(
     }
     val animationScope = rememberCoroutineScope()
     val accentColor = if (isDark) OfficialDarkAccent else OfficialLightAccent
-        val containerColor = if (isDark) {
-            Color(0xFF1C1C1E).copy(alpha = .34f)
-        } else {
-        // Keep the regular material translucent in light mode. A near-opaque
-        // fill hides the backdrop and makes the tab bar look like a flat card.
-        Color(0xFFF8F8FA).copy(alpha = if (containerRespondsToGesture) .36f else .32f)
-        }
+    val containerColor = if (isDark) {
+        Color(0xFF121212).copy(alpha = .4f)
+    } else {
+        Color(0xFFFAFAFA).copy(alpha = .4f)
+    }
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
         val density = LocalDensity.current
         val tabWidth = with(density) { (constraints.maxWidth.toFloat() - 8.dp.toPx()) / tabsCount }
-        var gestureOffset by remember { mutableFloatStateOf(0f) }
-        val settleOffset = remember { Animatable(0f) }
-        val panelOffset by remember(density, containerRespondsToGesture) {
+        val offsetAnimation = remember { Animatable(0f) }
+        val panelOffset by remember(density) {
             derivedStateOf {
-                if (!containerRespondsToGesture) return@derivedStateOf 0f
-                val fraction = ((gestureOffset + settleOffset.value) / constraints.maxWidth).fastCoerceIn(-1f, 1f)
+                val fraction = (offsetAnimation.value / constraints.maxWidth).fastCoerceIn(-1f, 1f)
                 with(density) { 4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction)) }
             }
         }
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val touchSlopPx = LocalViewConfiguration.current.touchSlop
-        val selectCurrent by rememberUpdatedState(onSelected)
-        var currentIndex by remember(tabsCount) {
+        var currentIndex by remember {
             mutableIntStateOf(selectedIndex.coerceIn(0, tabsCount - 1))
         }
-        val drag = remember(animationScope, tabsCount, containerRespondsToGesture, pressedScale) {
+        val drag = remember(animationScope, tabsCount, pressedScale) {
             DampedDragAnimation(
                 animationScope = animationScope,
                 initialValue = selectedIndex.coerceIn(0, tabsCount - 1).toFloat(),
@@ -345,27 +339,15 @@ private fun OfficialLiquidTabsCore(
                 visibilityThreshold = .001f,
                 initialScale = 1f,
                 pressedScale = pressedScale,
-                springDuringDrag = containerRespondsToGesture,
                 onDragStarted = {
-                    animationScope.launch {
-                        settleOffset.stop()
-                    }
                 },
                 onDragStopped = {
-                    val moved = abs(gestureOffset) >= touchSlopPx
-                    // The lens is above the row and owns touches on the selected
-                    // tab. A stationary release must publish a reselect too.
-                    val target = if (moved) targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1) else currentIndex
+                    val target = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
                     animateToValue(target.toFloat())
                     currentIndex = target
-                    selectCurrent(target)
-                    val releasedOffset = settleOffset.value + gestureOffset
-                    gestureOffset = 0f
-                    if (releasedOffset != 0f) {
-                        animationScope.launch {
-                            settleOffset.snapTo(releasedOffset)
-                            settleOffset.animateTo(0f, spring(1f, 300f, .5f))
-                        }
+                    onSelected(target)
+                    animationScope.launch {
+                        offsetAnimation.animateTo(0f, spring(1f, 300f, .5f))
                     }
                 },
                 onDrag = { _, dragAmount ->
@@ -373,7 +355,9 @@ private fun OfficialLiquidTabsCore(
                         (targetValue + dragAmount.x / tabWidth * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat()),
                     )
-                    gestureOffset += dragAmount.x
+                    animationScope.launch {
+                        offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
+                    }
                 },
             )
         }
@@ -393,22 +377,18 @@ private fun OfficialLiquidTabsCore(
                 )
             }
         }
+        val tabsBackdrop = rememberLayerBackdrop()
         Row(
             Modifier
-                // Keep tab labels and icons above the selected lens surface.
-                // The lens is a material layer, never a content occluder.
-                .zIndex(1f)
                 .graphicsLayer { translationX = panelOffset }
                 .drawBackdrop(
                     backdrop = backdrop,
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
                     effects = {
                         vibrancy()
-                        blur(24.dp.toPx())
-                        lens(32.dp.toPx(), 36.dp.toPx())
+                        blur(8.dp.toPx())
+                        lens(24.dp.toPx(), 24.dp.toPx())
                     },
-                    highlight = { RefugeGlassStyle.barHighlight },
-                    shadow = { RefugeGlassStyle.barShadow },
                     layerBlock = if (containerRespondsToGesture) {
                         {
                             val progress = drag.pressProgress
@@ -421,7 +401,7 @@ private fun OfficialLiquidTabsCore(
                         drawRect(containerColor)
                     },
                 )
-                .then(if (containerRespondsToGesture) interactiveHighlight.modifier else Modifier)
+                .then(interactiveHighlight.modifier)
                 .height(outerHeight)
                 .fillMaxWidth()
                 .padding(4.dp),
@@ -435,14 +415,49 @@ private fun OfficialLiquidTabsCore(
             }
         }
 
-        // The selected lens is rendered directly from the page backdrop. A
-        // second transparent full-window capture used to sit behind it and
-        // made list scrolling needlessly expensive on the emulator.
+        // Keep a second content capture for the selected lens, matching the
+        // AndroidLiquidGlass reference. The selected cell is drawn above the
+        // bar surface and samples both the page and the bar content, so its
+        // refraction remains visible instead of being hidden behind the row.
         CompositionLocalProvider(
             LocalLiquidBottomTabScale provides {
                 if (containerRespondsToGesture) lerp(1f, 1.2f, drag.pressProgress) else 1f
             },
         ) {
+        Row(
+            Modifier
+                .alpha(0f)
+                .clearAndSetSemantics {}
+                .layerBackdrop(tabsBackdrop)
+                .graphicsLayer { translationX = panelOffset }
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { Capsule(RoundedCornerStyle.Continuous) },
+                    effects = {
+                        val progress = drag.pressProgress
+                        vibrancy()
+                        blur(8.dp.toPx())
+                        lens(24.dp.toPx() * progress, 24.dp.toPx() * progress)
+                    },
+                    highlight = {
+                        Highlight.Default.copy(alpha = drag.pressProgress)
+                    },
+                    onDrawSurface = { drawRect(containerColor) },
+                )
+                .then(interactiveHighlight.modifier)
+                .height(outerHeight - 8.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            content(currentIndex) { index ->
+                val target = index.coerceIn(0, tabsCount - 1)
+                currentIndex = target
+                drag.animateToValue(target.toFloat())
+                onSelected(target)
+            }
+        }
         Box(
             Modifier
                 .padding(horizontal = 4.dp)
@@ -456,14 +471,18 @@ private fun OfficialLiquidTabsCore(
                 .then(interactiveHighlight.gestureModifier)
                 .then(drag.modifier)
                 .drawBackdrop(
-                    backdrop = backdrop,
+                    backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
                     effects = {
                         val progress = drag.pressProgress
-                        lens(10.dp.toPx() * progress, 14.dp.toPx() * progress, chromaticAberration = true)
+                        lens(
+                            10.dp.toPx() * progress,
+                            14.dp.toPx() * progress,
+                            chromaticAberration = true,
+                        )
                     },
-                    highlight = { RefugeGlassStyle.controlHighlight.copy(alpha = .26f * drag.pressProgress) },
-                    shadow = { RefugeGlassStyle.controlShadow.copy(alpha = drag.pressProgress) },
+                    highlight = { Highlight.Default.copy(alpha = drag.pressProgress) },
+                    shadow = { Shadow(alpha = drag.pressProgress) },
                     innerShadow = { InnerShadow(radius = 8.dp * drag.pressProgress, alpha = drag.pressProgress) },
                     layerBlock = {
                         scaleX = drag.scaleX
@@ -475,16 +494,12 @@ private fun OfficialLiquidTabsCore(
                     onDrawSurface = {
                         val progress = drag.pressProgress
                         drawRect(
-                            if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .13f),
+                            if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .10f),
                             alpha = 1f - progress,
                         )
                         drawRect(Color.Black.copy(alpha = .03f * progress))
                     },
                 )
-                // The selected lens is a visual layer behind the selected
-                // label/icon. Keeping it below the row prevents the glass
-                // surface from hiding the active tab content.
-                .zIndex(0f)
                 .height(selectedHeight)
                 .fillMaxWidth(1f / tabsCount),
         )
