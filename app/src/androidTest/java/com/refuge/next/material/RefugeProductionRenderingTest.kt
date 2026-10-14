@@ -111,7 +111,7 @@ class RefugeProductionRenderingTest {
                                 { route.value = it }, terminal, true, UserPresence.ONLINE, null, {})
                         }
                     }, overlay = { page ->
-                        RootBottomNav(page, dark.value, route.value) { route.value = it }
+                        RootBottomNav(page, dark.value, route.value, onNavigate = { route.value = it })
                     })
                 }
             }

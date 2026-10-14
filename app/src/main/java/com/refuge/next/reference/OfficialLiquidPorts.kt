@@ -228,6 +228,8 @@ fun OfficialLiquidBottomTabsPort(
     tabsCount: Int,
     isDark: Boolean,
     modifier: Modifier = Modifier,
+    surfaceAlpha: Float = .94f,
+    selectedSurfaceAlpha: Float = .68f,
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     OfficialLiquidTabsCore(
@@ -241,6 +243,8 @@ fun OfficialLiquidBottomTabsPort(
         selectedHeight = 56.dp,
         pressedScale = 78f / 56f,
         containerRespondsToGesture = true,
+        surfaceAlpha = surfaceAlpha,
+        selectedSurfaceAlpha = selectedSurfaceAlpha,
         content = content,
     )
 }
@@ -286,6 +290,8 @@ private fun OfficialLiquidTabsCore(
     selectedHeight: Dp,
     pressedScale: Float,
     containerRespondsToGesture: Boolean,
+    surfaceAlpha: Float = .94f,
+    selectedSurfaceAlpha: Float = .68f,
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     require(tabsCount > 0) { "Liquid tabs require at least one tab" }
@@ -312,11 +318,15 @@ private fun OfficialLiquidTabsCore(
     val animationScope = rememberCoroutineScope()
     val accentColor = if (isDark) OfficialDarkAccent else OfficialLightAccent
     val containerColor = if (isDark) {
-        Color(0xFF121212).copy(alpha = .4f)
+        Color(0xFF121212).copy(alpha = surfaceAlpha.coerceIn(0f, 1f))
     } else {
-        Color(0xFFFAFAFA).copy(alpha = .4f)
+        Color(0xFFFAFAFA).copy(alpha = surfaceAlpha.coerceIn(0f, 1f))
     }
-    BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
+    val selectedSurfaceColor = if (isDark) Color(0xFF393C42) else Color(0xFFE3E7ED)
+    BoxWithConstraints(
+        modifier.clip(Capsule(RoundedCornerStyle.Continuous)),
+        contentAlignment = Alignment.CenterStart,
+    ) {
         val density = LocalDensity.current
         val tabWidth = with(density) { (constraints.maxWidth.toFloat() - 8.dp.toPx()) / tabsCount }
         val offsetAnimation = remember { Animatable(0f) }
@@ -386,7 +396,7 @@ private fun OfficialLiquidTabsCore(
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
                     effects = {
                         vibrancy()
-                        blur(8.dp.toPx())
+                        blur(18.dp.toPx())
                         lens(24.dp.toPx(), 24.dp.toPx())
                     },
                     layerBlock = if (containerRespondsToGesture) {
@@ -406,7 +416,6 @@ private fun OfficialLiquidTabsCore(
                     },
                 )
                 .then(interactiveHighlight.modifier)
-                .then(interactiveHighlight.gestureModifier)
                 .height(outerHeight)
                 .fillMaxWidth()
                 .padding(4.dp),
@@ -441,7 +450,7 @@ private fun OfficialLiquidTabsCore(
                     effects = {
                         val progress = maxOf(drag.pressProgress, interactiveHighlight.progress)
                         vibrancy()
-                        blur(8.dp.toPx())
+                        blur(18.dp.toPx())
                         lens(24.dp.toPx() * progress, 24.dp.toPx() * progress)
                     },
                     highlight = {
@@ -473,8 +482,6 @@ private fun OfficialLiquidTabsCore(
                         size.width - (drag.value + 1f) * tabWidth + panelOffset
                     }
                 }
-                .then(interactiveHighlight.gestureModifier)
-                .then(drag.modifier)
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
@@ -501,7 +508,7 @@ private fun OfficialLiquidTabsCore(
                     onDrawSurface = {
                         val progress = drag.pressProgress
                         drawRect(
-                            if (isDark) Color.White.copy(alpha = .10f) else Color.Black.copy(alpha = .10f),
+                            selectedSurfaceColor.copy(alpha = selectedSurfaceAlpha.coerceIn(0f, 1f)),
                             alpha = 1f - progress,
                         )
                         drawRect(Color.Black.copy(alpha = .03f * progress))
@@ -510,6 +517,28 @@ private fun OfficialLiquidTabsCore(
                 .height(selectedHeight)
                 .fillMaxWidth(1f / tabsCount),
         )
+        // The lens is an optical surface, not a content occluder. Keep one
+        // shared foreground pass for the tab glyphs and labels so the selected
+        // item remains legible even when the material is opaque enough to hide
+        // high-contrast page text underneath it.
+        Row(
+            Modifier
+                .clearAndSetSemantics { }
+                .then(interactiveHighlight.gestureModifier)
+                .then(drag.modifier)
+                .graphicsLayer { translationX = panelOffset }
+                .height(outerHeight - 8.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            content(currentIndex) { index ->
+                val target = index.coerceIn(0, tabsCount - 1)
+                currentIndex = target
+                drag.animateToValue(target.toFloat())
+                onSelected(target)
+            }
+        }
         }
     }
 }

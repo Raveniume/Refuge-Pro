@@ -11,6 +11,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -107,8 +108,8 @@ class DampedDragAnimation(
 
     fun updateValue(value: Float) {
         val targetValue = value.coerceIn(valueRange)
-        animationScope.launch {
-            launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() } }
+        animationScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() }
         }
     }
 
@@ -117,7 +118,10 @@ class DampedDragAnimation(
             mutatorMutex.mutate {
                 press()
                 val targetValue = value.coerceIn(valueRange)
-                launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
+                // Complete the position animation before releasing the press.
+                // Starting it as a child and releasing immediately could leave
+                // the selected lens at its pressed scale after a tap.
+                valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() }
                 if (velocity != 0f) {
                     launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
                 }

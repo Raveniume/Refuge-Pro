@@ -34,7 +34,7 @@ class RefugeSeptemberRepairTest {
         var openedId = 0L
         compose.setContent { RefugeScene(RefugeColors.dark) { backdrop ->
             Box(Modifier.padding(top = 60.dp)) {
-                HangarCcuInventoryPanel(backdrop, RefugeColors.dark, true, ccu, 0, emptyList(), repository, listOf(row), { openedId = it })
+                HangarCcuInventoryPanel(backdrop, RefugeColors.dark, true, ccu, 0, emptyList(), repository, listOf(row), { openedId = it }, {})
             }
         } }
         compose.onNodeWithText("升级规划").assertIsDisplayed()

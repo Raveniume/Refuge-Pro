@@ -6,9 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -153,12 +155,23 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Image(
-                                painter = painterResource(glyphs[index]),
-                                contentDescription = null,
-                                colorFilter = ColorFilter.tint(if (allDisabled) palette.textMuted else palette.accent),
-                                modifier = Modifier.size(22.dp),
-                            )
+                            Box(
+                                Modifier
+                                    .size(34.dp)
+                                    .then(
+                                        if (allDisabled) Modifier
+                                        else Modifier
+                                            .background(palette.accent, CircleShape),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Image(
+                                    painter = painterResource(glyphs[index]),
+                                    contentDescription = null,
+                                    colorFilter = ColorFilter.tint(if (allDisabled) palette.textMuted else Color.White),
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
                         }
                         Text(group, style = RefugeTypography.caption(palette))
                     }

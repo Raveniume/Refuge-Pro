@@ -77,7 +77,7 @@ class RefugeMaterialRenderingTest {
                                 Modifier.align(Alignment.Center).size(180.dp, 64.dp).testTag("glass"),
                                 radius = 32.dp,
                             ) {}
-                            RootBottomNav(page, dark.value, selected.value) { selected.value = it }
+                            RootBottomNav(page, dark.value, selected.value, onNavigate = { selected.value = it })
                         },
                     )
                 }

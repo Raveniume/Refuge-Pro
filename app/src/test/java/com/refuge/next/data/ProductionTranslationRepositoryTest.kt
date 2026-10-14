@@ -75,4 +75,17 @@ class ProductionTranslationRepositoryTest {
         assertEquals("升级 - 极光 MR 到 复仇者泰坦 战争债券版", displayName(source, true, translator))
         assertEquals(source, displayName(source, false, translator))
     }
+
+    @Test
+    fun gameLocalizationIdsFillMissingShipAndComponentNames() {
+        val gameNames = LegacyNameTranslator(
+            translations = emptyMap(),
+            itemNames = emptyMap(),
+            gameShipNames = mapOf("Event_ShipName_A1SPIRIT" to "星灵 A1"),
+            gameItemNames = mapOf("VNCL_Mauler_Remote_Turret_S6_Single" to "S6 单发遥控炮塔"),
+        )
+
+        assertEquals("星灵 A1", gameNames.translate("A1 Spirit"))
+        assertEquals("S6 单发遥控炮塔", gameNames.translateGameItem("VNCL_Mauler_Remote_Turret_S6_Single_SCItem"))
+    }
 }

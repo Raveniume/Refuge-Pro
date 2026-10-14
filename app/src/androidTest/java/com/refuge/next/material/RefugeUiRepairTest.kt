@@ -94,9 +94,9 @@ class RefugeUiRepairTest {
                                 items(50) { Text("$route:项目 $it", modifier = Modifier.height(60.dp)) }
                             }
                         }
-                        RootBottomNav(backdrop, false, route) { next ->
+                        RootBottomNav(backdrop, false, route, onNavigate = { next ->
                             if (next == route) scope.launch { registry.scrollToTop(next) } else route = next
-                        }
+                        })
                     }
                 }
             }

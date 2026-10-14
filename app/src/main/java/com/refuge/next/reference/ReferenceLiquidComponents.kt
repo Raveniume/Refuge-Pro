@@ -114,6 +114,8 @@ fun ReferenceLiquidBottomTabs(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    surfaceAlpha: Float = .94f,
+    selectedSurfaceAlpha: Float = .5f,
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     OfficialLiquidBottomTabsPort(
@@ -123,6 +125,8 @@ fun ReferenceLiquidBottomTabs(
         tabsCount = tabsCount,
         isDark = isDark,
         modifier = modifier,
+        surfaceAlpha = surfaceAlpha,
+        selectedSurfaceAlpha = selectedSurfaceAlpha,
         content = content,
     )
 }

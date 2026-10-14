@@ -49,8 +49,22 @@ class ProductionTranslationRepository(context: Context) : TranslationRepository 
     private val itemNames by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         loadMap(appContext, "data/item_names.json")
     }
+    private val gameNames by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        runCatching {
+            val root = JSONObject(appContext.assets.open("data/game_local_names.json").bufferedReader().use { it.readText() })
+            fun readGroup(name: String): Map<String, String> = root.optJSONObject(name)?.let { objectValue ->
+                buildMap {
+                    objectValue.keys().forEach { key ->
+                        objectValue.optString(key).takeIf(String::isNotBlank)?.let { put(key, it) }
+                    }
+                }
+            }.orEmpty()
+            readGroup("ships") to readGroup("items")
+        }.onFailure { Log.w("RefugeTranslation", "Failed to load game localization additions", it) }
+            .getOrDefault(emptyMap<String, String>() to emptyMap())
+    }
     private val translator by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        LegacyNameTranslator(translations, itemNames)
+        LegacyNameTranslator(translations, itemNames, gameNames.first, gameNames.second)
     }
     private val warmScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -76,15 +90,24 @@ class ProductionTranslationRepository(context: Context) : TranslationRepository 
 internal class LegacyNameTranslator(
     translations: Map<String, String>,
     itemNames: Map<String, String>,
+    gameShipNames: Map<String, String> = emptyMap(),
+    gameItemNames: Map<String, String> = emptyMap(),
 ) : TranslationRepository {
     private val translations = translations.entries.associate { normalize(it.key) to it.value }
     private val itemNames = itemNames.entries.associate { it.key.lowercase(Locale.US) to it.value }
+    private val gameShipNames = gameShipNames.entries.associate {
+        compactIdentifier(it.key.replace(Regex("(?i)^event_shipname_"), "")) to it.value
+    }
+    private val gameItemNames = gameItemNames.entries.associate {
+        compactIdentifier(it.key.replace(Regex("(?i)^itemname_"), "")) to it.value
+    }
 
     override fun translate(value: String): String {
         val normalized = normalize(value)
         if (normalized.isBlank()) return value
         corrections[normalized]?.let { return it }
         translations[normalized]?.let { return it }
+        gameShipNames[compactIdentifier(normalized)]?.let { return it }
         val translated = normalized.split(" - ").joinToString(" - ") { part ->
             if (part.contains(" to ", true) && part.contains("Edition", true)) translateUpgradePart(part)
             else part.split(" · ").joinToString(" · ") { segment ->
@@ -99,8 +122,15 @@ internal class LegacyNameTranslator(
     override fun translateGameItem(value: String): String {
         var key = value.lowercase(Locale.US)
         if (key.endsWith("_scitem")) key = key.dropLast(7)
-        return itemNames["item_name$key"] ?: itemNames["item_name_$key"] ?: translate(value)
+        return itemNames["item_name$key"]
+            ?: itemNames["item_name_$key"]
+            ?: gameItemNames[compactIdentifier(key)]
+            ?: translate(value)
     }
+
+    private fun compactIdentifier(value: String): String = value
+        .lowercase(Locale.US)
+        .filter(Char::isLetterOrDigit)
 
     private fun translateUpgradePart(value: String): String {
         val edition = when {
