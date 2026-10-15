@@ -259,6 +259,8 @@ fun OfficialLiquidSegmentedPort(
     isDark: Boolean,
     modifier: Modifier = Modifier,
     outerHeight: Dp = 56.dp,
+    surfaceAlpha: Float = .52f,
+    selectedSurfaceAlpha: Float = .46f,
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     OfficialLiquidTabsCore(
@@ -274,6 +276,8 @@ fun OfficialLiquidSegmentedPort(
         selectedHeight = outerHeight - 8.dp,
         pressedScale = 78f / 56f,
         containerRespondsToGesture = true,
+        surfaceAlpha = surfaceAlpha,
+        selectedSurfaceAlpha = selectedSurfaceAlpha,
         content = content,
     )
 }
@@ -421,12 +425,9 @@ private fun OfficialLiquidTabsCore(
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            content(currentIndex) { index ->
-                val target = index.coerceIn(0, tabsCount - 1)
-                currentIndex = target
-                drag.animateToValue(target.toFloat())
-                onSelected(target)
-            }
+            // The visible labels are drawn once by the foreground pass below.
+            // Keeping a second visible copy in the glass track causes text
+            // ghosts when the lens is dragged by a small distance.
         }
 
         // Keep a second content capture for the selected lens, matching the

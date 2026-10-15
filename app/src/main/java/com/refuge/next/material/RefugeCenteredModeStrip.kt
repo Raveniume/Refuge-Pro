@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import com.kyant.backdrop.Backdrop
 import androidx.compose.ui.semantics.*
@@ -46,8 +47,23 @@ fun RefugeCenteredModeStrip(backdrop: Backdrop, palette: RefugePalette, labels: 
         animationSpec = androidx.compose.animation.core.tween(180),
         label = "centered-mode-strip-width",
     )
+    val pressProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(150),
+        label = "centered-mode-strip-press",
+    )
     val callback by rememberUpdatedState(onSelected)
     val current by rememberUpdatedState(selected)
+    val isDark = palette.background.luminance() < .5f
+    // The centered strip is used over both black and grouped light pages. A
+    // neutral white glass surface keeps the backdrop visible while making the
+    // functional layer legible in either appearance; using the dark content
+    // surface here made the strip read as a flat black web control.
+    val trackSurface = androidx.compose.ui.graphics.Color.White
+    val trackAlpha = if (isDark) .14f else .42f
+    val lensAlpha = if (isDark) .24f else .58f
+    val trackEdge = androidx.compose.ui.graphics.Color.White.copy(alpha = if (isDark) .18f else .34f)
+    val lensEdge = androidx.compose.ui.graphics.Color.White.copy(alpha = if (isDark) .30f else .52f)
     val iconAllowance = if (icons.any { it != null }) 30 else 0
     val cell = labels.maxOfOrNull { (it.length * 16 + 20 + iconAllowance).dp }?.coerceAtLeast(68.dp) ?: 68.dp
     LaunchedEffect(selected) {
@@ -68,14 +84,50 @@ fun RefugeCenteredModeStrip(backdrop: Backdrop, palette: RefugePalette, labels: 
             },
         contentAlignment = Alignment.Center,
     ) {
-        BoxWithConstraints(Modifier.fillMaxWidth(widthFraction).height(44.dp), contentAlignment = Alignment.Center) {
+        BoxWithConstraints(
+          Modifier
+            .fillMaxWidth(widthFraction)
+            // Keep the optical control above the page while it responds to a
+            // press. The reference component grows both the host and its lens;
+            // scaling only the lens makes the bar look detached.
+            .graphicsLayer {
+                val scale = 1f + pressProgress * .035f
+                scaleX = scale
+                scaleY = scale
+            }
+            .height(44.dp),
+          contentAlignment = Alignment.Center,
+        ) {
           val sidePadding = ((maxWidth - cell) / 2).coerceAtLeast(0.dp)
-            RefugeLiquidGlass(backdrop, palette, Modifier.fillMaxSize().testTag("mode-track"), radius = 22.dp,
-              surface = palette.contentSurfaceStrong, surfaceAlpha = .20f,
-              interactionProgress = if (expanded) 1f else 0f) {
-            RefugeLiquidGlass(backdrop, palette, Modifier.width(cell).height(36.dp).align(Alignment.Center).testTag("mode-lens"), radius = 18.dp,
-                surface = palette.glassStrong, surfaceAlpha = .20f,
-                interactionProgress = if (expanded) 1f else 0f) {}
+            RefugeLiquidGlass(backdrop, palette,
+              Modifier
+                .fillMaxSize()
+                .border(0.7.dp, trackEdge, RoundedCornerShape(22.dp))
+                .testTag("mode-track"), radius = 22.dp,
+              surface = trackSurface, surfaceAlpha = trackAlpha,
+              blurRadius = 8.dp, refractionHeight = 16.dp, refractionAmount = 22.dp,
+              highlightAlpha = .18f,
+              interactionProgress = pressProgress) {
+            RefugeLiquidGlass(backdrop, palette,
+                Modifier
+                    .width(cell)
+                    .height(36.dp)
+                    .align(Alignment.Center)
+                    // The active lens is allowed to breathe past the track's
+                    // optical edge, matching the press treatment used by the
+                    // official liquid tabs while remaining within the scene.
+                    .graphicsLayer {
+                        val scale = 1f + pressProgress * .14f
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .border(0.8.dp, lensEdge, RoundedCornerShape(18.dp))
+                    .testTag("mode-lens"),
+                radius = 18.dp,
+                surface = trackSurface, surfaceAlpha = lensAlpha,
+                blurRadius = 6.dp, refractionHeight = 14.dp, refractionAmount = 20.dp,
+                highlightAlpha = .24f,
+                interactionProgress = pressProgress) {}
             LazyRow(state = state, flingBehavior = rememberSnapFlingBehavior(state),
                 contentPadding = PaddingValues(horizontal = sidePadding),
                 modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)), verticalAlignment = Alignment.CenterVertically) {
