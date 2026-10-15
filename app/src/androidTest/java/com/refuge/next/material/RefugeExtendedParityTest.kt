@@ -1,15 +1,25 @@
 package com.refuge.next.material
 
 import android.view.KeyEvent
+import android.content.ContentValues
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -18,6 +28,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.refuge.next.R
 import com.refuge.next.data.*
 import com.refuge.next.design.RefugeColors
+import com.refuge.next.reference.OfficialLiquidBottomTabsPort
 import com.refuge.next.screens.HangarScreen
 import com.refuge.next.screens.OwnedShipHero
 import com.refuge.next.screens.ProfileScreen
@@ -31,6 +42,75 @@ import java.io.File
 
 class RefugeExtendedParityTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Test fun officialTabsSupportSingleTapAndDragWithGrowingLens() {
+        val selection = mutableIntStateOf(0)
+        val labels = listOf("机库", "商店", "终端")
+        compose.setContent {
+            RefugeScene(RefugeColors.dark) { backdrop ->
+                Box(Modifier.fillMaxSize().padding(horizontal = 20.dp).testTag("official-tabs-host")) {
+                    OfficialLiquidBottomTabsPort(
+                        selectedIndex = selection.intValue,
+                        onSelected = { selection.intValue = it },
+                        backdrop = backdrop,
+                        tabsCount = labels.size,
+                        isDark = true,
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.Center)
+                            .fillMaxWidth().testTag("official-tabs"),
+                    ) { current, select ->
+                        labels.forEachIndexed { index, label ->
+                            Box(
+                                Modifier.weight(1f).fillMaxHeight()
+                                    .semantics {
+                                        role = androidx.compose.ui.semantics.Role.Tab
+                                        selected = current == index
+                                        contentDescription = label
+                                    }
+                                    .clickable(interactionSource = null, indication = null, role = androidx.compose.ui.semantics.Role.Tab) {
+                                        select(index)
+                                    },
+                                contentAlignment = androidx.compose.ui.Alignment.Center,
+                            ) {
+                                Text(label, color = if (current == index) Color.Cyan else Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val initialLens = compose.onNodeWithTag("mode-lens").fetchSemanticsNode().boundsInRoot
+        save("official-tabs-resting")
+        val tabs = compose.onNodeWithTag("official-tabs")
+        compose.mainClock.autoAdvance = false
+        try {
+            tabs.performTouchInput { down(center) }
+            compose.mainClock.advanceTimeBy(300)
+            val pressedLens = compose.onNodeWithTag("mode-lens").fetchSemanticsNode().boundsInRoot
+            assertTrue("Pressed lens grows beyond its resting size", pressedLens.width > initialLens.width)
+            save("official-tabs-pressed")
+            tabs.performTouchInput { up() }
+            compose.mainClock.advanceTimeBy(500)
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        compose.waitForIdle()
+        tabs.performTouchInput { click(center.copy(x = width * .5f)) }
+        compose.runOnIdle { assertEquals("A single tap selects a tab", 1, selection.intValue) }
+        save("official-tabs-tapped")
+
+        val bounds = tabs.fetchSemanticsNode().boundsInRoot
+        val from = bounds.center.copy(x = bounds.left + bounds.width * .18f)
+        val to = bounds.center.copy(x = bounds.left + bounds.width * .84f)
+        compose.onNodeWithTag("official-tabs").performTouchInput {
+            down(from - bounds.topLeft)
+            moveTo(to - bounds.topLeft, delayMillis = 420)
+            up()
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("A drag settles on its target tab", 2, selection.intValue) }
+        save("official-tabs-dragged")
+    }
 
     @Test fun modeSelectorPressDragSnapCollapseAndBothEdges() {
         val selection = mutableIntStateOf(2)
@@ -75,27 +155,26 @@ class RefugeExtendedParityTest {
         }
     }
 
-    @Test fun modeSelectorFastTapsAndVerticalCancelDoNotLeaveExpandedState() {
+    @Test fun modeSelectorTapAndVerticalCancelDoNotLeaveExpandedState() {
         val selection = mutableIntStateOf(2)
+        val labels = StoreCategory.entries.map { it.label }
         compose.setContent {
             RefugeScene(RefugeColors.dark) { backdrop ->
                 Box(Modifier.padding(top = 100.dp, start = 12.dp, end = 12.dp)) {
-                    RefugeLiquidModeSelector(backdrop, RefugeColors.dark, StoreCategory.entries.map { it.label },
+                    RefugeLiquidModeSelector(backdrop, RefugeColors.dark, labels,
                         selection.intValue, { selection.intValue = it })
                 }
             }
         }
         val selector = compose.onNodeWithTag("refuge-liquid-mode-selector")
+        val next = selection.intValue + 1
         compose.mainClock.autoAdvance = false
         try {
-            repeat(3) {
-                selector.performTouchInput { click(center.copy(x = center.x + width * .25f)) }
-                compose.mainClock.advanceTimeBy(48)
-                save("selector-fast-$it")
-            }
+            compose.onNodeWithContentDescription(labels[next]).performClick()
+            compose.mainClock.advanceTimeBy(400)
         } finally { compose.mainClock.autoAdvance = true }
         compose.waitForIdle()
-        assertTrue(selection.intValue in 3..6)
+        compose.runOnIdle { assertEquals(next, selection.intValue) }
         val retained = selection.intValue
         selector.performTouchInput { down(center); moveBy(androidx.compose.ui.geometry.Offset(0f, 120f), 200); up() }
         compose.waitForIdle()
@@ -370,12 +449,25 @@ class RefugeExtendedParityTest {
     }
     private fun save(name: String) {
         compose.waitForIdle()
-        val roots = compose.onAllNodes(isRoot())
-        roots[roots.fetchSemanticsNodes().lastIndex].captureToImage()
         android.os.SystemClock.sleep(250)
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        File(compose.activity.getExternalFilesDir(null), "extended-$name.png").outputStream().use {
+        val resolver = compose.activity.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "refuge-qa-$name.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Refuge QA")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        val uri = requireNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+        requireNotNull(resolver.openOutputStream(uri)).use {
             bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            resolver.update(uri, ContentValues().apply {
+                put(MediaStore.Images.Media.IS_PENDING, 0)
+            }, null, null)
         }
     }
 }

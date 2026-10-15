@@ -3,6 +3,9 @@
 .kotlin/
 **/build/
 local.properties
+signing.properties
+*.keystore
+*.jks
 
 # IDE and editor state
 .idea/

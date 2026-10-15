@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
@@ -261,6 +263,7 @@ fun OfficialLiquidSegmentedPort(
     outerHeight: Dp = 56.dp,
     surfaceAlpha: Float = .52f,
     selectedSurfaceAlpha: Float = .46f,
+    onInteractionChanged: (Boolean) -> Unit = {},
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     OfficialLiquidTabsCore(
@@ -278,6 +281,7 @@ fun OfficialLiquidSegmentedPort(
         containerRespondsToGesture = true,
         surfaceAlpha = surfaceAlpha,
         selectedSurfaceAlpha = selectedSurfaceAlpha,
+        onInteractionChanged = onInteractionChanged,
         content = content,
     )
 }
@@ -296,6 +300,7 @@ private fun OfficialLiquidTabsCore(
     containerRespondsToGesture: Boolean,
     surfaceAlpha: Float = .94f,
     selectedSurfaceAlpha: Float = .68f,
+    onInteractionChanged: (Boolean) -> Unit = {},
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     require(tabsCount > 0) { "Liquid tabs require at least one tab" }
@@ -320,6 +325,7 @@ private fun OfficialLiquidTabsCore(
         return
     }
     val animationScope = rememberCoroutineScope()
+    val latestInteractionCallback by rememberUpdatedState(onInteractionChanged)
     val accentColor = if (isDark) OfficialDarkAccent else OfficialLightAccent
     val containerColor = if (isDark) {
         Color(0xFF121212).copy(alpha = surfaceAlpha.coerceIn(0f, 1f))
@@ -328,7 +334,10 @@ private fun OfficialLiquidTabsCore(
     }
     val selectedSurfaceColor = if (isDark) Color(0xFF393C42) else Color(0xFFE3E7ED)
     BoxWithConstraints(
-        modifier.clip(Capsule(RoundedCornerStyle.Continuous)),
+        // The catalog scales the host and selected lens past the resting rail
+        // while pressed. Clipping the host here truncates the optical edge and
+        // makes the press interaction look like a static filled pill.
+        modifier,
         contentAlignment = Alignment.CenterStart,
     ) {
         val density = LocalDensity.current
@@ -342,6 +351,8 @@ private fun OfficialLiquidTabsCore(
         }
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val touchSlopPx = LocalViewConfiguration.current.touchSlop
+        var didDrag by remember { mutableStateOf(false) }
+        var pendingDragX by remember { mutableFloatStateOf(0f) }
         var currentIndex by remember {
             mutableIntStateOf(selectedIndex.coerceIn(0, tabsCount - 1))
         }
@@ -354,23 +365,37 @@ private fun OfficialLiquidTabsCore(
                 initialScale = 1f,
                 pressedScale = pressedScale,
                 onDragStarted = {
+                    didDrag = false
+                    pendingDragX = 0f
+                    latestInteractionCallback(true)
                 },
                 onDragStopped = {
-                    val target = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
-                    animateToValue(target.toFloat())
-                    currentIndex = target
-                    onSelected(target)
+                    latestInteractionCallback(false)
+                    if (didDrag) {
+                        val target = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
+                        animateToValue(target.toFloat())
+                        currentIndex = target
+                        onSelected(target)
+                    }
+                    didDrag = false
+                    pendingDragX = 0f
                     animationScope.launch {
                         offsetAnimation.animateTo(0f, spring(1f, 300f, .5f))
                     }
                 },
                 onDrag = { _, dragAmount ->
-                    updateValue(
-                        (targetValue + dragAmount.x / tabWidth * if (isLtr) 1f else -1f)
-                            .fastCoerceIn(0f, (tabsCount - 1).toFloat()),
-                    )
-                    animationScope.launch {
-                        offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
+                    pendingDragX += dragAmount.x
+                    if (didDrag || abs(pendingDragX) > touchSlopPx) {
+                        didDrag = true
+                        val acceptedDelta = pendingDragX
+                        pendingDragX = 0f
+                        updateValue(
+                            (targetValue + acceptedDelta / tabWidth * if (isLtr) 1f else -1f)
+                                .fastCoerceIn(0f, (tabsCount - 1).toFloat()),
+                        )
+                        animationScope.launch {
+                            offsetAnimation.snapTo(offsetAnimation.value + acceptedDelta)
+                        }
                     }
                 },
             )
@@ -422,7 +447,8 @@ private fun OfficialLiquidTabsCore(
                 .then(interactiveHighlight.modifier)
                 .height(outerHeight)
                 .fillMaxWidth()
-                .padding(4.dp),
+                .padding(4.dp)
+                .testTag("mode-track"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The visible labels are drawn once by the foreground pass below.
@@ -516,7 +542,8 @@ private fun OfficialLiquidTabsCore(
                     },
                 )
                 .height(selectedHeight)
-                .fillMaxWidth(1f / tabsCount),
+                .fillMaxWidth(1f / tabsCount)
+                .testTag("mode-lens"),
         )
         // The lens is an optical surface, not a content occluder. Keep one
         // shared foreground pass for the tab glyphs and labels so the selected

@@ -62,7 +62,7 @@ fun RefugeLiquidModeSelector(
         onSelected = onSelected,
         icons = icons,
         restingFraction = if (icons.any { it != null }) 1f else .70f,
-        modifier = modifier.testTag("refuge-liquid-mode-selector").testTag("mode-track"),
+        modifier = modifier.testTag("refuge-liquid-mode-selector"),
     )
 }
 

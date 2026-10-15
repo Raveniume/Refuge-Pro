@@ -12,6 +12,27 @@ val releaseVersion = Properties().also { properties ->
     }
 }
 
+val signingProperties = Properties().also { properties ->
+    rootProject.file("signing.properties").takeIf { it.isFile }?.inputStream()?.use { stream ->
+        properties.load(stream)
+    }
+}
+
+fun signingValue(name: String): String? =
+    providers.gradleProperty(name).orNull
+        ?: signingProperties.getProperty(name)
+
+val releaseStoreFile = signingValue("storeFile")
+val releaseStorePassword = signingValue("storePassword")
+val releaseKeyAlias = signingValue("keyAlias")
+val releaseKeyPassword = signingValue("keyPassword")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.refuge.next"
     compileSdk = 37
@@ -30,6 +51,17 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        create("refugeRelease") {
+            if (hasReleaseSigning) {
+                storeFile = rootProject.file(requireNotNull(releaseStoreFile))
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     // Keep the standard per-user debug keystore explicit so every desktop APK
     // remains upgrade-compatible during phone testing.
     buildTypes {
@@ -44,6 +76,11 @@ android {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             matchingFallbacks += listOf("release")
+        }
+        getByName("release") {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("refugeRelease")
+            }
         }
     }
 
