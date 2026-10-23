@@ -22,7 +22,9 @@ internal fun powerGroup(type: String): String = when (type) {
 
 internal fun activeErkulSlots(slots: List<ErkulSlot>, draft: JSONObject): List<ErkulSlot> {
     val disabled = draft.strings("disabled")
-    return slots.filter { slot -> slot.item != null && disabled.none { slot.path == it || slot.path.startsWith("$it/") } }
+    return slots.filter { slot -> slot.item != null &&
+        !("weapons" in disabled && slot.item.optString("type") == "WeaponGun") &&
+        disabled.none { slot.path == it || slot.path.startsWith("$it/") } }
 }
 
 internal fun onlineResource(item: JSONObject) = item.obj("resource").objects("states").firstOrNull { it.optString("name") == "Online" } ?: JSONObject()
@@ -62,7 +64,9 @@ internal fun allocateErkulPower(ship: JSONObject, slots: List<ErkulSlot>, draft:
     val nav = draft.optString("flightMode") == "NAV"
     val consumers = buildList {
         val pool = ship.obj("vehicle").obj("powerPools").objects("pools").firstOrNull { it.optString("itemType") == "WeaponGun" }?.optInt("poolSize") ?: 0
-        if (pool > 0 && !nav && active.any { it.item!!.optString("type") == "WeaponGun" }) add(PowerConsumer("weapons", "武器", pool, 1, null))
+        val weaponDemand = active.filter { it.item!!.optString("type") == "WeaponGun" }.sumOf { resourceUnits(it.item!!, false, "Power") }
+        val usablePool = min(pool, ceil(weaponDemand).toInt())
+        if (usablePool > 0 && !nav) add(PowerConsumer("weapons", "武器", usablePool, 1, null))
         active.forEach { slot ->
             val item = slot.item!!
             val type = item.optString("type")
@@ -85,7 +89,17 @@ internal fun allocateErkulPower(ship: JSONObject, slots: List<ErkulSlot>, draft:
             values[consumer.path] = allocated; remaining -= allocated
         }
     } else {
-        ordered.forEach { consumer -> if (remaining >= consumer.minimum) { values[consumer.path] = consumer.minimum; remaining -= consumer.minimum } }
+        // Erkul starts with the weapon pool fully selected; the user can then
+        // lower it in the power panel. Reserve that fixed pool before spreading
+        // the remaining plant capacity across other powered components.
+        ordered.firstOrNull { it.path == "weapons" }?.let { weaponPool ->
+            val allocated = min(weaponPool.maximum, remaining)
+            values[weaponPool.path] = allocated
+            remaining -= allocated
+        }
+        ordered.filterNot { it.path == "weapons" }.forEach { consumer ->
+            if (remaining >= consumer.minimum) { values[consumer.path] = consumer.minimum; remaining -= consumer.minimum }
+        }
         while (remaining > 0) {
             val candidates = ordered.filter { values.getValue(it.path) in 1 until it.maximum }
             if (candidates.isEmpty()) break
@@ -132,10 +146,12 @@ internal fun togglePowerSlot(draft: JSONObject, path: String, disable: Boolean):
     return next
 }
 
+internal fun powerRangeModifier(item: JSONObject, supplied: Double): Double =
+    onlineResource(item).objects("powerRanges").lastOrNull { it.optDouble("start") <= supplied }?.number("modifier") ?: 1.0
+
 internal fun powerOutputRatio(item: JSONObject, supplied: Int): Double {
     val demand = resourceUnits(item, false, "Power")
     if (demand <= 0) return 1.0
     if (supplied <= 0) return 0.0
-    val band = onlineResource(item).objects("powerRanges").filter { it.optDouble("start") <= supplied }.maxByOrNull { it.optDouble("start") }
-    return min(1.0, supplied / demand) * (band?.number("modifier") ?: 1.0)
+    return min(1.0, supplied / demand) * powerRangeModifier(item, supplied.toDouble())
 }

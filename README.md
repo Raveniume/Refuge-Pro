@@ -80,6 +80,21 @@ Refuge Pro 是一款基于 Kotlin 与 Jetpack Compose 开发的《Star Citizen�
 
 APK 输出位置：`app/build/outputs/apk/debug/app-debug.apk`
 
+本机共用的 Android SDK 位于 `D:\Android\Sdk`，唯一模拟设备为
+`Shared_Pixel7_API35`。所有 IDE 共用用户环境变量 `ANDROID_HOME`、
+`ANDROID_SDK_ROOT` 和 `ANDROID_AVD_HOME`；更改环境变量后重新启动 IDE。
+不要为不同项目或测试额外创建模拟器。项目迁移后需在未跟踪的
+`local.properties` 中设置 `sdk.dir=D\:/Android/Sdk`。
+
+```powershell
+.\scripts\android.ps1 Start   # 启动或复用唯一设备
+.\scripts\android.ps1 Verify  # 构建、单元测试、lint、设备回归并收集当前证据
+.\scripts\android.ps1 Install # 覆盖安装 review APK，保留应用数据
+```
+
+当前设备测试结果与画面存放在被 Git 忽略的 `qa/current`。认证测试需要在
+模拟器中自行登录 RSI；跳过的认证测试不能作为真实账户验收通过。
+
 ---
 
 <div id="refuge-pro-en"></div>

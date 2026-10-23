@@ -35,7 +35,7 @@ internal fun Modifier.refugeContentMaterial(
                     offset = DpOffset(0.dp, 3.dp),
                     // A strong black drop shadow reads as a hard outline on
                     // the black app canvas. Keep only a quiet elevation cue.
-                    color = Color.Black.copy(alpha = if (isDark) .07f else .08f),
+                    color = Color.Black.copy(alpha = if (isDark) .07f else .035f),
                 ),
         ) else Modifier,
         )

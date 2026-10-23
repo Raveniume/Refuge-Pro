@@ -28,24 +28,25 @@ import org.json.JSONObject
 import kotlin.math.*
 
 @Composable
-internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: List<ErkulSlot>, draft: JSONObject,
+internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop, palette: RefugePalette, ship: JSONObject, slots: List<ErkulSlot>, draft: JSONObject,
     metrics: ErkulMetrics, update: (JSONObject) -> Unit, showTelemetry: Boolean = false) {
     val power = remember(ship, slots, draft) { allocateErkulPower(ship, slots, draft) }
     val active = remember(slots, draft) { activeErkulSlots(slots, draft) }
-    val signatures = remember(active, power) {
-        listOf("ir", "em").map { axis -> active.sumOf { slot ->
-            val item = slot.item!!
-            val units = resourceUnits(item, false, "Power")
-            val ratio = if (item.optString("type") == "WeaponGun") {
-                if (power.supplied("weapons") > 0) 1.0 else 0.0
-            } else if (units > 0) powerOutputRatio(item, power.supplied(slot.path)) else 1.0
-            (onlineResource(item).obj("signature").obj(axis).number("nominal") ?: 0.0) * ratio
-        } }
+    val available = remember(ship, slots, draft.optString("flightMode")) {
+        allocateErkulPower(ship, slots, JSONObject(draft.toString()).apply { remove("disabled"); remove("powerSegments") })
+    }
+    val signatures = remember(ship, active, power, metrics) {
+        erkulSignatures(ship, active, power, metrics.cooling, metrics.coolingUsed)
     }
     val radar = active.firstOrNull { it.item!!.optString("type") == "Radar" }
-    val aim = radar?.let { (it.item!!.obj("radar").obj("aimAssist").number("distanceMaxAssignment") ?: 0.0) * powerOutputRatio(it.item, power.supplied(it.path)) }
+    val aim = radar?.let {
+        val settings = it.item!!.obj("radar").obj("aimAssist")
+        val minimum = settings.number("distanceMinAssignment") ?: 0.0
+        val maximum = settings.number("distanceMaxAssignment") ?: minimum
+        if (power.supplied(it.path) <= 0) 0.0 else minimum + (maximum - minimum) * powerOutputRatio(it.item, power.supplied(it.path))
+    }
     val groups = listOf("武器", "引擎", "护盾", "量子", "雷达", "维生", "散热") + if (power.consumers.any { it.group == "其他" }) listOf("其他") else emptyList()
-    val chartMaximum = groups.maxOf { group -> power.consumers.filter { it.group == group }.sumOf { it.maximum } }.coerceAtLeast(1)
+    val chartMaximum = groups.maxOf { group -> available.consumers.filter { it.group == group }.sumOf { it.maximum } }.coerceAtLeast(1)
     val glyphs = listOf(
         R.drawable.erkul_power_weapons,
         R.drawable.erkul_power_engines,
@@ -65,9 +66,9 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
             if (showTelemetry) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     listOf(
-                        Triple("红外", signatures[0], R.drawable.erkul_power_infra_red),
-                        Triple("电磁", signatures[1], R.drawable.erkul_power_electromagnetic),
-                        Triple("截面 Z", ship.obj("vehicle").obj("crossSection").number("z") ?: 0.0, R.drawable.erkul_power_cross_section),
+                        Triple("红外", signatures.infrared, R.drawable.erkul_power_infra_red),
+                        Triple("电磁", signatures.electromagnetic, R.drawable.erkul_power_electromagnetic),
+                        Triple("截面 Z", signatures.crossSectionZ, R.drawable.erkul_power_cross_section),
                     ).forEach { (label, value, icon) ->
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                             Image(
@@ -102,7 +103,7 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                 verticalAlignment = Alignment.Top,
             ) {
                 groups.forEachIndexed { index, group ->
-                    val members = power.consumers.filter { it.group == group }
+                    val members = available.consumers.filter { it.group == group }
                     val maximum = members.sumOf { it.maximum }
                     val value = members.sumOf { power.supplied(it.path) }
                     val onChange by rememberUpdatedState<(Int) -> Unit>({ update(setPowerGroup(power, draft, group, it)) })
@@ -134,7 +135,7 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                                 )
                             }
                         }
-                        val allDisabled = members.isNotEmpty() && members.all { member -> active.none { it.path == member.path } }
+                        val allDisabled = members.isNotEmpty() && members.all { member -> member.path in draft.strings("disabled") }
                         // Keep the glyph visually compact while giving the
                         // power toggle the same 44 dp target as every other
                         // native control. This makes tapping a group reliable
@@ -151,7 +152,7 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
                                     enabled = members.isNotEmpty(),
                                     interactionSource = null,
                                     indication = null,
-                                    onClick = { update(togglePowerGroup(draft, members, allDisabled)) },
+                                    onClick = { update(togglePowerGroup(draft, members, !allDisabled)) },
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -179,10 +180,12 @@ internal fun ErkulPowerCard(palette: RefugePalette, ship: JSONObject, slots: Lis
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val nav = draft.optString("flightMode") == "NAV"
-                TextButton({ update(JSONObject(draft.toString()).put("flightMode", "SCM").apply { remove("powerSegments") }) }) { Text("SCM", color = if (!nav) palette.accent else palette.textMuted) }
-                TextButton({ update(JSONObject(draft.toString()).put("flightMode", "NAV").apply { remove("powerSegments") }) }) { Text("NAV", color = if (nav) palette.accent else palette.textMuted) }
-                Spacer(Modifier.weight(1f))
-                TextButton({ update(JSONObject(draft.toString()).apply { remove("powerSegments") }) }) { Text("自动分配", color = palette.accent) }
+                RefugeLiquidModeSelector(backdrop, palette, listOf("SCM", "NAV"), if (nav) 1 else 0,
+                    { update(JSONObject(draft.toString()).put("flightMode", if (it == 0) "SCM" else "NAV").apply { remove("powerSegments") }) },
+                    modifier = Modifier.weight(1f), fixedWidth = true)
+                Spacer(Modifier.width(12.dp))
+                RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.refresh, "自动分配",
+                    { update(JSONObject(draft.toString()).apply { remove("powerSegments") }) })
             }
         }
     }

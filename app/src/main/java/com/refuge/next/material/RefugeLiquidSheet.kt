@@ -40,6 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -85,7 +88,7 @@ fun RefugeLiquidSheet(
     contentUnderHandle: Boolean = false,
     transparentActionArea: Boolean = false,
     surfaceRefraction: Boolean = true,
-    surfaceAlpha: Float = 1f,
+    surfaceAlpha: Float = .88f,
     contentScrollable: Boolean = true,
     titleTopPadding: androidx.compose.ui.unit.Dp = 0.dp,
     /** Increment to run the Cupertino dismissal animation from content. */
@@ -105,6 +108,11 @@ fun RefugeLiquidSheet(
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
+            .testTag("refuge-sheet")
+            .semantics {
+                paneTitle = title.ifBlank { "详情" }
+                isTraversalGroup = true
+            }
             .zIndex(1000f),
         contentAlignment = Alignment.BottomCenter,
     ) {

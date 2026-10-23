@@ -1,77 +1,49 @@
 package com.refuge.next.screens
 
 import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.background
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.material.Text
 import androidx.activity.compose.BackHandler
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.Text
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.input.*
+import androidx.compose.ui.unit.dp
+import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
-import com.refuge.next.data.RsiAuthDataSource
+import com.refuge.next.data.RsiAuthRepository
 import com.refuge.next.data.RsiLoginStep
 import com.refuge.next.design.RefugePalette
-import com.refuge.next.design.RefugeSpacing
 import com.refuge.next.design.RefugeTypography
-import com.refuge.next.material.RefugeLiquidGlass
-import com.refuge.next.material.RefugeLiquidGlassField
-import com.refuge.next.material.RefugeLiquidGlassButton
-import com.refuge.next.material.ModalGlassScope
-import com.refuge.next.material.RefugeGlassControl
-import com.refuge.next.material.RefugeModalSurface
 import com.refuge.next.material.RefugeIcons
+import com.refuge.next.material.RefugeLiquidGlassField
+import com.refuge.next.material.RefugeLiquidSheet
+import com.refuge.next.reference.OfficialLiquidButtonPort
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 
+/** Native editing and the catalog LiquidButton share one optical layer.
+ * Credentials stay in composition memory; no preview authentication path exists.
+ */
 @Composable
 fun RsiLoginScreen(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
-    auth: com.refuge.next.data.RsiAuthRepository,
+    auth: RsiAuthRepository,
     loginEmailDraft: String = "",
     onLoginEmailChanged: (String) -> Unit = {},
     allowClose: Boolean = true,
@@ -86,299 +58,141 @@ fun RsiLoginScreen(
     var needCode by remember { mutableStateOf(false) }
     var needCaptcha by remember { mutableStateOf(false) }
     var captchaImage by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var showCaptchaDialog by remember { mutableStateOf(false) }
+    var showCaptcha by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var isError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val captchaFocusRequester = remember { FocusRequester() }
-    val codeFocusRequester = remember { FocusRequester() }
-    val formReady = email.isNotBlank() && password.isNotBlank() &&
-        (!needCaptcha || captcha.isNotBlank()) && (!needCode || code.isNotBlank())
-    LaunchedEffect(showCaptchaDialog) {
-        if (showCaptchaDialog) {
-            delay(120)
-            captchaFocusRequester.requestFocus()
+    val focus = LocalFocusManager.current
+    val passwordFocus = remember { FocusRequester() }
+    val codeFocus = remember { FocusRequester() }
+    val captchaFocus = remember { FocusRequester() }
+    val ready = if (needCode) code.isNotBlank() else
+        email.isNotBlank() && password.isNotBlank() && (!needCaptcha || captcha.isNotBlank())
+
+    suspend fun fetchCaptcha() {
+        captcha = ""
+        captchaImage = auth.captcha()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+        showCaptcha = captchaImage != null
+        if (captchaImage == null) { message = "验证码加载失败，请重试"; isError = true }
+    }
+    fun refreshCaptcha() {
+        if (loading) return
+        loading = true
+        scope.launch {
+            try { fetchCaptcha() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { message = "验证码加载失败，请重试"; isError = true }
+            finally { loading = false }
         }
     }
-    LaunchedEffect(needCode) {
-        if (needCode) {
-            delay(120)
-            codeFocusRequester.requestFocus()
-        }
-    }
-    // The login card must be laid out above the IME. Without imePadding the
-    // centered card can remain behind the password keyboard, leaving its
-    // action visually present in stale coordinates but outside the touchable
-    // viewport.
-    Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
-        RefugeLiquidGlass(
-            backdrop = backdrop,
-            palette = palette,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .heightIn(max = 560.dp)
-                .padding(horizontal = RefugeSpacing.page),
-            radius = 28.dp,
-            padding = PaddingValues(22.dp),
-            surface = if (palette.background.luminance() < .5f) palette.contentSurfaceStrong else palette.glassStrong,
-            // Keep the backdrop, blur and lens visible in light mode. A near
-            // opaque white fill makes the login form look like a plain card.
-            surfaceAlpha = if (palette.background.luminance() < .5f) .58f else .44f,
-            blurRadius = 12.dp,
-            edgeAlpha = .04f,
-            edgeColor = palette.outline,
-            highlightAlpha = .08f,
-        ) {
-            Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("登录 RSI", style = RefugeTypography.largeTitle(palette).copy(color = palette.text))
+    fun submit() {
+        if (loading || !ready) return
+        loading = true
+        message = null
+        isError = false
+        focus.clearFocus()
+        scope.launch {
+            try {
+                val result = if (needCode) auth.verifyCode(code.trim())
+                    else auth.login(email.trim(), password, captcha.ifBlank { null })
+                when {
+                    result.success -> { password = ""; captcha = ""; code = ""; onAuthenticated() }
+                    result.step == RsiLoginStep.NEED_CODE -> {
+                        needCode = true; needCaptcha = false; showCaptcha = false
+                        message = "验证码已发送到你的 RSI 邮箱"
+                    }
+                    result.step == RsiLoginStep.NEED_CAPTCHA || result.retryCaptcha || result.message.contains("4233") -> {
+                        needCaptcha = true
+                        fetchCaptcha()
+                    }
+                    else -> { message = result.message; isError = true }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                message = "连接失败，请检查网络后重试"; isError = true
+            } finally { loading = false }
+        }
+    }
+
+    LaunchedEffect(needCode, loading) { if (needCode && !loading) codeFocus.requestFocus() }
+    LaunchedEffect(showCaptcha, loading) { if (showCaptcha && !loading) captchaFocus.requestFocus() }
+    Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
+        // Glass belongs to interactive controls. A second, opaque glass card
+        // behind the entire form conceals the controls' live optical sampling.
+        Column(
+            Modifier.align(Alignment.Center).widthIn(max = 440.dp).fillMaxWidth()
+                .verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 24.dp)
+                .testTag("rsi-login-form"),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Refuge", style = RefugeTypography.secondary(palette).copy(color = palette.accent))
+                Text("登录 RSI", style = RefugeTypography.largeTitle(palette))
+                Text("连接你的机库与账户", style = RefugeTypography.body(palette).copy(color = palette.textSecondary))
             }
-            Spacer(Modifier.height(2.dp))
-            RefugeLiquidGlassField(
-                value = email,
-                onValueChange = { email = it; onLoginEmailChanged(it) },
-                backdrop = backdrop,
-                palette = palette,
-                label = "RSI 邮箱",
-                placeholder = "name@example.com",
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            )
-            RefugeLiquidGlassField(
-                value = password,
-                onValueChange = { password = it },
-                backdrop = backdrop,
-                palette = palette,
-                label = "密码",
-                placeholder = "输入 RSI 密码",
-                modifier = Modifier.fillMaxWidth(),
+            RefugeLiquidGlassField(email, { email = it; onLoginEmailChanged(it) }, backdrop, palette,
+                "RSI 邮箱", Modifier.fillMaxWidth().testTag("login-email"), "name@example.com",
+                enabled = !loading && !needCode,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }))
+            RefugeLiquidGlassField(password, { password = it }, backdrop, palette,
+                "密码", Modifier.fillMaxWidth().focusRequester(passwordFocus).testTag("login-password"), "输入 RSI 密码",
+                enabled = !loading && !needCode,
                 leadingIcon = if (showPassword) RefugeIcons.visibilityOff else RefugeIcons.visibility,
                 leadingIconContentDescription = if (showPassword) "隐藏密码" else "显示密码",
                 onLeadingIconClick = { showPassword = !showPassword },
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            )
-            if (needCaptcha) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {
-                    Text(
-                        "需要图形验证码",
-                        style = RefugeTypography.secondary(palette).copy(color = palette.textSecondary),
-                        modifier = Modifier.weight(1f),
-                    )
-                    RefugeLiquidGlassButton(
-                        backdrop = backdrop,
-                        palette = palette,
-                        onClick = {
-                            scope.launch {
-                                captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
-                                if (captchaImage != null) showCaptchaDialog = true
-                            }
-                        },
-                        modifier = Modifier.width(128.dp).height(48.dp),
-                        radius = 24.dp,
-                        padding = PaddingValues(0.dp),
-                        edgeAlpha = .10f,
-                        highlightAlpha = .10f,
-                    ) {
-                        Text("重新打开", color = palette.text, style = RefugeTypography.body(palette))
-                    }
-                }
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { submit() }))
+            if (needCode) RefugeLiquidGlassField(code, { code = it }, backdrop, palette,
+                "RSI 邮件验证码", Modifier.fillMaxWidth().focusRequester(codeFocus).testTag("login-code"), "输入邮件中的验证码",
+                enabled = !loading,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { submit() }))
+            if (needCaptcha) LoginGlassAction(backdrop, palette, "打开图形验证码", !loading, false, ::refreshCaptcha)
+            message?.let {
+                Text(it, style = RefugeTypography.secondary(palette).copy(color = if (isError) palette.error else palette.textSecondary),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
-            if (needCode) RefugeLiquidGlassField(
-                value = code,
-                onValueChange = { code = it },
-                backdrop = backdrop,
-                palette = palette,
-                label = "RSI 邮件验证码",
-                placeholder = "输入邮件中的验证码",
-                modifier = Modifier.fillMaxWidth().focusRequester(codeFocusRequester),
-            )
-            message?.let { Text(it, style = RefugeTypography.secondary(palette).copy(color = palette.error)) }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (allowClose) {
-                    RefugeLiquidGlassButton(
-                        backdrop = backdrop,
-                        palette = palette,
-                        onClick = { if (!loading) onClose() },
-                        modifier = Modifier
-                            .width(128.dp)
-                            .height(48.dp)
-                            .alpha(if (loading) .5f else 1f),
-                        padding = PaddingValues(0.dp),
-                        edgeAlpha = .10f,
-                        highlightAlpha = .10f,
-                    ) {
-                        Text("返回", color = palette.text, style = RefugeTypography.body(palette))
+            LoginGlassAction(backdrop, palette, if (needCode) "验证并登录" else "登录", ready && !loading,
+                true, ::submit, loading = loading)
+            if (allowClose) LoginGlassAction(backdrop, palette, "返回", !loading, false, onClose)
+        }
+        if (showCaptcha && captchaImage != null) {
+            BackHandler { showCaptcha = false }
+            RefugeLiquidSheet(backdrop, palette, "输入图形验证码", { showCaptcha = false }, sheetHeight = 470.dp,
+                action = { local ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        LoginGlassAction(local, palette, "刷新", !loading, false, ::refreshCaptcha, Modifier.weight(1f))
+                        LoginGlassAction(local, palette, "完成", captcha.isNotBlank() && !loading, true,
+                            { showCaptcha = false; submit() }, Modifier.weight(1f))
                     }
-                    Spacer(Modifier.width(RefugeSpacing.sm))
-                }
-                RefugeLiquidGlassButton(
-                    backdrop = backdrop,
-                    palette = palette,
-                    radius = 24.dp,
-                        surface = if (formReady && !loading) palette.accent else palette.glassStrong,
-                        surfaceAlpha = if (formReady && !loading) .72f else .30f,
-                    edgeAlpha = if (formReady && !loading) .16f else .24f,
-                    highlightAlpha = .10f,
-                    onClick = {
-                        if (!loading && formReady) {
-                        loading = true
-                        message = null
-                        scope.launch {
-                            val result = if (needCode) auth.verifyCode(code) else auth.login(email, password, captcha.ifBlank { null })
-                            needCode = result.step == RsiLoginStep.NEED_CODE
-                            needCaptcha = result.step == RsiLoginStep.NEED_CAPTCHA
-                            if (result.step == RsiLoginStep.NEED_CAPTCHA) {
-                                captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
-                                showCaptchaDialog = captchaImage != null
-                                message = if (captchaImage == null) "验证码加载失败，请重试" else null
-                            } else if (result.step == RsiLoginStep.NEED_CODE) {
-                                message = "验证码已发送到你的 RSI 邮箱，请输入后登录"
-                            } else if (result.retryCaptcha || result.message.contains("4233")) {
-                                captcha = ""
-                                needCaptcha = true
-                                captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
-                                showCaptchaDialog = captchaImage != null
-                                message = "图形验证码无效，请重新输入"
-                            } else {
-                                message = result.message
-                            }
-                            loading = false
-                            if (result.success) onAuthenticated()
-                        }
-                        }
-                    },
-                        modifier = Modifier
-                            .width(128.dp)
-                            .height(48.dp)
-                        .semantics {
-                            role = androidx.compose.ui.semantics.Role.Button
-                            contentDescription = "登录"
-                        },
-                    enabled = formReady && !loading,
-                ) {
-                    if (loading) androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
-                        drawArc(
-                            color = Color.White,
-                            startAngle = -90f,
-                            sweepAngle = 250f,
-                            useCenter = false,
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx()),
-                        )
-                    }
-                    else Text(
-                        if (needCode) "验证并登录" else if (needCaptcha) "提交验证码" else "登录",
-                        color = if (formReady && !loading) Color.White else palette.text,
-                        style = RefugeTypography.body(palette),
-                    )
-                }
-            }
+                }) { local ->
+                Image(captchaImage!!.asImageBitmap(), "RSI 图形验证码", Modifier.fillMaxWidth().height(150.dp), contentScale = ContentScale.Fit)
+                RefugeLiquidGlassField(captcha, { captcha = it.filterNot(Char::isWhitespace) }, local, palette,
+                    "图形验证码", Modifier.fillMaxWidth().focusRequester(captchaFocus), "输入图片中的字符",
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { if (captcha.isNotBlank()) { showCaptcha = false; submit() } }))
             }
         }
-        if (showCaptchaDialog && captchaImage != null) {
-            BackHandler { showCaptchaDialog = false }
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(palette.scrim)
-                    .zIndex(2f),
-                contentAlignment = Alignment.Center,
-            ) {
-                ModalGlassScope(
-                    modifier = Modifier
-                        .fillMaxWidth(.94f)
-                        .widthIn(max = 520.dp)
-                        .padding(14.dp),
-                    underlay = backdrop,
-                    base = {
-                        RefugeModalSurface(
-                            palette = palette,
-                            modifier = Modifier.matchParentSize(),
-                            radius = 28.dp,
-                            fill = if (palette.background.luminance() < .5f) {
-                                palette.contentSurfaceStrong
-                            } else {
-                                Color.White
-                            },
-                        ) {}
-                    },
-                    content = { modalBackdrop ->
-                            Column(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                verticalArrangement = Arrangement.spacedBy(RefugeSpacing.sm),
-                            ) {
-                                Text("输入图形验证码", style = RefugeTypography.title(palette).copy(color = palette.text))
-                                Text("请按图片内容输入，验证码不会保存。", style = RefugeTypography.body(palette).copy(color = palette.textSecondary))
-                                Image(
-                                    bitmap = captchaImage!!.asImageBitmap(),
-                                    contentDescription = "RSI 图形验证码",
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 140.dp, max = 190.dp),
-                                )
-                                RefugeLiquidGlassField(
-                                    value = captcha,
-                                    onValueChange = { captcha = it.filterNot(Char::isWhitespace) },
-                                    backdrop = modalBackdrop,
-                                    palette = palette,
-                                    label = "图形验证码",
-                                    placeholder = "输入图片中的字符",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .focusRequester(captchaFocusRequester),
-                                )
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    RefugeLiquidGlassButton(
-                                        backdrop = modalBackdrop,
-                                        palette = palette,
-                                        modifier = Modifier.width(92.dp).height(48.dp),
-                                        padding = PaddingValues(0.dp),
-                                        edgeAlpha = .10f,
-                                        highlightAlpha = .10f,
-                                        refractionHeight = 0.dp,
-                                        refractionAmount = 0.dp,
-                                        blurRadius = 2.dp,
-                                        onClick = {
-                                            scope.launch {
-                                                captchaImage = auth.captcha()?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
-                                            }
-                                        },
-                                    ) { Text("刷新", color = palette.text) }
-                                    RefugeLiquidGlassButton(
-                                        backdrop = modalBackdrop,
-                                        palette = palette,
-                                        modifier = Modifier.width(92.dp).height(48.dp),
-                                        padding = PaddingValues(0.dp),
-                                        edgeAlpha = .10f,
-                                        highlightAlpha = .10f,
-                                        refractionHeight = 0.dp,
-                                        refractionAmount = 0.dp,
-                                        blurRadius = 2.dp,
-                                        onClick = { showCaptchaDialog = false },
-                                    ) { Text("完成", color = palette.text) }
-                                }
-                            }
-                    },
-                )
-            }
-        }
+    }
+}
+
+@Composable
+private fun LoginGlassAction(
+    backdrop: Backdrop, palette: RefugePalette, label: String, enabled: Boolean,
+    primary: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, loading: Boolean = false,
+) {
+    OfficialLiquidButtonPort(onClick, backdrop,
+        modifier = modifier.fillMaxWidth().semantics { contentDescription = label },
+        enabled = enabled, visualHeight = 52.dp,
+        tint = if (primary && enabled) palette.accent else Color.Unspecified,
+        surfaceColor = if (primary && enabled) Color.Transparent else palette.text.copy(alpha = if (enabled) .08f else .04f),
+    ) {
+        if (loading) CircularProgressIndicator(Modifier.size(20.dp), color = palette.text, strokeWidth = 2.dp)
+        Text(if (loading) "正在连接…" else label, style = RefugeTypography.body(palette),
+            color = if (primary && enabled) Color.White else if (enabled) palette.text else palette.textMuted)
     }
 }

@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +44,7 @@ import androidx.compose.material.IconButton
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -208,6 +211,7 @@ fun RefugeLiquidGlassField(
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     singleLine: Boolean = true,
     enabled: Boolean = true,
@@ -216,20 +220,35 @@ fun RefugeLiquidGlassField(
     onLeadingIconClick: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val progress by animateFloatAsState(if (focused) 1f else 0f, label = "liquid-glass-field-focus")
+    // Keep the IME selection local while the parent state catches up. A plain
+    // String-controlled BasicTextField can apply two fast hardware key events
+    // against the same stale cursor and swap their order.
+    var fieldValue by remember { mutableStateOf(TextFieldValue(value)) }
+    var lastPropagatedValue by remember { mutableStateOf(value) }
+    LaunchedEffect(value) {
+        if (value != lastPropagatedValue && value != fieldValue.text) {
+            fieldValue = TextFieldValue(value)
+        }
+        lastPropagatedValue = value
+    }
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = fieldValue,
+        onValueChange = {
+            fieldValue = it
+            lastPropagatedValue = it.text
+            onValueChange(it.text)
+        },
         singleLine = singleLine,
         enabled = enabled,
         keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         visualTransformation = visualTransformation,
         textStyle = RefugeTypography.body(palette).copy(color = palette.text),
         // Focus is communicated through a slightly stronger neutral glass
         // surface. A blue frame here reads like a web form selection state
         // and overwhelms the translucent control.
         cursorBrush = SolidColor(palette.text),
-        modifier = modifier.onFocusChanged { focused = it.isFocused },
+        modifier = modifier.semantics { contentDescription = label }.onFocusChanged { focused = it.isFocused },
         decorationBox = { innerTextField ->
             Column(Modifier.fillMaxWidth()) {
                 // Keep the field name outside the editable surface. This gives
@@ -242,27 +261,16 @@ fun RefugeLiquidGlassField(
                     ),
                 )
                 Spacer(Modifier.height(5.dp))
-                RefugeLiquidGlass(
+                com.refuge.next.reference.OfficialLiquidButtonPort(
+                    onClick = {},
                     backdrop = backdrop,
-                    palette = palette,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .border(
-                            width = .5.dp,
-                            color = palette.outline.copy(alpha = if (focused) .20f else .12f),
-                            shape = refugeContinuousShape(18.dp),
-                        ),
-                    radius = 18.dp,
-                    padding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                    refractionHeight = 11.dp,
-                    refractionAmount = 16.dp,
-                    blurRadius = 3.dp,
-                    surface = palette.glassStrong,
-                    surfaceAlpha = if (focused) .12f else .085f,
-                    edgeAlpha = 0f,
-                    highlightAlpha = .08f,
-                    interactionProgress = progress,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    handlesClick = false,
+                    isInteractive = false,
+                    enablePressHighlight = false,
+                    visualHeight = 52.dp,
+                    contentPadding = 16.dp,
+                    surfaceColor = palette.text.copy(alpha = if (focused) .10f else .05f),
                 ) {
                     Row(
                         Modifier.fillMaxWidth(),
@@ -272,7 +280,7 @@ fun RefugeLiquidGlassField(
                             IconButton(
                                 onClick = onLeadingIconClick,
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(48.dp)
                                     .semantics {
                                         role = Role.Button
                                         if (leadingIconContentDescription != null) {

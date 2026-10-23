@@ -79,7 +79,7 @@ import kotlin.math.sin
 import kotlin.math.sign
 import kotlin.math.tanh
 
-private val OfficialLightAccent = Color(0xFF0088FF)
+private val OfficialLightAccent = Color(0xFF0066D6)
 private val OfficialDarkAccent = Color(0xFF0091FF)
 
 /**
@@ -153,8 +153,8 @@ fun OfficialLiquidButtonPort(
                 shape = { shape },
                 effects = {
                     vibrancy()
-                    blur(8.dp.toPx())
-                    lens(16.dp.toPx(), 24.dp.toPx())
+                    blur(2.dp.toPx())
+                    lens(12.dp.toPx(), 24.dp.toPx())
                 },
                 highlight = { RefugeGlassStyle.controlHighlight },
                 shadow = { RefugeGlassStyle.controlShadow },
@@ -166,8 +166,8 @@ fun OfficialLiquidButtonPort(
                         val scale = lerp(1f, 1f + 4.dp.toPx() / size.height, progress)
                         val maxOffset = size.minDimension
                         val offset = interactiveHighlight.offset
-                        translationX = maxOffset * tanh(.032f * offset.x / maxOffset)
-                        translationY = maxOffset * tanh(.032f * offset.y / maxOffset)
+                        translationX = maxOffset * tanh(.05f * offset.x / maxOffset)
+                        translationY = maxOffset * tanh(.05f * offset.y / maxOffset)
                         val maxDragScale = 4.dp.toPx() / size.height
                         val offsetAngle = atan2(offset.y, offset.x)
                         scaleX = scale + maxDragScale * abs(cos(offsetAngle) * offset.x / size.maxDimension) *
@@ -230,8 +230,8 @@ fun OfficialLiquidBottomTabsPort(
     tabsCount: Int,
     isDark: Boolean,
     modifier: Modifier = Modifier,
-    surfaceAlpha: Float = .94f,
-    selectedSurfaceAlpha: Float = .68f,
+    surfaceAlpha: Float = .4f,
+    selectedSurfaceAlpha: Float = .1f,
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     OfficialLiquidTabsCore(
@@ -261,8 +261,8 @@ fun OfficialLiquidSegmentedPort(
     isDark: Boolean,
     modifier: Modifier = Modifier,
     outerHeight: Dp = 56.dp,
-    surfaceAlpha: Float = .52f,
-    selectedSurfaceAlpha: Float = .46f,
+    surfaceAlpha: Float = .4f,
+    selectedSurfaceAlpha: Float = .1f,
     onInteractionChanged: (Boolean) -> Unit = {},
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
@@ -298,8 +298,8 @@ private fun OfficialLiquidTabsCore(
     selectedHeight: Dp,
     pressedScale: Float,
     containerRespondsToGesture: Boolean,
-    surfaceAlpha: Float = .94f,
-    selectedSurfaceAlpha: Float = .68f,
+    surfaceAlpha: Float = .4f,
+    selectedSurfaceAlpha: Float = .1f,
     onInteractionChanged: (Boolean) -> Unit = {},
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
@@ -332,7 +332,7 @@ private fun OfficialLiquidTabsCore(
     } else {
         Color(0xFFFAFAFA).copy(alpha = surfaceAlpha.coerceIn(0f, 1f))
     }
-    val selectedSurfaceColor = if (isDark) Color(0xFF393C42) else Color(0xFFE3E7ED)
+    val selectedSurfaceColor = if (isDark) Color.White else Color.Black
     BoxWithConstraints(
         // The catalog scales the host and selected lens past the resting rail
         // while pressed. Clipping the host here truncates the optical edge and
@@ -425,7 +425,7 @@ private fun OfficialLiquidTabsCore(
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
                     effects = {
                         vibrancy()
-                        blur(18.dp.toPx())
+                        blur(8.dp.toPx())
                         lens(24.dp.toPx(), 24.dp.toPx())
                     },
                     layerBlock = if (containerRespondsToGesture) {
@@ -477,7 +477,7 @@ private fun OfficialLiquidTabsCore(
                     effects = {
                         val progress = maxOf(drag.pressProgress, interactiveHighlight.progress)
                         vibrancy()
-                        blur(18.dp.toPx())
+                        blur(8.dp.toPx())
                         lens(24.dp.toPx() * progress, 24.dp.toPx() * progress)
                     },
                     highlight = {
@@ -524,10 +524,8 @@ private fun OfficialLiquidTabsCore(
                     shadow = { Shadow(alpha = drag.pressProgress) },
                     innerShadow = { InnerShadow(radius = 8.dp * drag.pressProgress, alpha = drag.pressProgress) },
                     layerBlock = {
-                        val pressScale = maxOf(drag.pressProgress, interactiveHighlight.progress)
-                        val hostScale = lerp(1f, 1.2f, pressScale)
-                        scaleX = drag.scaleX * hostScale
-                        scaleY = drag.scaleY * hostScale
+                        scaleX = drag.scaleX
+                        scaleY = drag.scaleY
                         val velocity = drag.velocity / 10f
                         scaleX /= 1f - (velocity * .75f).fastCoerceIn(-.2f, .2f)
                         scaleY *= 1f - (velocity * .25f).fastCoerceIn(-.2f, .2f)
@@ -551,7 +549,6 @@ private fun OfficialLiquidTabsCore(
         // high-contrast page text underneath it.
         Row(
             Modifier
-                .clearAndSetSemantics { }
                 .then(interactiveHighlight.gestureModifier)
                 .then(drag.modifier)
                 .graphicsLayer { translationX = panelOffset }

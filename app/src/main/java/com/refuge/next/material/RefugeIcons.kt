@@ -37,12 +37,14 @@ import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Upgrade
 import androidx.compose.material.icons.outlined.RocketLaunch
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Person
@@ -59,6 +61,8 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 object RefugeIcons {
+    val language: ImageVector = Icons.Outlined.Translate
+    val powerToggle: ImageVector = Icons.Outlined.PowerSettingsNew
     val loadout: ImageVector = ShipSymbols.loadout
     val home: ImageVector = Icons.Outlined.Home
     /** Navigation glyphs mirror RefugeNext's Flutter MainNavigationBar. */

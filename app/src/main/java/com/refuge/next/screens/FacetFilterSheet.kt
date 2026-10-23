@@ -24,12 +24,14 @@ internal fun FacetFilterSheet(
 ) {
     var group by remember { mutableStateOf<String?>(null) }
     val optionCount = if (group == null) groups.size else 1 + groups[group].orEmpty().size
-    val compactHeight = (if (group == null) 196 + groups.size * 48 else 154 + optionCount * 46).dp.coerceIn(300.dp, 700.dp)
+    // Include the handle, title, reset row, action rail and system inset.
+    // A three-option sheet previously gave the list only ~70dp of viewport.
+    val compactHeight = (260 + optionCount * 48).dp.coerceIn(360.dp, 700.dp)
     RefugeLiquidSheet(backdrop, palette, if (group == null) title else group!!, onDismiss, sheetHeight = compactHeight,
-        contentScrollable = false,
+        contentScrollable = true,
         surfaceRefraction = false,
         surfaceAlpha = 1f,
-        actionOverContent = true,
+        actionOverContent = false,
         leadingAction = if (group != null) ({ local ->
             RefugeCircularHeaderButton(local, palette, RefugeIcons.back, "返回筛选", { group = null })
         }) else null,

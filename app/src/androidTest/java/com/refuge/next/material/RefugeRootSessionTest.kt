@@ -38,9 +38,15 @@ class RefugeRootSessionTest {
         assumeTrue(RsiAuthDataSource(compose.activity).session() != null)
         val settings = PreferencesSettingsRepository(compose.activity)
         fun openSettings() {
-            compose.onAllNodesWithContentDescription("我的").onLast().performClick()
+            tapVisible("我的", last = true)
+            compose.waitUntil(20_000) {
+                compose.onAllNodes(hasScrollToIndexAction()).fetchSemanticsNodes().isNotEmpty()
+            }
             compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription("设置"))
-            compose.onNodeWithContentDescription("设置").performClick()
+            tapVisible("设置")
+            compose.waitUntil(10_000) {
+                compose.onAllNodesWithContentDescription("深色主题").fetchSemanticsNodes().isNotEmpty()
+            }
         }
         compose.waitUntil(20000) { compose.onAllNodesWithContentDescription("我的").fetchSemanticsNodes().isNotEmpty() }
         openSettings()
@@ -49,7 +55,7 @@ class RefugeRootSessionTest {
         save("root-theme-light")
         compose.onNodeWithContentDescription("深色主题").performClick()
         compose.onNodeWithText("已开启").assertIsDisplayed()
-        compose.onAllNodesWithContentDescription("机库").onLast().performClick()
+        tapVisible("机库", last = true)
         save("root-theme-dark-hangar")
         compose.activityRule.scenario.recreate()
         compose.waitUntil(20000) { compose.onAllNodesWithText("我的机库").fetchSemanticsNodes().isNotEmpty() }
@@ -63,7 +69,7 @@ class RefugeRootSessionTest {
         compose.waitUntil(10000) { compose.onAllNodesWithText("图片缓存已清理").fetchSemanticsNodes().isNotEmpty() }
         save("root-cache-cleared")
         assertTrue(RsiAuthDataSource(compose.activity).session() != null)
-        compose.onAllNodesWithContentDescription("机库").onLast().performClick()
+        tapVisible("机库", last = true)
         save("root-light-hangar-final")
     }
 
@@ -95,7 +101,7 @@ class RefugeRootSessionTest {
         val hero = compose.onNodeWithContentDescription("M80").fetchSemanticsNode().boundsInRoot
         touch(hero.center, hero.center.copy(y = hero.top + 5f))
         compose.waitForIdle()
-        compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithTag("refuge-sheet").assertDoesNotExist()
         org.junit.Assert.assertEquals(hero.width,
             compose.onNodeWithContentDescription("Perseus").fetchSemanticsNode().boundsInRoot.width, 3f)
         save("hero-stack-drag")
@@ -103,6 +109,29 @@ class RefugeRootSessionTest {
             compose.onAllNodesWithContentDescription(label).onLast().performClick()
             compose.waitForIdle()
             save("nav-${when(label) { "商店" -> "store"; "终端" -> "terminal"; "我的" -> "profile"; else -> "hangar" }}")
+        }
+    }
+
+    @Test fun authenticatedRootMaterialsAndNavigationInBothThemes() {
+        assumeTrue(RsiAuthDataSource(compose.activity).session() != null)
+        val settings = PreferencesSettingsRepository(compose.activity)
+        for (dark in listOf(false, true)) {
+            tapVisible("我的", last = true)
+            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription("设置"))
+            tapVisible("设置")
+            if (settings.load().darkTheme != dark) tapVisible("深色主题")
+            tapVisible("返回")
+            for ((label, name) in listOf("机库" to "hangar", "商店" to "store", "终端" to "terminal", "我的" to "profile")) {
+                tapVisible(label, last = true)
+                compose.onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(
+                    androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(0)
+                save("live-root-${if (dark) "dark" else "light"}-$name")
+            }
+            val from = compose.onAllNodesWithContentDescription("我的").onLast().fetchSemanticsNode().boundsInRoot.center
+            val to = compose.onAllNodesWithContentDescription("终端").onLast().fetchSemanticsNode().boundsInRoot.center
+            touch(from, to)
+            compose.onAllNodesWithContentDescription("终端").onLast().assertIsSelected()
+            save("live-root-${if (dark) "dark" else "light"}-drag-release")
         }
     }
 
@@ -124,12 +153,24 @@ class RefugeRootSessionTest {
         send(android.view.MotionEvent.ACTION_UP, to)
     }
 
+    // Exercise the displayed production controls, including their hit targets,
+    // rather than invoking an action on a descendant semantics-only label.
+    private fun tapVisible(label: String, last: Boolean = false) {
+        val nodes = compose.onAllNodesWithContentDescription(label)
+        val node = if (last) nodes.onLast() else nodes.onFirst()
+        // Recreating MainActivity briefly shows a startup title before the
+        // root route and its navigation are actually ready for touch input.
+        compose.waitUntil(30_000) { runCatching { node.isDisplayed() }.getOrDefault(false) }
+        node.performTouchInput { click() }
+        compose.waitForIdle()
+    }
+
     private fun save(name: String) {
         compose.waitForIdle()
         compose.onAllNodes(isRoot()).onLast().captureToImage()
         android.os.SystemClock.sleep(250)
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        File(compose.activity.getExternalFilesDir(null), "$name.png").outputStream().use {
+        evidenceFile("$name.png").outputStream().use {
             bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
     }

@@ -27,6 +27,16 @@ import org.junit.Test
 /** Production composables with isolated repositories; no account or remote mutations. */
 class RefugeFunctionalRegressionTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val testName = org.junit.rules.TestName()
+    @org.junit.After fun captureCurrentEvidence() {
+        runCatching { evidenceFile("${testName.methodName}.txt").writeText(compose.onRoot(useUnmergedTree = true).printToString()) }
+        runCatching {
+            val image = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            evidenceFile("${testName.methodName}.png").outputStream().use {
+                image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+    }
 
     private val products = listOf(
         product("Atlas", 20000, metadata = "Anvil", warbond = true),
@@ -104,7 +114,7 @@ class RefugeFunctionalRegressionTest {
         compose.onNodeWithText("\u79fb\u9664").performClick()
         compose.onNodeWithText("\u8d2d\u7269\u8f66\u4e3a\u7a7a").assertIsDisplayed()
         compose.onNodeWithText("\u5b8c\u6210").performClick()
-        compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithTag("refuge-sheet").assertDoesNotExist()
         for (title in listOf("Aurora", "Arrow")) {
             compose.onNodeWithText(title).performClick()
             compose.onNodeWithText("\u52a0\u5165\u8d2d\u7269\u8f66").performClick()
@@ -161,16 +171,22 @@ class RefugeFunctionalRegressionTest {
         compose.onNode(hasSetTextAction()).performTextClearance()
         compose.onNodeWithContentDescription("\u641c\u7d22\u673a\u5e93").performClick()
         compose.onNodeWithText("\u7b5b\u9009").performClick()
-        compose.onNodeWithText("\u4ec5\u663e\u793a\u8230\u8239").performClick()
-        compose.onNodeWithText("\u53ef\u8d60\u9001").performClick()
-        compose.onNodeWithContentDescription("\u5b8c\u6210\u7b5b\u9009").performClick()
+        compose.onNodeWithText("类型").performClick()
+        compose.onNodeWithText("舰船").performClick()
+        compose.onNodeWithContentDescription("返回筛选").performClick()
+        compose.onNodeWithText("礼物").performClick()
+        compose.onNodeWithText("可礼物").performClick()
+        compose.onNodeWithText("完成").performClick()
         compose.onNodeWithText("Aurora MR").assertIsDisplayed()
         compose.onNodeWithText("Arrow").assertDoesNotExist()
         compose.onNodeWithText("Paint").assertDoesNotExist()
         compose.onNodeWithText("\u7b5b\u9009").performClick()
-        compose.onNodeWithText("\u4ec5\u663e\u793a\u8230\u8239").performClick()
-        compose.onNodeWithText("\u53ef\u8d60\u9001").performClick()
-        compose.onNodeWithContentDescription("\u5b8c\u6210\u7b5b\u9009").performClick()
+        compose.onNodeWithText("类型").performClick()
+        compose.onNodeWithText("舰船").performClick()
+        compose.onNodeWithContentDescription("返回筛选").performClick()
+        compose.onNodeWithText("礼物").performClick()
+        compose.onNodeWithText("可礼物").performClick()
+        compose.onNodeWithText("完成").performClick()
         compose.onNodeWithText("\u6392\u5e8f\uff1a\u6700\u65b0").performClick()
         compose.onNodeWithText("\u6700\u65e9\u540c\u6b65").performClick()
         assertAbove("Aurora MR", "Arrow")
@@ -213,11 +229,11 @@ class RefugeFunctionalRegressionTest {
         compose.onNodeWithText("\u7248\u672c").performClick()
         compose.onNodeWithText("RefugeNext").assertIsDisplayed()
         back()
-        compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithTag("refuge-sheet").assertDoesNotExist()
         compose.runOnIdle { showPresence.value = true }
         compose.onNodeWithText(UserPresence.AWAY.label).performClick()
         compose.runOnIdle { assertEquals(UserPresence.AWAY, presence.presence) }
-        compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithTag("refuge-sheet").assertDoesNotExist()
         compose.onNodeWithContentDescription("\u8fd4\u56de").performClick()
         compose.runOnIdle { assertEquals(4, navigatedTo) }
     }
@@ -252,7 +268,7 @@ class RefugeFunctionalRegressionTest {
     private fun back() {
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         compose.waitUntil(5000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
-        compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithTag("refuge-sheet").assertDoesNotExist()
     }
 
     private fun product(title: String, price: Int, metadata: String = "Fixture",

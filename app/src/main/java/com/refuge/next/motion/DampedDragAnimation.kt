@@ -63,7 +63,10 @@ class DampedDragAnimation(
     val scaleY: Float get() = scaleYAnimation.value
     val velocity: Float get() = velocityAnimation.value
 
-    val modifier: Modifier = Modifier.pointerInput(Unit) {
+    // Rebind gesture callbacks when a control replaces its animation for a
+    // changed value range, layout width, or direction. Unit retained the old
+    // instance and converted subsequent drags using stale bounds.
+    val modifier: Modifier = Modifier.pointerInput(this@DampedDragAnimation) {
         inspectDragGestures(
             onDragStart = { down ->
                 onDragStarted(down.position)

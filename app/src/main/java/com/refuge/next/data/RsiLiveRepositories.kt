@@ -1716,7 +1716,7 @@ class WikiTerminalRepository(
         if (cache.isFile && System.currentTimeMillis() - modified < 24 * 60 * 60 * 1000L) {
             readWikiDetailsCache(cache, title)?.let { return it }
         }
-        val pageUrl = "https://starcitizen.tools/${java.net.URLEncoder.encode(title.replace(' ', '_'), Charsets.UTF_8).replace("+", "_")}"
+        val pageUrl = "https://starcitizen.tools/${java.net.URLEncoder.encode(title.replace(' ', '_'), Charsets.UTF_8.name()).replace("+", "_")}"
         val live = runCatching {
             val request = Request.Builder().url(pageUrl)
                 .header("User-Agent", "RefugeNext/1.0 (in-app reference reader)")
@@ -1736,7 +1736,7 @@ class WikiTerminalRepository(
         if (live != null && (live.description.isNotBlank() || live.rows.isNotEmpty() || live.imageUrl != null)) return live
         val className = item.className?.replace('_', ' ')?.trim()?.takeIf { it.isNotBlank() && !it.equals(title, true) }
         if (className != null) {
-            val alternate = "https://starcitizen.tools/${java.net.URLEncoder.encode(className.replace(' ', '_'), Charsets.UTF_8).replace("+", "_")}"
+            val alternate = "https://starcitizen.tools/${java.net.URLEncoder.encode(className.replace(' ', '_'), Charsets.UTF_8.name()).replace("+", "_")}"
             runCatching {
                 client.newCall(Request.Builder().url(alternate).header("User-Agent", "RefugeNext/1.0 (in-app reference reader)").build()).execute().use { response ->
                     if (!response.isSuccessful) error("Wiki page ${response.code}")
@@ -1755,7 +1755,7 @@ class WikiTerminalRepository(
     }
 
     private fun searchStarCitizenToolsPage(query: String): StarCitizenToolsDetails? {
-        val encoded = java.net.URLEncoder.encode(query, Charsets.UTF_8)
+        val encoded = java.net.URLEncoder.encode(query, Charsets.UTF_8.name())
         val searchUrl = "https://starcitizen.tools/api.php?action=query&list=search&srnamespace=0&srlimit=5&srsearch=$encoded&format=json"
         val candidate = runCatching {
             val request = Request.Builder().url(searchUrl)
@@ -1772,7 +1772,7 @@ class WikiTerminalRepository(
             }
         }.getOrNull() ?: return null
         if (wikiTitleSimilarity(query, candidate) < .72) return null
-        val pageUrl = "https://starcitizen.tools/${java.net.URLEncoder.encode(candidate.replace(' ', '_'), Charsets.UTF_8).replace("+", "_")}"
+        val pageUrl = "https://starcitizen.tools/${java.net.URLEncoder.encode(candidate.replace(' ', '_'), Charsets.UTF_8.name()).replace("+", "_")}"
         return runCatching {
             val request = Request.Builder().url(pageUrl)
                 .header("User-Agent", "RefugeNext/1.0 (in-app reference reader)")
@@ -1850,7 +1850,7 @@ class WikiTerminalRepository(
             .firstOrNull { it.contains("media.starcitizen.tools") }
         val canonicalTitle = document.selectFirst("link[rel=canonical]")?.attr("href")
             ?.takeIf { it.startsWith("https://starcitizen.tools/") }
-        val sourceUrl = canonicalTitle ?: "https://starcitizen.tools/${java.net.URLEncoder.encode(title.replace(' ', '_'), Charsets.UTF_8).replace("+", "_")}"
+        val sourceUrl = canonicalTitle ?: "https://starcitizen.tools/${java.net.URLEncoder.encode(title.replace(' ', '_'), Charsets.UTF_8.name()).replace("+", "_")}"
         return StarCitizenToolsDetails(description, image, rows.toList(), sourceUrl)
     }
 

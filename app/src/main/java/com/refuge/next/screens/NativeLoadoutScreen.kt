@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -64,6 +65,8 @@ internal fun NativeLoadoutScreen(
     var notice by remember { mutableStateOf<String?>(null) }
     var compare by rememberSaveable { mutableStateOf(false) }
     var showPerformance by rememberSaveable { mutableStateOf(false) }
+    var componentInfo by remember { mutableStateOf<JSONObject?>(null) }
+    var blueprintQuery by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun normalizeShipIdentity(value: String?): String = value.orEmpty()
         .trim()
@@ -87,29 +90,16 @@ internal fun NativeLoadoutScreen(
         ?.takeIf(String::isNotBlank)
     LaunchedEffect(branch, attempt) {
         error = null
-        // Publish the disk snapshot first. The editor must stay usable when
-        // RSI/Erkul is unavailable; the network refresh replaces this frame
-        // only after the local data is already on screen.
-            runCatching { repository.catalog(branch) }
-            .onSuccess { loaded ->
-                catalog = loaded
-                busy = false
-                shipId = resolveShipId(shipId, loaded)
-                    ?: loaded.ships.firstOrNull()?.optString("className").orEmpty()
-            }
-            .onFailure { failure ->
-                if (catalog == null) error = failure.message ?: "目录载入失败"
-            }
-        runCatching { repository.catalog(branch, refresh = true) }
-            .onSuccess { loaded ->
-                catalog = loaded
-                shipId = resolveShipId(shipId, loaded)
-                    ?: loaded.ships.firstOrNull()?.optString("className").orEmpty()
-            }
-            .onFailure { failure ->
-                if (catalog == null) error = failure.message ?: "目录载入失败"
-            }
-        busy = false
+        busy = true
+        if (catalog?.branch != branch) { catalog = repository.cachedCatalog(branch); ship = null }
+        try {
+            val loaded = repository.catalog(branch, refresh = attempt > 0)
+            catalog = loaded
+            shipId = resolveShipId(shipId, loaded)
+                ?: loaded.ships.firstOrNull()?.optString("className").orEmpty()
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (failure: Exception) { error = failure.message ?: "目录载入失败" }
+        finally { busy = false }
     }
     LaunchedEffect(catalog, shipId) {
         val current = catalog ?: return@LaunchedEffect
@@ -118,7 +108,7 @@ internal fun NativeLoadoutScreen(
             ?: return@LaunchedEffect
         if (summary.optString("className") != shipId) shipId = summary.optString("className")
         busy = true; error = null
-        repository.cachedShip(current, shipId)?.let { ship = it; busy = false }
+        ship = repository.cachedShip(current, shipId)
         try { ship = repository.ship(current, summary) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: "舰船载入失败" }
@@ -141,32 +131,47 @@ internal fun NativeLoadoutScreen(
     val metrics = remember(ship, slots, draft) { ship?.let { calculateErkulMetrics(it, slots, draft) } }
     val stock = remember(ship, catalog) { if (ship != null && catalog != null) calculateErkulMetrics(ship!!, resolveErkulSlots(ship!!, catalog!!, JSONObject()), JSONObject()) else null }
     val currentCatalog = catalog
+    val editorListState = rememberLazyListState()
     BackHandler { if (picker != null) picker = null else onDismiss() }
-    // Keep the editor in the activity composition. A platform Dialog creates
-    // a second window and removes the live page during its opening frame.
-    RefugeLiquidSheet(
-        backdrop = backdrop,
-        palette = palette,
-        title = "",
-        onDismiss = onDismiss,
-        leadingAction = if (picker == null) {
-            { modalBackdrop ->
-                RefugeCircularHeaderButton(modalBackdrop, palette, RefugeIcons.back, "返回", onDismiss)
-            }
-        } else null,
-        sheetHeight = 760.dp,
-        contentScrollable = false,
-        contentUnderHandle = true,
-        modifier = Modifier.zIndex(5f),
-        surfaceRefraction = false,
-        surfaceAlpha = 1f,
-    ) { modalBackdrop ->
+    blueprintQuery?.let { query ->
+        TerminalKnowledgeNavigator(backdrop, palette, isDark, "blueprints", query) { blueprintQuery = null }
+        return
+    }
+    componentInfo?.let { component ->
+        ErkulComponentDetail(backdrop, palette, component, { blueprintQuery = it }) { componentInfo = null }
+        return
+    }
+    val pickerMode = picker
+    if (pickerMode != null && currentCatalog != null) {
+        val activeSlot = slots.firstOrNull { it.path == pickerMode }
+        NativeLoadoutPicker(backdrop, palette, isDark, currentCatalog, activeSlot, pickerMode == "ship",
+            onDismiss = { picker = null },
+            onPick = { selected ->
+                if (pickerMode == "ship") {
+                    selected?.optString("className")?.takeIf { it.isNotBlank() }?.let { shipId = it }
+                } else if (activeSlot != null) {
+                    val overrides = JSONObject(draft.obj("overrides").toString())
+                    overrides.keys().asSequence().filter { it.startsWith(activeSlot.path + "/") }
+                        .toList().forEach { overrides.remove(it) }
+                    overrides.put(activeSlot.path, selected?.optString("className") ?: "")
+                    update(JSONObject(draft.toString()).put("overrides", overrides))
+                }
+                picker = null
+            })
+        // This is a separate page. Do not keep the hidden editor drawing its
+        // glass or exposing a second Back action to accessibility services.
+        return
+    }
+    val modalBackdrop = backdrop
+    Box(Modifier.fillMaxSize().background(palette.background).statusBarsPadding().navigationBarsPadding()) {
             Box(Modifier.fillMaxSize().testTag("native-loadout")) {
             Column(Modifier.fillMaxSize()) {
                 // The circular back control is anchored to the sheet corner.
                 // Reserve its horizontal footprint so the title never paints
                 // underneath the control while the sheet enters or settles.
-                Row(Modifier.fillMaxWidth().padding(start = 56.dp, end = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.back, "返回", onDismiss)
+                    Spacer(Modifier.width(12.dp))
                     Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
                     Box {
                         RefugeHeaderActionBar(modalBackdrop, palette, listOf(
@@ -178,6 +183,7 @@ internal fun NativeLoadoutScreen(
                             modifier = Modifier.widthIn(max = 284.dp),
                             offset = androidx.compose.ui.unit.DpOffset(0.dp, 52.dp)) {
                             MenuAction({ attempt++; menu = null }, onClickLabel = "更新数据") { Text("更新数据", color = palette.text) }
+                            MenuAction({ showPerformance = true; menu = null }, onClickLabel = "性能总览") { Text("性能总览", color = palette.text) }
                             MenuAction({ planName = ""; menu = "save" }, onClickLabel = "保存方案") { Text("保存方案", color = palette.text) }
                             MenuAction({ menu = "load" }, onClickLabel = "调用方案") { Text("调用方案", color = palette.text) }
                             MenuAction({ menu = "settings" }, onClickLabel = "配装设置") { Text("配装设置", color = palette.text) }
@@ -186,28 +192,27 @@ internal fun NativeLoadoutScreen(
                 }
                 LazyColumn(
                     Modifier.fillMaxWidth().weight(1f),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    state = editorListState,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     item {
                         val reference = rememberShipReference(ship?.itemName().orEmpty())
-                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), onClick = { picker = "ship" }, contentDescription = "选择舰船", padding = PaddingValues(14.dp)) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), onClick = { picker = "ship" }, contentDescription = "选择舰船", padding = PaddingValues(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 reference?.images?.firstOrNull()?.let { url ->
                                     coil3.compose.AsyncImage(url, "舰船图片", contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                        modifier = Modifier.fillMaxWidth().height(150.dp).clip(refugeContinuousShape(14.dp)))
+                                        modifier = Modifier.size(68.dp).clip(refugeContinuousShape(10.dp)))
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(translatedShipName(ship?.itemName() ?: "选择舰船"), style = RefugeTypography.title(palette))
-                                        Text(translatedShipName(reference?.manufacturer.orEmpty()), style = RefugeTypography.caption(palette))
-                                    }
-                                    Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
-                                }
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(translatedShipName(ship?.itemName() ?: "选择舰船"), style = RefugeTypography.title(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(translatedShipName(reference?.manufacturer.orEmpty()), style = RefugeTypography.caption(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 ship?.let { vessel ->
                                     Text("S${vessel.optInt("size")} · ${vessel.obj("vehicle").optInt("crewSize")} 人 · ${vessel.obj("precomputed").optInt("cargo")} SCU", style = RefugeTypography.caption(palette))
                                 }
-                                Text(if (branch == "LIVE") "LIVE 数据" else "PTU 数据", style = RefugeTypography.caption(palette))
+                                    Text("Erkul ${catalog?.branch ?: branch} · ${catalog?.version.orEmpty()}${if (catalog?.offline == true) " · 缓存" else ""}", style = RefugeTypography.caption(palette), color = palette.textMuted)
+                                }
+                                Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
                             }
                         }
                     }
@@ -215,130 +220,19 @@ internal fun NativeLoadoutScreen(
                     // Keep the last usable ship visible during a transient
                     // catalog refresh failure. An error card is useful only
                     // when there is no ship to interact with at all.
-                    if (ship == null) error?.let { message ->
+                    error?.let { message ->
                         item { ProductionErrorState(backdrop, palette, message, { attempt++ }) }
                     }
                     if (ship != null && metrics != null) {
-                        item { ErkulPowerCard(palette, ship!!, slots, draft, metrics!!, ::update, showTelemetry = true) }
-                        item {
-                            RefugeLightweightGlassSurface(
-                                palette = palette,
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { showPerformance = true },
-                                contentDescription = "性能总览",
-                                padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        Text("性能总览", style = RefugeTypography.title(palette))
-                                        Text("DPS · 护盾 · 电力 · 散热", style = RefugeTypography.caption(palette))
-                                    }
-                                    metrics?.let { summary ->
-                                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            Text("${summary.burst.metric()} DPS", style = RefugeTypography.body(palette).copy(color = palette.accent))
-                                            Text("散热 ${coolingLoadLabel(summary)} · ${summary.cooling.metric(" /s")}", style = RefugeTypography.caption(palette))
-                                        }
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    Icon(RefugeIcons.chevron, null, tint = palette.textMuted)
-                                }
-                            }
-                        }
-                        // Keep the complete factory tree visible. Fixed mounts are
-                        // part of the stock configuration and must not look like
-                        // empty slots simply because they cannot be replaced.
-                        // The catalog contains decorative paint hardpoints with
-                        // no installed item and no accepted component type.
-                        // They are not usable loadout rows and made a stock
-                        // ship look empty. Keep real factory items and real
-                        // configurable ports only.
-                        val displaySlots = slots.filter { slot ->
-                            // Erkul exposes paint, doors, fuel plumbing and
-                            // maneuver hardware as hardpoints too. They are
-                            // part of the raw vehicle tree, but are not
-                            // user-facing loadout controls. Keeping them in
-                            // this list makes a stock ship look full of empty
-                            // mounts and hides the actual component tree.
-                            val hiddenType = slot.item?.optString("type").orEmpty() in setOf(
-                                "Door", "FuelTank", "FuelIntake", "QuantumFuelTank",
-                                "ManneuverThruster", "Thruster", "Paints", "CargoGrid",
-                            )
-                            if (hiddenType) false
-                            else slot.item != null || catalog?.components?.values?.any { candidate ->
-                                erkulSlotAccepts(slot, candidate)
-                            } == true
-                        }
-                        displaySlots.groupBy(::erkulSlotGroup).forEach { (group, groupSlots) ->
-                            item { Text(group, style = RefugeTypography.title(palette)) }
-                            items(groupSlots, key = { it.path }) { slot ->
-                                val editable = slot.port.obj("flags").optBoolean("editable") &&
-                                    !slot.port.obj("flags").optBoolean("uneditable")
-                                RefugeLightweightGlassSurface(
-                                    palette,
-                                    Modifier.fillMaxWidth(),
-                                    onClick = if (editable) ({ picker = slot.path }) else null,
-                                    enabled = editable,
-                                    contentDescription = "更换 ${erkulPortLabel(slot)}",
-                                    padding = PaddingValues(12.dp),
-                                ) {
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    ) {
-                                        Icon(
-                                            loadoutSlotIcon(slot),
-                                            contentDescription = null,
-                                            tint = if (editable) palette.accent else palette.textMuted,
-                                            modifier = Modifier.size(24.dp),
-                                        )
-                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(erkulPortLabel(slot), style = RefugeTypography.caption(palette))
-                                            Text(
-                                                translatedGameItemName(slot.item?.itemName() ?: "空挂点", slot.item?.optString("className")),
-                                                style = RefugeTypography.title(palette),
-                                            )
-                                            Text(
-                                                "S${slot.port.optInt("minSize")}–S${slot.port.optInt("maxSize")} · ${if (editable) "点击更换" else "原厂组件"}",
-                                                style = RefugeTypography.caption(palette),
-                                            )
-                                        }
-                                        val disabled = draft.strings("disabled").any {
-                                            it == slot.path || slot.path.startsWith("$it/")
-                                        }
-                                        if (slot.item != null) {
-                                            IconButton(
-                                                onClick = {
-                                                    update(togglePowerSlot(draft, slot.path, disable = !disabled))
-                                                },
-                                                modifier = Modifier.size(40.dp).semantics {
-                                                    role = Role.Button
-                                                    contentDescription = if (disabled) "启用 ${erkulPortLabel(slot)}" else "停用 ${erkulPortLabel(slot)}"
-                                                },
-                                            ) {
-                                                Icon(
-                                                    if (disabled) RefugeIcons.visibilityOff else RefugeIcons.visibility,
-                                                    contentDescription = null,
-                                                    tint = if (disabled) palette.textMuted else palette.accent,
-                                                    modifier = Modifier.size(20.dp),
-                                                )
-                                            }
-                                        } else {
-                                            Icon(
-                                                if (editable) RefugeIcons.chevron else RefugeIcons.visibilityOff,
-                                                contentDescription = null,
-                                                tint = palette.textMuted,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
+                        item { ErkulDashboard(backdrop, palette, ship!!, slots, catalog!!, draft, metrics!!, ::update) }
+                        item { ErkulPowerCard(backdrop, palette, ship!!, slots, draft, metrics!!, ::update, showTelemetry = true) }
                     }
                 }
             }
+            }
+    }
+            // Secondary sheets are full-screen siblings of the editor. Keeping
+            // them inside its scroll viewport clipped their scrim and corners.
             if (menu == "settings") {
                 RefugeLiquidSheet(backdrop, palette, "配装设置", { menu = null }, sheetHeight = 320.dp) { local ->
                     Text("游戏版本", style = RefugeTypography.headline(palette))
@@ -346,31 +240,6 @@ internal fun NativeLoadoutScreen(
                         branch = if (it == 0) "LIVE" else "PTU"; menu = null
                     })
                 }
-            }
-            if (picker != null && currentCatalog != null) {
-                val activeSlot = slots.firstOrNull { it.path == picker }
-                val pickerMode = picker
-                NativeLoadoutPicker(
-                    modalBackdrop,
-                    palette,
-                    isDark,
-                    currentCatalog,
-                    activeSlot,
-                    pickerMode == "ship",
-                    onDismiss = { picker = null },
-                    onPick = { selected ->
-                        if (pickerMode == "ship") {
-                            selected?.optString("className")?.takeIf { it.isNotBlank() }?.let { shipId = it }
-                        } else if (activeSlot != null) {
-                            val overrides = JSONObject(draft.obj("overrides").toString())
-                            overrides.keys().asSequence().filter { it.startsWith(activeSlot.path + "/") }.toList().forEach { overrides.remove(it) }
-                            overrides.put(activeSlot.path, selected?.optString("className") ?: "")
-                            update(JSONObject(draft.toString()).put("overrides", overrides))
-                        }
-                        picker = null
-                    },
-                )
-            }
             }
             if (showPerformance && ship != null && metrics != null) {
                 LoadoutPerformanceSheet(
@@ -411,7 +280,6 @@ internal fun NativeLoadoutScreen(
                     Text(message, style = RefugeTypography.body(palette), modifier = Modifier.background(palette.contentSurface).padding(12.dp))
                 }
             }
-        }
     }
 
 /** Compatibility entry retained for isolated rendering fixtures. */
@@ -440,13 +308,15 @@ private fun loadoutSlotIcon(slot: ErkulSlot): androidx.compose.ui.graphics.vecto
 
 @Composable
 private fun LoadoutCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop, palette: RefugePalette, title: String, subtitle: String, imageUrl: String? = null, onClick: () -> Unit) {
-    RefugeGlassControl(backdrop, palette, onClick = onClick, modifier = Modifier.fillMaxWidth(), contentDescription = title, padding = PaddingValues(16.dp)) {
+    // Catalog rows are reading surfaces. Keep optical passes on the toolbar
+    // and controls rather than allocating blur/lens shaders for every row.
+    RefugeLightweightGlassSurface(palette, onClick = onClick, modifier = Modifier.fillMaxWidth(), contentDescription = title, padding = PaddingValues(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (imageUrl != null) coil3.compose.AsyncImage(imageUrl, null,
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.size(52.dp).clip(refugeContinuousShape(10.dp)))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(translatedShipName(title), style = RefugeTypography.title(palette))
+                Text(translatedShipName(title), style = RefugeTypography.headline(palette))
                 if (subtitle.isNotBlank()) Text(translatedShipName(subtitle), style = RefugeTypography.caption(palette))
             }
             Icon(RefugeIcons.chevron, null, tint = palette.textMuted, modifier = Modifier.size(18.dp))
@@ -548,7 +418,8 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
         Modifier
             .fillMaxSize()
             .zIndex(50f)
-            .background(palette.contentSurfaceStrong)
+            .background(palette.background)
+            .statusBarsPadding().navigationBarsPadding()
             .padding(horizontal = 16.dp),
     ) {
         Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

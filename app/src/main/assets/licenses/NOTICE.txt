@@ -1,0 +1,7 @@
+Refuge includes adapted component examples from AndroidLiquidGlass by Kyant0.
+Source: https://github.com/Kyant0/AndroidLiquidGlass
+License: Apache License, Version 2.0 (see AndroidLiquidGlass-LICENSE.txt).
+
+Adapted examples include LiquidButton, LiquidBottomTabs, LiquidToggle and
+LiquidSlider. Refuge changes include semantic theme colors, navigation state,
+accessibility, native editing, touch handling, and rendering-scope integration.

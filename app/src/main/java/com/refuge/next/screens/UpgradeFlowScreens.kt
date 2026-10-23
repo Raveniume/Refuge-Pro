@@ -276,13 +276,9 @@ fun StoreUpgradePurchaseScreen(
         try { quote = purchaseRepository.quote(from.id, to.id, edition.id) }
         catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (failure: Exception) {
-            // Keep the review step usable with the locally cached catalogue.
-            val localDifference = (edition.price - from.msrp).coerceAtLeast(0)
-            if (localDifference > 0) {
-                quote = UpgradePriceQuote(from.id, to.id, edition.id, localDifference)
-            } else {
-                quoteError = failure.message ?: "升级报价读取失败"
-            }
+            // Catalogue arithmetic is not an RSI quote. Keep the price
+            // unverified and the purchase action disabled until a retry succeeds.
+            quoteError = failure.message ?: "升级报价读取失败"
         }
         finally { quoteLoading = false }
     }

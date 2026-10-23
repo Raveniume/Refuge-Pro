@@ -14,6 +14,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import com.refuge.next.design.RefugePalette
@@ -37,7 +40,8 @@ fun RefugeDialog(
         contentAlignment = Alignment.Center,
     ) {
         ModalGlassScope(
-            modifier = Modifier.fillMaxWidth(.88f).padding(20.dp),
+            modifier = Modifier.fillMaxWidth(.88f).padding(20.dp)
+                .testTag("refuge-dialog").semantics { paneTitle = title },
             underlay = pageBackdrop,
             base = {
                 RefugeLiquidGlass(

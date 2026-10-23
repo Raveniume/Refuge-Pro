@@ -50,7 +50,7 @@ import com.kyant.shapes.RoundedRectangle
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.design.RefugeTypography
 
-private val ReferenceAccent = Color(0xFF0088FF)
+private fun referenceAccent(isDark: Boolean) = if (isDark) RefugeColors.dark.accent else RefugeColors.light.accent
 
 /** Compatibility name for the lab; the implementation is the official port. */
 @Composable
@@ -114,8 +114,8 @@ fun ReferenceLiquidBottomTabs(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    surfaceAlpha: Float = .94f,
-    selectedSurfaceAlpha: Float = .5f,
+    surfaceAlpha: Float = if (isDark) .42f else .70f,
+    selectedSurfaceAlpha: Float = if (isDark) .12f else .08f,
     content: @Composable RowScope.(selectedIndex: Int, select: (Int) -> Unit) -> Unit,
 ) {
     OfficialLiquidBottomTabsPort(
@@ -167,7 +167,7 @@ fun ReferenceSegmentedControl(
             ) {
                 Text(
                     label,
-                    color = if (index == selected) ReferenceAccent else if (isDark) {
+                    color = if (index == selected) referenceAccent(isDark) else if (isDark) {
                         Color.White.copy(alpha = .78f)
                     } else {
                         Color.Black.copy(alpha = .72f)
@@ -187,7 +187,8 @@ fun ReferenceSearchField(
     searchIcon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier,
 ) {
-    val textColor = if (isDark) Color.White else Color.Black
+    val palette = if (isDark) RefugeColors.dark else RefugeColors.light
+    val textColor = palette.text
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -202,16 +203,19 @@ fun ReferenceSearchField(
                         backdrop = backdrop,
                         shape = { RoundedRectangle(16.dp, RoundedCornerStyle.Continuous) },
                         effects = { vibrancy(); blur(2.dp.toPx()); lens(8.dp.toPx(), 12.dp.toPx()) },
+                        highlight = { com.refuge.next.material.RefugeGlassStyle.controlHighlight },
+                        shadow = null,
+                        innerShadow = null,
                         onDrawSurface = {
-                            drawRect(if (isDark) Color.White.copy(alpha = .12f) else Color.White.copy(alpha = .58f))
+                            drawRect(palette.contentSurface.copy(alpha = if (isDark) .72f else .60f))
                         },
                     )
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(searchIcon, contentDescription = null, tint = if (isDark) Color.White.copy(alpha = .78f) else Color.Black.copy(alpha = .58f), modifier = Modifier.size(20.dp))
+                Icon(searchIcon, contentDescription = null, tint = palette.textSecondary, modifier = Modifier.size(20.dp))
                 Box(Modifier.weight(1f).padding(start = 8.dp)) {
-                    if (value.isEmpty()) Text("搜索", color = textColor.copy(alpha = .55f))
+                    if (value.isEmpty()) Text("搜索", color = palette.textSecondary)
                     inner()
                 }
             }
@@ -261,7 +265,6 @@ fun RowScope.ReferenceSelectionItem(
     Column(
         Modifier
             .clip(Capsule(RoundedCornerStyle.Continuous))
-            .clickable(interactionSource = null, indication = null, role = Role.Tab, onClick = onClick)
             .fillMaxHeight()
             .weight(1f)
             .graphicsLayer {
@@ -269,11 +272,12 @@ fun RowScope.ReferenceSelectionItem(
                 scaleX = currentScale
                 scaleY = currentScale
             }
+            .clickable(interactionSource = null, indication = null, role = Role.Tab, onClick = onClick)
             .semantics { this.selected = selected; contentDescription = label },
         verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        val tint = if (selected) ReferenceAccent else if (isDark) Color.White.copy(alpha = .78f) else Color.Black.copy(alpha = .72f)
+        val tint = if (selected) referenceAccent(isDark) else if (isDark) Color.White.copy(alpha = .78f) else Color.Black.copy(alpha = .72f)
         // Correct the visible path area, which differs from each vector's viewport.
         val iconSize = when (label) {
             "终端" -> if (selected) 16.5.dp else 13.5.dp

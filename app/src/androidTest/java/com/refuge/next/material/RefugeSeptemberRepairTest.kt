@@ -19,6 +19,11 @@ import java.io.File
 
 class RefugeSeptemberRepairTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val testName = org.junit.rules.TestName()
+    @org.junit.After fun captureCurrentEvidence() {
+        runCatching { evidenceFile("${testName.methodName}.txt").writeText(compose.onRoot(useUnmergedTree = true).printToString()) }
+        runCatching { save(testName.methodName) }
+    }
     @Test fun hangarUpgradeOpensOwnedInventoryOnlyFromSecondLevel() {
         val row = HangarItem("Upgrade - Aurora MR to Avenger Titan", "$5", "2026-09-13", com.refuge.next.R.drawable.ship_placeholder,
             originalName = "Upgrade - Aurora MR to Avenger Titan", upgradeFrom = "Aurora MR", upgradeTo = "Avenger Titan", id = 99, isUpgrade = true)
@@ -72,19 +77,36 @@ class RefugeSeptemberRepairTest {
         } }
         compose.onNodeWithText("护盾类型").performClick()
         compose.onNodeWithText("Bubble").performClick()
+        compose.waitForIdle()
         assertEquals(setOf("Bubble"), selection["护盾类型"])
         compose.onNodeWithContentDescription("返回筛选").performClick()
         compose.onNodeWithText("1 项").assertIsDisplayed()
         save("filter-groups")
         compose.onNodeWithText("重置").performClick()
+        compose.waitForIdle()
         assertTrue(selection.isEmpty())
+    }
+    @Test fun longFilterListReachesLastOptionAboveTheDoneAction() {
+        var selection by mutableStateOf<FacetSelection>(emptyMap())
+        compose.setContent { RefugeScene(RefugeColors.dark) { backdrop ->
+            FacetFilterSheet(backdrop, RefugeColors.dark, "终端筛选",
+                mapOf("厂商" to (1..30).map { "Manufacturer $it" }), selection,
+                { selection = it }, {})
+        } }
+        compose.onNodeWithText("厂商").performClick()
+        compose.onNodeWithText("Manufacturer 30").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(setOf("Manufacturer 30"), selection["厂商"]) }
+        compose.onNodeWithText("完成").assertIsDisplayed()
+        save("filter-last-option")
     }
     @Test fun nativeOutfitterLoadsPowerAndSettingsWithoutWebView() {
         compose.setContent { RefugeScene(RefugeColors.dark) { _ -> NativeLoadoutScreen(RefugeColors.dark, true, {}) } }
-        compose.waitUntil(90_000) { compose.onAllNodesWithText("电力分配").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(90_000) { compose.onAllNodesWithText("火力 · Damage").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("电力分配"))
         compose.onNodeWithText("电力分配").performScrollTo().assertIsDisplayed()
         save("native-power")
-        compose.onNodeWithContentDescription("配装设置").performClick()
+        compose.onNodeWithContentDescription("更多操作").performClick()
+        compose.onNodeWithText("配装设置").performClick()
         compose.onNodeWithText("游戏版本").assertIsDisplayed()
         compose.onNodeWithText("LIVE").assertIsDisplayed()
         compose.onNodeWithText("PTU").assertIsDisplayed()
@@ -94,6 +116,6 @@ class RefugeSeptemberRepairTest {
         compose.waitForIdle()
         android.os.SystemClock.sleep(350)
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        File(compose.activity.getExternalFilesDir(null), "sept13-$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        evidenceFile("sept13-$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
     }
 }

@@ -2,12 +2,14 @@ package com.refuge.next.material
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -48,6 +50,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
@@ -79,6 +84,16 @@ fun RefugeCenteredModeStrip(
     val scope = rememberCoroutineScope()
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
+    val dragged by state.interactionSource.collectIsDraggedAsState()
+    val interacting = pressed || dragged
+    val pressProgress by animateFloatAsState(if (interacting) 1f else 0f,
+        spring(1f, 1000f, .001f), label = "category-glass-press")
+    val lensScaleX by animateFloatAsState(if (interacting) 78f / 56f else 1f,
+        spring(.6f, 250f, .001f), label = "category-lens-x")
+    val lensScaleY by animateFloatAsState(if (interacting) 78f / 56f else 1f,
+        spring(.7f, 250f, .001f), label = "category-lens-y")
+    val trackBackdrop = rememberLayerBackdrop()
+    val lensBackdrop = rememberCombinedBackdrop(backdrop, trackBackdrop)
     val expanded = pressed || state.isScrollInProgress
     val widthFraction by animateFloatAsState(
         targetValue = if (expanded) 1f else restingFraction.coerceIn(.55f, 1f),
@@ -87,8 +102,8 @@ fun RefugeCenteredModeStrip(
     )
     val current by rememberUpdatedState(selected)
     val isDark = palette.background.luminance() < .5f
-    val trackColor = if (isDark) Color(0xFF19191C) else Color(0xFFF8F8FA)
-    val lensColor = if (isDark) Color(0xFF393C42) else Color(0xFFE3E7ED)
+    val trackColor = if (isDark) Color(0xFF121212) else palette.contentSurface
+    val lensColor = if (isDark) Color.White else Color.Black
     val cell = labels.maxOfOrNull { (it.length * 16 + 28 + if (icons.any { icon -> icon != null }) 30 else 0).dp }
         ?.coerceAtLeast(68.dp) ?: 68.dp
 
@@ -118,27 +133,29 @@ fun RefugeCenteredModeStrip(
             contentAlignment = Alignment.Center,
         ) {
             val sidePadding = ((maxWidth - cell) / 2).coerceAtLeast(0.dp)
+            Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier
                     .fillMaxSize()
                     .testTag("mode-track")
+                    .layerBackdrop(trackBackdrop)
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { Capsule(RoundedCornerStyle.Continuous) },
-                        effects = { vibrancy(); blur(12.dp.toPx()); lens(18.dp.toPx(), 24.dp.toPx()) },
-                        highlight = { Highlight.Default.copy(alpha = if (pressed) .42f else .18f) },
-                        shadow = { Shadow(alpha = if (pressed) .34f else .12f) },
+                        effects = { vibrancy(); blur(8.dp.toPx()); lens(24.dp.toPx() * pressProgress, 24.dp.toPx() * pressProgress) },
+                        highlight = { Highlight.Default.copy(alpha = pressProgress) },
+                        shadow = { Shadow(alpha = .12f + pressProgress * .12f) },
                         innerShadow = {
-                            InnerShadow(radius = 6.dp, alpha = if (pressed) .24f else .10f)
+                            InnerShadow(radius = 8.dp * pressProgress, alpha = pressProgress)
                         },
                         layerBlock = {
-                            val scale = 1f + if (pressed) 16.dp.toPx() / size.width else 0f
+                            val scale = 1f + .2f * pressProgress
                             scaleX = scale
                             scaleY = scale
                         },
-                        onDrawSurface = { drawRect(trackColor.copy(alpha = if (isDark) .38f else .52f)) },
+                        onDrawSurface = { drawRect(trackColor.copy(alpha = .4f)) },
                     ),
-            ) {
+            )
                 Box(
                     Modifier
                         .align(Alignment.Center)
@@ -146,22 +163,22 @@ fun RefugeCenteredModeStrip(
                         .height(36.dp)
                         .testTag("mode-lens")
                         .drawBackdrop(
-                            backdrop = backdrop,
+                            backdrop = lensBackdrop,
                             shape = { Capsule(RoundedCornerStyle.Continuous) },
                             effects = {
-                                vibrancy()
-                                blur(10.dp.toPx())
-                                lens(16.dp.toPx(), 22.dp.toPx(), chromaticAberration = pressed)
+                                lens(10.dp.toPx() * pressProgress, 14.dp.toPx() * pressProgress, chromaticAberration = true)
                             },
-                            highlight = { Highlight.Default.copy(alpha = if (pressed) .74f else .36f) },
-                            shadow = { Shadow(alpha = if (pressed) .52f else .20f) },
-                            innerShadow = { InnerShadow(radius = 5.dp, alpha = if (pressed) .38f else .16f) },
+                            highlight = { Highlight.Default.copy(alpha = pressProgress) },
+                            shadow = { Shadow(alpha = pressProgress) },
+                            innerShadow = { InnerShadow(radius = 8.dp * pressProgress, alpha = pressProgress) },
                             layerBlock = {
-                                val scale = if (pressed) 78f / 56f else 1f
-                                scaleX = scale
-                                scaleY = scale
+                                scaleX = lensScaleX
+                                scaleY = lensScaleY
                             },
-                            onDrawSurface = { drawRect(lensColor.copy(alpha = if (isDark) .48f else .58f)) },
+                            onDrawSurface = {
+                                drawRect(lensColor.copy(alpha = .1f * (1f - pressProgress)))
+                                drawRect(Color.Black.copy(alpha = .03f * pressProgress))
+                            },
                         ),
                 )
                 LazyRow(

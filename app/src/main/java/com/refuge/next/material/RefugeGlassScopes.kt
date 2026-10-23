@@ -9,7 +9,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.layer.CompositingStrategy
-import androidx.compose.ui.semantics.dialog
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.Backdrop
@@ -124,12 +124,17 @@ fun ModalGlassScope(
     } else {
         rememberCombinedBackdrop(underlay, modalBackdrop, contentBackdrop)
     }
-    Box(modifier.semantics { dialog() }) {
+    // This is an in-activity pane, not a second Android dialog window.
+    // Dialog semantics make tooling look for a nonexistent DialogWindowProvider.
+    Box(modifier.semantics { isTraversalGroup = true }) {
         Box(Modifier.matchParentSize().layerBackdrop(modalBackdrop)) {
             base()
         }
         Box(Modifier.layerBackdrop(contentBackdrop)) {
-            CompositionLocalProvider(LocalPageOverlayBackdrop provides combinedBackdrop) {
+            // A nested modal is still inside contentBackdrop's capture. It
+            // must sample only the base, otherwise its render node references
+            // itself and Android's RenderThread overflows the stack.
+            CompositionLocalProvider(LocalPageOverlayBackdrop provides modalBackdrop) {
                 content(modalBackdrop)
             }
         }

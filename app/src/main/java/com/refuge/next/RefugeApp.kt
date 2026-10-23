@@ -424,7 +424,12 @@ private fun RefugeAppContent() {
                           Modifier
                               .fillMaxSize()
                               .zIndex(pageLayerZ)
-                              .layerBackdrop(rootNavigationBackdrop),
+                              .layerBackdrop(rootNavigationBackdrop)
+                              // Include the opaque page canvas in this capture.
+                              // Blurring transparent Profile controls alone
+                              // leaves their original sharp text visible below
+                              // the sampled layer. Opaque lists hid that defect.
+                              .background(palette.background),
                       ) {
                       RefugeRouteTransition(
                           targetState = route,

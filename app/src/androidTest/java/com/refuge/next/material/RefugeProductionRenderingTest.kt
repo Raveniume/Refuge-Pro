@@ -10,8 +10,11 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.mutableStateOf
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
@@ -24,6 +27,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeUp
 import android.view.KeyEvent
@@ -44,11 +50,15 @@ import com.refuge.next.data.TerminalCategory
 import com.refuge.next.data.TerminalItem
 import com.refuge.next.data.TerminalRepository
 import com.refuge.next.data.UserPresence
+import com.refuge.next.data.ProfileData
+import com.refuge.next.data.ProfileRepository
+import com.refuge.next.data.ProductionUtilityRepository
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.screens.HangarScreen
 import com.refuge.next.screens.RootBottomNav
 import com.refuge.next.screens.StoreScreen
 import com.refuge.next.screens.TerminalScreen
+import com.refuge.next.screens.ProfileScreen
 import java.io.File
 import java.util.Collections
 import org.json.JSONObject
@@ -91,27 +101,52 @@ class RefugeProductionRenderingTest {
         val logs = ProductionHangarLogRepository()
         val ccu = ProductionCcuRepository()
         val cart = InMemoryCartRepository()
+        val purchases = object : com.refuge.next.data.CcuPurchaseRepository {
+            override suspend fun catalog(): org.json.JSONObject? = null
+            override suspend fun sourceIds(toId: Int): Set<Int> = emptySet()
+        }
+        val profile = ProfileData(handle = "QA Pilot", isAuthenticated = true,
+            totalSpent = "$1000", hangarValue = "$440", currentValue = "$900", credit = "$120")
+        val profileRepository = object : ProfileRepository {
+            override fun cachedProfile() = profile
+            override suspend fun profile() = profile
+        }
         val route = mutableStateOf(1)
         val dark = mutableStateOf(false)
         val optics = mutableStateOf(true)
         val reusePage = mutableStateOf(true)
+        val overlayClear = mutableStateOf(true)
         compose.setContent {
             val palette = if (dark.value) RefugeColors.dark else RefugeColors.light
             CompositionLocalProvider(LocalOpticalGlassEnabled provides optics.value,
                 LocalRasterizePageBackdrop provides reusePage.value) {
             Box(Modifier.fillMaxSize().testTag("scene")) {
                 RefugeScene(palette) { canvas ->
+                    val pageCapture = rememberLayerBackdrop()
                     PageGlassScope(canvas, content = {
+                        Box(Modifier.fillMaxSize().zIndex(if (overlayClear.value) 1f else 3f).layerBackdrop(pageCapture)) {
                         when (route.value) {
                             0 -> HangarScreen(canvas, palette, hangar, buyback, logs, ccu,
-                                dark.value, 0, { route.value = it }, {}, {}, true, UserPresence.ONLINE, null, {})
-                            1 -> StoreScreen(canvas, palette, store, cart, dark.value, 1,
-                                { route.value = it }, {}, true, UserPresence.ONLINE, null, {})
+                                dark.value, 0, { route.value = it }, {}, {}, true, UserPresence.ONLINE, null, {},
+                                onOverlayVisibilityChanged = { overlayClear.value = it })
+                            1 -> StoreScreen(canvas, palette, store, cart, purchases, dark.value, 1,
+                                { route.value = it }, {}, true, UserPresence.ONLINE, null, {},
+                                onOverlayVisibilityChanged = { overlayClear.value = it })
                             2 -> TerminalScreen(canvas, palette, dark.value, 2,
-                                { route.value = it }, terminal, true, UserPresence.ONLINE, null, {})
+                                { route.value = it }, terminal, true, UserPresence.ONLINE, null, {},
+                                onOverlayVisibilityChanged = { overlayClear.value = it })
+                            4 -> ProfileScreen(canvas, palette, dark.value, 4,
+                                { route.value = it }, profileRepository, ProductionUtilityRepository(),
+                                {}, {}, true, UserPresence.ONLINE, profile, onToggleOnline = {},
+                                onOverlayVisibilityChanged = { overlayClear.value = it })
+                            5 -> com.refuge.next.screens.SettingsScreen(canvas, palette, dark.value,
+                                true, {}, 4, { route.value = it }, { dark.value = !dark.value }, {},
+                                com.refuge.next.data.productionCacheManifest, true, UserPresence.ONLINE, null, {})
                         }
-                    }, overlay = { page ->
-                        RootBottomNav(page, dark.value, route.value, onNavigate = { route.value = it })
+                        }
+                    }, overlay = {
+                        RootBottomNav(pageCapture, dark.value, if (route.value == 5) 4 else route.value,
+                            onNavigate = { route.value = it }, coveredBySheet = !overlayClear.value)
                     })
                 }
             }
@@ -132,7 +167,7 @@ class RefugeProductionRenderingTest {
         save("store-detail-dark", dialog = true)
         pressBack()
 
-        val list = compose.onNode(hasScrollToIndexAction())
+        val list = compose.onNode(hasScrollToIndexAction() and androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange))
         list.performTouchInput { swipeUp(durationMillis = 350) }
         list.performScrollToIndex(0)
         for ((run, reuse) in listOf(false, true, false, true).withIndex()) {
@@ -152,19 +187,37 @@ class RefugeProductionRenderingTest {
         compose.onNodeWithText("\u7ec8\u7aef").performClick()
         compose.onNodeWithText("M80 00").assertIsDisplayed()
         save("terminal-dark")
-        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(30)
-        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
+        compose.onNode(hasScrollToIndexAction() and androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(30)
+        compose.onNode(hasScrollToIndexAction() and androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(0)
         compose.onNodeWithText("M80 00").performClick()
-        compose.onNode(isDialog()).assertExists()
+        compose.onNodeWithTag("refuge-sheet").assertExists()
         save("terminal-detail-dark", dialog = true)
         pressBack()
         compose.onNodeWithText("\u673a\u5e93").performClick()
-        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(5)
+        compose.onNode(hasScrollToIndexAction() and androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(5)
         save("hangar-dark")
-        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(30)
+        compose.onNode(hasScrollToIndexAction() and androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(30)
         compose.runOnIdle { dark.value = false }
-        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(5)
+        compose.onNode(hasScrollToIndexAction() and androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(5)
         save("hangar-light")
+
+        // Exercise physical taps and verify the same production navigation on
+        // every root in both themes. Component fixtures are not live RSI QA.
+        for (isDark in listOf(false, true)) {
+            compose.runOnIdle { dark.value = isDark }
+            for ((label, destination, name) in listOf(
+                Triple("商店", 1, "store"), Triple("终端", 2, "terminal"),
+                Triple("我的", 4, "profile"), Triple("机库", 0, "hangar"),
+            )) {
+                compose.onAllNodesWithContentDescription(label).onLast().performTouchInput { click() }
+                compose.waitForIdle()
+                compose.runOnIdle { assertEquals("Single tap must open $label", destination, route.value) }
+                save("root-${if (isDark) "dark" else "light"}-$name")
+            }
+            compose.runOnIdle { route.value = 5 }
+            compose.onNodeWithText("深色主题").assertIsDisplayed()
+            save("settings-${if (isDark) "dark" else "light"}")
+        }
     }
 
     private fun recordScrollFrames(reuse: Boolean, run: Int, workload: () -> Unit) {
@@ -201,12 +254,12 @@ class RefugeProductionRenderingTest {
             result.put("${label}MedianMs", values[values.size / 2])
             result.put("${label}P95Ms", values[((values.size - 1) * .95).toInt()])
         }
-        File(compose.activity.getExternalFilesDir(null), "store-raster-$run-${if (reuse) "cached" else "baseline"}.json").writeText(result.toString(2))
+        evidenceFile("store-raster-$run-${if (reuse) "cached" else "baseline"}.json").writeText(result.toString(2))
     }
 
     private fun nativeSwipe(up: Boolean) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val bounds = compose.onNode(hasScrollToIndexAction()).fetchSemanticsNode().boundsInRoot
+        val bounds = compose.onNode(hasScrollToIndexAction() and androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).fetchSemanticsNode().boundsInRoot
         val startY = if (up) bounds.height * .72f else bounds.height * .3f
         val endY = if (up) bounds.height * .3f else bounds.height * .72f
         val started = SystemClock.uptimeMillis()
@@ -233,7 +286,7 @@ class RefugeProductionRenderingTest {
         compose.waitForIdle()
         val image = if (dialog) InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
             else compose.onNodeWithTag("scene").captureToImage().asAndroidBitmap()
-        File(compose.activity.getExternalFilesDir(null), "$name.png").outputStream().use {
+        evidenceFile("$name.png").outputStream().use {
             image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
     }

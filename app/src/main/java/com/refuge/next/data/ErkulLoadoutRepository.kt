@@ -36,6 +36,7 @@ internal class ErkulLoadoutRepository(private val context: Context) {
         }
     }
     private val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(40, TimeUnit.SECONDS).build()
+    private val directClient = client.newBuilder().proxy(java.net.Proxy.NO_PROXY).build()
     private val dir = File(context.filesDir, "erkul-v8").apply { mkdirs() }
     private val lock = Mutex()
     private val cache = java.util.concurrent.ConcurrentHashMap<String, ErkulCatalog>()
@@ -60,18 +61,8 @@ internal class ErkulLoadoutRepository(private val context: Context) {
 
     private suspend fun warmAssembledData(branch: String, current: ErkulCatalog) {
         current.ships.firstOrNull()?.let { runCatching { ship(current, it) } }
-        // Warm the disk cache without keeping every parsed hardpoint tree in RAM.
-        withContext(Dispatchers.IO) {
-            current.manifest.objects("groups").forEach { group ->
-                runCatching {
-                    val index = JSONObject(read(branch, group.getString("indexPath")))
-                    index.objects("blobs").forEach { blob ->
-                        ensureActive()
-                        runCatching { read(branch, blob.getString("path")) }
-                    }
-                }
-            }
-        }
+        // Other ships load on demand. Eagerly downloading every vessel at
+        // startup monopolized the network while the user was logging in.
     }
 
     private fun shouldRefresh(branch: String): Boolean {
@@ -85,10 +76,14 @@ internal class ErkulLoadoutRepository(private val context: Context) {
         require(branch in setOf("LIVE", "PTU") && !path.contains("..") && Regex("[A-Za-z0-9_/.-]+\\.bin").matches(path))
         val file = File(dir, "$branch/${path.replace('/', '_')}").apply { parentFile?.mkdirs() }
         if (!refresh && file.isFile) return file.readText()
-        val raw = client.newCall(Request.Builder().url("https://cdn.erkul.games/$branch/$path").build()).execute().use {
-            check(it.isSuccessful) { "Erkul 目录暂时不可用（${it.code}）" }
+        val request = Request.Builder().url("https://cdn.erkul.games/$branch/$path").build()
+        fun fetch(http: OkHttpClient): String = http.newCall(request).execute().use {
+            if (!it.isSuccessful) throw java.io.IOException("Erkul 目录暂时不可用（${it.code}）")
             decode(it.body?.bytes() ?: error("目录响应为空"))
         }
+        // A device-wide development proxy may not reach the public CDN.
+        // Retry the same public URL directly; never substitute a different branch.
+        val raw = try { fetch(client) } catch (_: java.io.IOException) { fetch(directClient) }
         // Decode/parse before replacing a good cache entry.
         if (raw.trimStart().startsWith("[")) JSONArray(raw) else JSONObject(raw)
         file.writeText(raw)
@@ -101,7 +96,7 @@ internal class ErkulLoadoutRepository(private val context: Context) {
             // A normal read is cache-first.  Only an explicit/manual refresh
             // reaches the network before returning, so a cold screen can use
             // the downloaded dataset without waiting for the CDN.
-            var offline = !refresh
+            var offline = !refresh && File(dir, "$branch/catalog.bin").isFile
             val local = if (!refresh) runCatching {
                 val file = File(dir, "$branch/catalog.bin")
                 if (file.isFile) JSONObject(file.readText()) else null
@@ -111,7 +106,7 @@ internal class ErkulLoadoutRepository(private val context: Context) {
             catch (failure: Exception) {
                 offline = true
                 val file = File(dir, "$branch/catalog.bin")
-                if (file.isFile) JSONObject(file.readText()) else return@withLock fallbackCatalog(branch)
+                if (file.isFile) JSONObject(file.readText()) else throw failure
             }
             check(manifest.optInt("schemaVersion") == 8) { "Erkul 数据格式已更新，请更新应用" }
             val version = manifest.getString("dataVersion")
@@ -139,126 +134,13 @@ internal class ErkulLoadoutRepository(private val context: Context) {
         ships[key]?.let { return@withLock it }
         val kind = if (summary.optString("category") == "AssembledGroundVehicle") "groundvehicles" else "ships"
         val group = catalog.manifest.objects("groups").firstOrNull { it.getString("kind") == kind }
-        if (group == null) return@withLock fallbackShip(summary).also { ships.put(key, it) }
+        check(group != null) { "当前版本没有对应舰船数据，请更新目录" }
         val className = summary.getString("className")
-        val indexPath = group.getString("indexPath")
-        val localIndex = runCatching { JSONObject(read(catalog.branch, indexPath)) }.getOrNull()
-        if (localIndex != null) {
-            val path = localIndex.objects("blobs").first { it.getString("id") == className }.getString("path")
-            return@withLock JSONObject(read(catalog.branch, path)).also { ships.put(key, it) }
-        }
-
-        // The CDN can temporarily deny a branch's assembled group index even
-        // though its catalog, summaries, and component families are already
-        // cached. Keep the selector usable in that case by resolving a ship
-        // from the other locally complete branch. LIVE/PTU share the same
-        // assembled payload shape, and the selected branch's summary still
-        // supplies the visible name, manufacturer, and size.
-        val fallbackBranch = if (catalog.branch == "PTU") "LIVE" else "PTU"
-        val fallbackIndex = cachedGroupIndex(fallbackBranch, kind)
-        val fallbackPath = fallbackIndex?.objects("blobs")
-            ?.firstOrNull { it.optString("id") == className }
-            ?.optString("path")
-            ?.takeIf(String::isNotBlank)
-        if (fallbackPath != null) {
-            return@withLock JSONObject(read(fallbackBranch, fallbackPath)).also { ships.put(key, it) }
-        }
-        // A catalog can be available while the assembled payload is denied.
-        // Keep the editor usable with a deterministic local snapshot rather
-        // than replacing the whole screen with an error card.
-        return@withLock fallbackShip(summary)
+        val index = JSONObject(read(catalog.branch, group.getString("indexPath")))
+        val path = index.objects("blobs").firstOrNull { it.getString("id") == className }
+            ?.getString("path") ?: error("当前版本尚未收录该舰船")
+        JSONObject(read(catalog.branch, path)).also { ships.put(key, it) }
         } }
-    }
-
-    /** Small offline editor snapshot used when the CDN is unavailable on a cold install. */
-    private fun fallbackCatalog(branch: String): ErkulCatalog {
-        val names = listOf(
-            "M80" to "Origin Jumpworks", "100i" to "Origin Jumpworks",
-            "325a" to "Origin Jumpworks", "Perseus" to "RSI",
-        )
-        val ships = names.map { (name, maker) ->
-            JSONObject().put("className", name.lowercase().replace(" ", "_"))
-                .put("name", name).put("manufacturerName", maker).put("size", 3)
-                .put("i18n", JSONObject().put("displayName", name).put("class", "Ship"))
-        }
-        val manifest = JSONObject().put("schemaVersion", 8).put("dataVersion", "offline-${branch.lowercase()}")
-            .put("singles", JSONArray()).put("families", JSONArray()).put("groups", JSONArray())
-        val offlineComponents = listOf(
-            offlinePowerPlant(), offlineCooler(), offlineShield(), offlineQuantumDrive(),
-        ).associateBy { it.getString("className").lowercase() }
-        return ErkulCatalog(branch, "offline-${branch.lowercase()}", manifest, ships, offlineComponents, emptyMap(), offline = true)
-            .also { cache[branch] = it }
-    }
-
-    private fun offlineFlow(resource: String, units: Double, output: Boolean, unitKind: String = "powerSegment"): JSONObject =
-        JSONObject().put(if (output) "produces" else "consumes", JSONArray().put(
-            JSONObject().put("resource", resource).put("unitKind", unitKind).put("units", units)
-        ))
-
-    private fun offlineComponent(
-        className: String,
-        name: String,
-        type: String,
-        category: String,
-        size: Int,
-        onlineFlows: List<JSONObject>,
-        extra: JSONObject = JSONObject(),
-    ): JSONObject = JSONObject().put("className", className).put("name", name)
-        .put("type", type).put("category", category).put("size", size)
-        .put("mass", size * 90.0)
-        .put("i18n", JSONObject().put("displayName", name).put("displayType", category).put("class", category))
-        .put("resource", JSONObject().put("states", JSONArray().put(JSONObject().put("name", "Online").put("flows", JSONArray(onlineFlows)))))
-        .let { JSONObject(it.toString()).apply { extra.keys().forEach { key -> put(key, extra.get(key)) } } }
-
-    private fun offlinePowerPlant() = offlineComponent(
-        "offline_power_plant", "原厂发电机", "PowerPlant", "PowerPlant", 3,
-        listOf(offlineFlow("Power", 30.0, output = true)),
-    )
-
-    private fun offlineCooler() = offlineComponent(
-        "offline_cooler", "原厂冷却器", "Cooler", "Cooler", 3,
-        listOf(offlineFlow("Power", 4.0, output = false), offlineFlow("Coolant", 40.0, output = true, unitKind = "coolantPerSecond")),
-        JSONObject().put("connection", JSONObject().put("heatRateOnline", 4.0)),
-    )
-
-    private fun offlineShield() = offlineComponent(
-        "offline_shield", "原厂护盾", "Shield", "Shield", 3,
-        listOf(offlineFlow("Power", 6.0, output = false)),
-        JSONObject().put("shield", JSONObject().put("maxShieldHealth", 2400.0).put("maxShieldRegen", 80.0)),
-    )
-
-    private fun offlineQuantumDrive() = offlineComponent(
-        "offline_quantum_drive", "原厂量子引擎", "QuantumDrive", "QuantumDrive", 3,
-        listOf(offlineFlow("Power", 5.0, output = false)),
-        JSONObject().put("qdrive", JSONObject().put("params", JSONObject().put("driveSpeed", 120000000.0)).put("quantumFuelRequirement", .01)),
-    )
-
-    private fun fallbackShip(summary: JSONObject): JSONObject {
-        val className = summary.optString("className", "m80")
-        val displayName = summary.itemName().ifBlank { summary.optString("name", className) }
-        val powerPlant = offlinePowerPlant()
-        val cooler = offlineCooler()
-        val shield = offlineShield()
-        val quantum = offlineQuantumDrive()
-        fun slot(name: String, item: JSONObject) = JSONObject().put("portName", name)
-            .put("hardpoint", JSONObject().put("name", name).put("minSize", 3).put("maxSize", 3)
-                .put("accepts", JSONArray().put(JSONObject().put("type", item.optString("type"))))
-                .put("flags", JSONObject().put("editable", true))).put("item", item)
-        val slots = JSONArray().put(slot("powerPlant", powerPlant)).put(slot("cooler", cooler))
-            .put(slot("shield", shield)).put(slot("quantumDrive", quantum))
-        return JSONObject(summary.toString()).put("className", className).put("name", displayName)
-            .put("i18n", JSONObject().put("displayName", displayName).put("class", "Ship"))
-            .put("vehicle", JSONObject().put("crewSize", 1).put("hardpoints", JSONArray()))
-            .put("slots", slots)
-            .put("precomputed", JSONObject().put("massFixedKg", 10000.0).put("cargo", 0).put("hp", JSONObject().put("total", 10000.0)).put("fuel", JSONObject().put("quantumCapacity", 100.0)))
-            .put("powerPools", JSONObject())
-    }
-
-    private fun cachedGroupIndex(branch: String, kind: String): JSONObject? {
-        val prefix = "$kind.group."
-        return File(dir, branch).listFiles()
-            ?.firstOrNull { it.isFile && it.name.startsWith(prefix) && it.name.endsWith(".bin") }
-            ?.let { runCatching { JSONObject(it.readText()) }.getOrNull() }
     }
 
     fun savedPlans(branch: String, version: String, ship: String): List<Pair<String, JSONObject>> =
@@ -280,12 +162,47 @@ internal class ErkulLoadoutRepository(private val context: Context) {
     }
 }
 
-internal data class ErkulSlot(val path: String, val port: JSONObject, val item: JSONObject?, val original: JSONObject?, val pilot: Boolean, val depth: Int)
+/** A resolved slot keeps its immediate assembled parent so the dashboard can
+ * use Erkul's real pilot/turret/PDS classification instead of guessing from
+ * a translated label or path fragment. */
+internal data class ErkulSlot(
+    val path: String,
+    val port: JSONObject,
+    val item: JSONObject?,
+    val original: JSONObject?,
+    val pilot: Boolean,
+    val depth: Int,
+    val container: JSONObject? = null,
+    val rootItem: JSONObject? = null,
+    val rootPort: JSONObject? = null,
+)
+
+/** Mirrors Erkul's by-location weapon aggregation using the assembled top
+ * component, control seats and hardpoint metadata. */
+internal fun erkulWeaponLocation(slot: ErkulSlot): String {
+    val root = slot.rootItem ?: slot.container ?: slot.item ?: return "pilot"
+    val subtype = root.optString("subType").lowercase().filter(Char::isLetterOrDigit)
+    val type = root.optString("type").lowercase().filter(Char::isLetterOrDigit)
+    if (subtype == "pdcturret" || root.strings("tags").any { it.equals("pdc", true) }) return "pdc"
+    if (subtype == "mannedturret" || type == "turretbase") return "mannedTurret"
+    val control = slot.rootPort?.obj("control")
+    val seats = (control?.strings("seats").orEmpty() + root.strings("seats")).distinct()
+    val hasPilotSeat = seats.any { it.contains("pilot", true) || it.contains("driver", true) }
+    val hasOtherSeat = seats.any { !(it.contains("pilot", true) || it.contains("driver", true)) }
+    return when {
+        control == null || control.optBoolean("pilot") || hasPilotSeat || (!hasOtherSeat && slot.pilot) -> "pilot"
+        hasOtherSeat -> "remoteOperator"
+        else -> "pilot"
+    }
+}
 
 /** Resolve the whole tree after parent replacement; old turret/missile children never survive a swap. */
 internal fun resolveErkulSlots(ship: JSONObject, catalog: ErkulCatalog, overrides: JSONObject): List<ErkulSlot> {
     val all = mutableListOf<ErkulSlot>()
-    fun visit(nodes: List<JSONObject>, ports: List<JSONObject>, prefix: String, pilot: Boolean, depth: Int) {
+    fun visit(
+        nodes: List<JSONObject>, ports: List<JSONObject>, prefix: String, pilot: Boolean, depth: Int,
+        container: JSONObject? = null, rootItem: JSONObject? = null, rootPort: JSONObject? = null,
+    ) {
         if (depth > 20) return
         for (node in nodes) {
             val name = node.optString("portName")
@@ -294,12 +211,14 @@ internal fun resolveErkulSlots(ship: JSONObject, catalog: ErkulCatalog, override
             val original = node.optJSONObject("item")
             val item = if (overrides.has(path)) catalog.components[overrides.optString(path).lowercase()] else original
             val isPilot = port.obj("control").optBoolean("pilot", pilot)
-            all += ErkulSlot(path, port, item, original, isPilot, depth)
+            val topItem = rootItem ?: item.takeIf { prefix.isBlank() }
+            val topPort = rootPort ?: port.takeIf { prefix.isBlank() }
+            all += ErkulSlot(path, port, item, original, isPilot, depth, container, topItem, topPort)
             if (item != null) {
                 val childNodes = if (overrides.has(path)) item.objects("slots") else node.objects("children").ifEmpty { item.objects("slots") }
                 // An empty replaceable mount still has real child hardpoints.
                 val children = childNodes.ifEmpty { item.objects("ports").map { JSONObject().put("portName", it.optString("name")).put("hardpoint", it) } }
-                visit(children, item.objects("ports"), path, isPilot, depth + 1)
+                visit(children, item.objects("ports"), path, isPilot, depth + 1, item, topItem, topPort)
             }
         }
     }

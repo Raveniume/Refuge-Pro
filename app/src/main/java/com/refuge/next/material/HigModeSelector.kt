@@ -36,10 +36,11 @@ fun RefugeLiquidModeSelector(
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
     icons: List<ImageVector?> = emptyList(),
+    fixedWidth: Boolean = false,
 ) {
     if (labels.isEmpty()) return
-    if (labels.size == 2) {
-        RefugeTwoOptionSelector(
+    if (labels.size == 2 || fixedWidth) {
+        RefugeFixedModeSelector(
             backdrop = backdrop,
             palette = palette,
             labels = labels,
@@ -70,7 +71,7 @@ fun RefugeLiquidModeSelector(
  * carousel is useful for long category lists, but it leaves an artificial
  * empty lens when there are only two choices (for example CCU objectives). */
 @Composable
-private fun RefugeTwoOptionSelector(
+private fun RefugeFixedModeSelector(
     backdrop: LayerBackdrop,
     palette: RefugePalette,
     labels: List<String>,
@@ -79,17 +80,17 @@ private fun RefugeTwoOptionSelector(
     icons: List<ImageVector?>,
     modifier: Modifier,
 ) {
-    val selected = selectedIndex.coerceIn(0, 1)
+    val selected = selectedIndex.coerceIn(labels.indices)
     OfficialLiquidSegmentedPort(
         selectedIndex = selected,
         onSelected = onSelected,
         backdrop = backdrop,
-        tabsCount = 2,
+        tabsCount = labels.size,
         isDark = palette.background.luminance() < .5f,
         modifier = modifier.testTag("mode-track"),
         outerHeight = 48.dp,
     ) { _, select ->
-        labels.take(2).forEachIndexed { index, label ->
+        labels.forEachIndexed { index, label ->
             Box(
                 Modifier
                     .weight(1f)

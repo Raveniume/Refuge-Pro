@@ -42,6 +42,11 @@ import java.io.File
 
 class RefugeExtendedParityTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val testName = org.junit.rules.TestName()
+    @org.junit.After fun captureCurrentEvidence() {
+        runCatching { evidenceFile("${testName.methodName}.txt").writeText(compose.onRoot(useUnmergedTree = true).printToString()) }
+        runCatching { save(testName.methodName) }
+    }
 
     @Test fun officialTabsSupportSingleTapAndDragWithGrowingLens() {
         val selection = mutableIntStateOf(0)
@@ -242,8 +247,8 @@ class RefugeExtendedParityTest {
         }
         // With no translation provider the preserved original name is shown.
         compose.onNodeWithContentDescription("Original package").performClick()
-        fun field(value: String) = compose.onAllNodes(hasText(value) and hasAnyAncestor(isDialog())).onFirst()
-        fun action(value: String) = compose.onNode(hasContentDescription(value) and hasAnyAncestor(isDialog()))
+        fun field(value: String) = compose.onAllNodes(hasText(value) and hasAnyAncestor(hasTestTag("refuge-sheet"))).onFirst()
+        fun action(value: String) = compose.onNode(hasContentDescription(value) and hasAnyAncestor(hasTestTag("refuge-sheet")))
         for (text in listOf("Original package", "$140", "$300", "$160", "入库日期", "2026-09-05", "LTI", "101", "Digital Star Citizen")) {
             field(text).performScrollTo().assertIsDisplayed()
         }
@@ -311,7 +316,12 @@ class RefugeExtendedParityTest {
             {"id":201,"title":"Warbond Edition","price":18000,"available":true},
             {"id":202,"title":"Standard Edition","price":20000,"available":false}]}
         ]}}""")
+        var quoteAttempts = 0
         val purchase = object : CcuPurchaseRepository {
+            override suspend fun quote(sourceShipId: Int, targetShipId: Int, skuId: Int): UpgradePriceQuote {
+                if (quoteAttempts++ == 0) error("报价暂不可用")
+                return UpgradePriceQuote(sourceShipId, targetShipId, skuId, 8000)
+            }
             override fun cachedCatalog() = catalogue
             override suspend fun catalog() = catalogue
             override fun cachedSourceIds(toId: Int) = setOf(10)
@@ -358,8 +368,11 @@ class RefugeExtendedParityTest {
         compose.onNodeWithText("战争债券版").performClick()
         compose.onNodeWithText("已有舰船").assertIsDisplayed().performClick()
         compose.onNodeWithText("RSI 升级差价").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("待核验").assertIsDisplayed()
+        compose.onNodeWithText("待核验").performScrollTo().assertIsDisplayed()
         save("upgrade-cost-preview")
+        compose.onNodeWithText("重试").performScrollTo().performClick()
+        compose.onNodeWithText("$80").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("待核验").assertDoesNotExist()
     }
 
     @Test fun ownedUpgradeUsesServerEligibilityAndRetriesFailures() {
@@ -435,8 +448,8 @@ class RefugeExtendedParityTest {
         for (item in items) {
             compose.onNodeWithContentDescription(item.category.label).performScrollTo().performClick()
             compose.onNodeWithText(item.name).performClick()
-            for (value in listOf("12345 aUEC", "123 kg", "987 W", "765 HP", item.description)) {
-                compose.onNode(hasText(value) and hasAnyAncestor(isDialog())).performScrollTo().assertIsDisplayed()
+            for (value in listOf("12345", "123 kg", "987 W", "765 HP", item.description)) {
+                compose.onNode(hasText(value) and hasAnyAncestor(hasTestTag("refuge-sheet"))).performScrollTo().assertIsDisplayed()
             }
             save("terminal-${item.category.name}")
             compose.onNodeWithText("完成").performClick()
@@ -451,23 +464,8 @@ class RefugeExtendedParityTest {
         compose.waitForIdle()
         android.os.SystemClock.sleep(250)
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        val resolver = compose.activity.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "refuge-qa-$name.png")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Refuge QA")
-                put(MediaStore.Images.Media.IS_PENDING, 1)
-            }
-        }
-        val uri = requireNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
-        requireNotNull(resolver.openOutputStream(uri)).use {
+        evidenceFile("$name.png").outputStream().use {
             bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            resolver.update(uri, ContentValues().apply {
-                put(MediaStore.Images.Media.IS_PENDING, 0)
-            }, null, null)
         }
     }
 }

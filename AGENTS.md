@@ -1,0 +1,11 @@
+# Local Android development
+
+- The active checkout is `D:\RefugeNext`; do not recreate the retired OneDrive checkout or historical backups.
+- Use the single shared Google Android Emulator installation at `D:\Android\Sdk` and AVD `Shared_Pixel7_API35` in `%USERPROFILE%\.android\avd` for every IDE/agent. Reuse the running device; do not install another emulator or create per-task AVDs.
+- Use `scripts/android.ps1` to start the shared device and run the local verification workflow. Preserve app data when installing APKs (`adb install -r`).
+- Keep `hw.keyboard=yes` in the shared AVD so the host's physical keyboard works. Check actual host input as well as instrumented key events when changing login fields.
+- Prefer ADB, UIAutomator hierarchy inspection, screenshots and on-device instrumentation for end-to-end QA. Use desktop Computer Use only when ADB cannot verify the required behavior (for example, actual host-keyboard delivery).
+- Keep generated builds, captures, and reports under ignored build/qa directories. Retain only the current verification evidence, not duplicate checkouts or dated backup trees.
+- Before delivery, run unit tests, lint, instrumented tests, and inspect light/dark screenshots of all four root routes and pressed/dragged navigation. Follow `docs/DELIVERY_HARD_REQUIREMENTS.md`. Report skipped authenticated checks explicitly; test fixtures do not prove live account/API behavior.
+- For UI changes, apply the installed `apple-design` skill and `docs/APPEARANCE_REVIEW.md`. Light mode uses a cool gray page, soft white content groups, quiet inset dividers, and restrained shadows. Use `RefugePalette` semantic colors instead of hard-coded white. Reserve optical glass for functional controls and floating navigation; preserve readable text and the Refuge theme.
+- Drag controls must follow Kyant0/AndroidLiquidGlass catalog behavior, not merely imitate its colors. Use `RefugeLiquidSlider` for continuous values; preserve official thumb geometry, track sampling, press springs, blur/lens transitions and velocity deformation. Check resting, pressed, dragged and released captures in both themes. For centered category strips preserve the requested fixed lens while adapting the reference optics.

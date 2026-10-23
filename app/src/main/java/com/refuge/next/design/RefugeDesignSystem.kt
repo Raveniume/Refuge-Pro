@@ -61,26 +61,26 @@ object RefugeColors {
     )
 
     val light = RefugePalette(
-        // iOS grouped-background hierarchy: the page is the tinted system
-        // group and cards/list surfaces remain white.
-        background = Color(0xFFF2F2F7),
-        backgroundEdge = Color(0xFFE5E5EA),
-        backgroundLight = Color(0xFFFFFFFF),
-        contentSurface = Color(0xFFFFFFFF),
-        contentSurfaceStrong = Color(0xFFEFEFF4),
+        // A quiet, cool canvas separates content groups without outlining
+        // every card. Keep large surfaces slightly below display white.
+        background = Color(0xFFECEEF3),
+        backgroundEdge = Color(0xFFE1E4EB),
+        backgroundLight = Color(0xFFF5F6FA),
+        contentSurface = Color(0xFFFAFBFD),
+        contentSurfaceStrong = Color(0xFFF4F5F9),
         glass = Color.White.copy(alpha = .54f),
         glassStrong = Color.White.copy(alpha = .70f),
         glassSelection = Color.Black.copy(alpha = .075f),
         text = Color(0xFF1C1C1E),
         textSecondary = Color(0xFF3C3C43),
         textMuted = Color(0xFF636366),
-        accent = Color(0xFF007AFF),
+        accent = Color(0xFF0066D6),
         accentSoft = Color(0xFF007AFF).copy(alpha = .10f),
         positive = Color(0xFF087B51),
-        warning = Color(0xFF9A6700),
-        error = Color(0xFFFF3B30),
-        divider = Color(0xFF3C3C43).copy(alpha = .24f),
-        outline = Color(0xFF3C3C43).copy(alpha = .26f),
+        warning = Color(0xFF906000),
+        error = Color(0xFFC53228),
+        divider = Color(0xFF3C3C43).copy(alpha = .16f),
+        outline = Color(0xFF3C3C43).copy(alpha = .14f),
         scrim = Color.Black.copy(alpha = .34f),
     )
 }

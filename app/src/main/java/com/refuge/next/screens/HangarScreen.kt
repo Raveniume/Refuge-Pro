@@ -1561,6 +1561,12 @@ private fun HangarDetailContent(
         DetailDivider(palette)
         DetailValueSummary(palette, detail)
         DetailDivider(palette)
+        DetailMetadataRow(palette, "入库日期", detail.date)
+        if (detail.insurance.isNotBlank() && detail.insurance != "—") {
+            DetailMetadataRow(palette, "保险", detail.insurance)
+        }
+        if (detail.sourceId > 0) DetailMetadataRow(palette, "机库编号", detail.sourceId.toString())
+        DetailDivider(palette)
         if (detail.isUpgrade) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 RefugeRemoteImage(model = detail.imageUrl, fallback = painterResource(detail.imageRes),

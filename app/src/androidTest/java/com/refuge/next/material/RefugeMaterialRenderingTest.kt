@@ -31,6 +31,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kyant.backdrop.backdrops.layerBackdrop
 import com.refuge.next.R
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.reference.OfficialLiquidButtonPort
@@ -138,40 +139,33 @@ class RefugeMaterialRenderingTest {
         save("white-button-shadow")
     }
 
-    @Test fun modalGlassSamplesThePageAcrossDialogWindows() {
+    @Test fun modalGlassSamplesThePageInsideTheActivity() {
         val artColor = mutableStateOf(Color(0xFFDD493B))
         val showSheet = mutableStateOf(true)
         val dark = mutableStateOf(false)
         compose.setContent {
             val palette = if (dark.value) RefugeColors.dark else RefugeColors.light
-            RefugeScene(palette) { canvas ->
-                PageGlassScope(
-                    backdrop = canvas,
-                    content = {
-                        Box(Modifier.fillMaxSize().background(artColor.value))
-                        if (showSheet.value) {
-                            RefugeLiquidSheet(
-                                canvas, palette, "", onDismiss = {},
-                                modifier = Modifier.testTag("sheet"), sheetHeight = 280.dp,
-                                action = { page ->
-                                    RefugeLiquidGlass(page, palette, Modifier.fillMaxWidth().height(56.dp)) {
-                                        Text("Action", color = palette.text)
-                                    }
-                                },
-                            ) { Box(Modifier.fillMaxWidth().height(80.dp)) }
-                        } else {
-                            RefugeDialog(canvas, palette, "M80", "Detail", "Done", {}, {})
-                        }
-                    },
-                    overlay = {},
-                )
+            val page = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
+            RefugeScene(palette) {
+                Box(Modifier.fillMaxSize().layerBackdrop(page).background(artColor.value))
+                if (showSheet.value) {
+                    RefugeLiquidSheet(page, palette, "", onDismiss = {},
+                        modifier = Modifier.testTag("sheet"), sheetHeight = 280.dp,
+                        action = { local ->
+                            RefugeLiquidGlass(local, palette, Modifier.fillMaxWidth().height(56.dp)) {
+                                Text("Action", color = palette.text)
+                            }
+                        }) { Box(Modifier.fillMaxWidth().height(80.dp)) }
+                } else {
+                    RefugeDialog(page, palette, "M80", "Detail", "Done", {}, {})
+                }
             }
         }
         for (isDark in listOf(false, true)) {
             for (sheet in listOf(true, false)) {
                 compose.runOnIdle { dark.value = isDark; showSheet.value = sheet; artColor.value = Color(0xFFDD493B) }
                 compose.waitForIdle()
-                val modal = if (sheet) compose.onNodeWithTag("sheet") else compose.onNode(isDialog())
+                val modal = if (sheet) compose.onNodeWithTag("sheet") else compose.onNodeWithTag("refuge-dialog")
                 val before = mean(modal.captureToImage())
                 compose.runOnIdle { artColor.value = Color(0xFF2872DC) }
                 compose.waitForIdle()
@@ -200,7 +194,7 @@ class RefugeMaterialRenderingTest {
 
     private fun save(name: String, rendered: ImageBitmap = compose.onNodeWithTag("scene").captureToImage()) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val file = File(context.getExternalFilesDir(null), "$name.png")
+        val file = evidenceFile("$name.png")
         val image = rendered.asAndroidBitmap()
         file.outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
     }

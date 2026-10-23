@@ -1,28 +1,30 @@
-# Final Functional QA Matrix
+# Current functional QA matrix
 
-This is the migration-phase evidence index. Visual refinements remain in
-`FINAL_VISUAL_POLISH_BACKLOG.md` and do not change the shared Liquid Glass
-baseline.
+2026-10-24. Active checkout: `D:\RefugeNext`. Shared device: Google Android Emulator `Shared_Pixel7_API35`, API 35, serial `emulator-5554`. The final Review APK was installed with `adb install -r`; the existing authenticated application data was preserved. Evidence is in ignored `qa/current`.
 
-| Area | Checks | Result |
+| Area | Result | Evidence |
 | --- | --- | --- |
-| Hangar | Main, Buyback, Upgrade, Detail, Logs, Gift/Reclaim safe boundary | PASS |
-| Store | Categories, Search, Filter, Sort, Detail, Cart, Upgrade selector | PASS |
-| Terminal | All nine categories, Search, Filter, Detail, Back | PASS |
-| Profile | Avatar/status, panels, utility groups, Settings entry | PASS |
-| Tools | Read-only utilities, social detail, external RSI links | PASS |
-| Settings | Theme persistence, sync/local toggles, cache diagnostics | PASS |
-| CCU | Seed, Target, Owned editor, local calculation, chain detail | PASS |
-| Global | Dialog, Sheet, Alert, Loading, Error/Retry, Empty, Dark, Light | PASS |
-| Navigation | Root -> subpage -> detail/sheet -> back for every production route | PASS |
+| Unit tests | 95 passed, 0 failures, 0 errors | `app/build/test-results/testDebugUnitTest` and `qa/current/delivery-build.txt` |
+| Build and lint | Debug, AndroidTest and Review build passed; lint has 118 warnings and 2 hints, no errors | `qa/current/delivery-build.txt` |
+| Real authenticated session | Passed with the logged-in account and 109-item hangar still present after `adb install -r` | `qa/current/delivery-final-installed.png`, `qa/current/delivery-final-window.xml` |
+| Tasks | Live task catalog, search, filters, language data, detail view, and detail/back navigation passed. The reward item and SCM crafting recipe services have no common stable identifier; direct item-name search can return no recipe, so this is not counted as a verified reward-to-recipe link. | `qa/current/mission-detail-native-light.png`, `qa/current/latest-knowledge-instrumentation-2.txt` |
+| Blueprints | Live blueprint list, grouped materials, quality sections, and return navigation passed in both themes. | `qa/current/blueprints-native-dark.png`, `qa/current/blueprint-materials-native-dark.png`, `qa/current/latest-blueprint-instrumentation.txt` |
+| Outfitting | Independent native page, real ship data, four draft slots, dashboard metrics, component selectors and safe local shield/power interactions passed | `qa/current/loadout-independent-light.png`, `qa/current/loadout-independent-dark.png`, `qa/current/dashboard-light-damage.png`, `qa/current/dashboard-dark-defense.png`, `qa/current/dashboard-dark-flight.png` |
+| Root navigation and “我的” | Existing authenticated captures show Hangar, Store, Terminal and Profile in light and dark themes, with opaque captured backdrop and correct frosted navigation. The latest Compose drag harness hit Android's targeted-injection restriction; the equivalent physical device swipe via ADB from Profile to Terminal succeeded and selected Terminal. | `qa/current/live-root-{light,dark}-{hangar,store,terminal,profile}.png`, `qa/current/live-root-{light,dark}-drag-release.png`, `qa/current/live-root-adb-swipe-profile-terminal.png`, `qa/current/latest-root-final.txt` |
+| Liquid controls | Slider and mode-selector press, drag, release and accessibility progress passed in both themes | `qa/current/slider-*.png`, `qa/current/modeSelector*.png` |
+| Large text | Mission list was checked at 150% system font scale without clipped chips or overlapping content; font scale restored to 1.0 afterward | `qa/current/delivery-missions-large-text.png` |
+| Device instrumentation | Full suite passed: 40 tests, 0 failures; one optional M80 fixture smoke test was skipped by its assumption because the real hangar has no M80 fixture. Login, root navigation, store, terminal, blueprint, liquid controls, rendering, performance sampling, and native outfitting ran on the shared device. | `qa/current/instrumentation-final.txt`, `qa/current/outfitter-targeted.txt`, `qa/current/qa/sept13-nativeOutfitterLoadsPowerAndSettingsWithoutWebView.png` |
 
-## Safety confirmations
+The regression run did not execute ship reclaiming, melting, purchases, gifts, upgrades, or other account-mutating actions. The local shield and power checks only changed the draft shown in the editor.
 
-- Real Gift executed: **NO**
-- Real Reclaim executed: **NO**
-- Real Upgrade purchase executed: **NO**
-- Real RSI purchase executed: **NO**
-- AI functionality: **REMOVED BY DESIGN**
-- RefugeNext Premium/VIP/paywall: **REMOVED BY DESIGN**
-- Remote CCU planner dependency: **NONE**
-- Production preview/mock repositories remaining: **NONE**
+## Remaining Erkul parity
+
+The native editor follows the supplied Erkul dashboard structure and uses live ship/component data. The verified Avenger Stalker fixture renders burst DPS 2,360 and sustained DPS 1,459, matching the Erkul reference. Full projectile and penetration simulation, shopping-location inventory, crafting-quality application to the ship build, specialist flight tools, and power-dependent flight dynamics remain outside this verified scope; no blanket 60 fps or complete Erkul parity claim is made.
+
+## Delivery state
+
+The release candidate (`0.3.11`, versionCode 23) was installed on the shared emulator with `adb install -r`; the user's app data and login were preserved:
+
+`app/build/outputs/apk/debug/app-debug.apk`
+
+The Review APK and release workflow inputs are ready. The shared AVD remains `Shared_Pixel7_API35`; no additional emulator or checkout was created. No account-mutating action was used during verification.

@@ -311,6 +311,7 @@ fun TerminalScreen(
     var taggedOnly by rememberSaveable { mutableStateOf(false) }
     var selectedItem by remember { mutableStateOf<TerminalItem?>(null) }
     var showLoadout by rememberSaveable { mutableStateOf(false) }
+    var knowledgeRoute by rememberSaveable { mutableStateOf<String?>(null) }
     var loadoutShipId by rememberSaveable { mutableStateOf<String?>(null) }
     fun normalizedIdentity(value: String?): String = value.orEmpty()
         .trim()
@@ -339,8 +340,8 @@ fun TerminalScreen(
     var loadAttempt by remember { mutableIntStateOf(0) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
-    LaunchedEffect(selectedItem != null, showLoadout, loadoutPicker != null, showFilter) {
-        onOverlayVisibilityChanged(selectedItem == null && !showLoadout && loadoutPicker == null && !showFilter)
+    LaunchedEffect(selectedItem != null, showLoadout, loadoutPicker != null, showFilter, knowledgeRoute) {
+        onOverlayVisibilityChanged(selectedItem == null && !showLoadout && loadoutPicker == null && !showFilter && knowledgeRoute == null)
     }
     val listState = com.refuge.next.navigation.rememberRootListState(2)
     val refreshCallback = remember { { loadAttempt++; Unit } }
@@ -392,6 +393,17 @@ fun TerminalScreen(
         if (sortDescending) filtered.sortedByDescending { it.name } else filtered.sortedBy { it.name }
     }
 
+    if (showLoadout) {
+        NativeLoadoutScreen(backdrop, palette, isDark,
+            initialShipId = loadoutShip?.className ?: loadoutShip?.id,
+            onDismiss = { showLoadout = false })
+        return
+    }
+    knowledgeRoute?.let { destination ->
+        TerminalKnowledgeNavigator(backdrop, palette, isDark, destination, query) { knowledgeRoute = null }
+        return
+    }
+
     PageGlassScope(
         backdrop = backdrop,
         content = {
@@ -421,20 +433,29 @@ fun TerminalScreen(
                             backdrop,
                             palette,
                             listOf(
-                                RefugeFloatingAction(RefugeIcons.loadout, "改船", {
-                                    // Use the first currently visible vehicle in
-                                    // the terminal list. The repository order is
-                                    // a source order and can begin with another
-                                    // hull than the row the user is looking at.
-                                    visible.firstOrNull { it.category == TerminalCategory.VEHICLES }
-                                        ?.let { loadoutShipId = it.id }
-                                    showLoadout = true
-                                }),
                                 RefugeFloatingAction(RefugeIcons.search, "搜索", { showSearch = !showSearch }),
                             ),
                         )
                     },
                 )
+            }
+            item {
+                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("改船" to "loadout", "制造蓝图" to "blueprints", "任务数据库" to "missions").forEach { (label, destination) ->
+                        RefugeLightweightGlassSurface(palette, Modifier.weight(1f), onClick = {
+                            if (destination == "loadout") {
+                                visible.firstOrNull { it.category == TerminalCategory.VEHICLES }?.let { loadoutShipId = it.id }
+                                showLoadout = true
+                            } else knowledgeRoute = destination
+                        }, contentDescription = label, padding = PaddingValues(horizontal = 8.dp, vertical = 16.dp)) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(if (destination == "loadout") RefugeIcons.loadout else if (destination == "blueprints") RefugeIcons.tools else RefugeIcons.terminal,
+                                    null, tint = palette.accent, modifier = Modifier.size(24.dp))
+                                Text(label, style = RefugeTypography.caption(palette))
+                            }
+                        }
+                    }
+                }
             }
             item {
                 // Draw above rows while the expand animation is running.
@@ -529,34 +550,6 @@ fun TerminalScreen(
     )
 
     selectedItem?.let { TerminalDetailSheet(backdrop, palette, it) { selectedItem = null } }
-    if (showLoadout) {
-        NativeLoadoutScreen(
-            backdrop = backdrop,
-            palette = palette,
-            isDark = isDark,
-            initialShipId = loadoutShip?.className ?: loadoutShip?.id,
-            onDismiss = { showLoadout = false },
-        )
-        /* Legacy terminal loadout remains compiled for migration previews. */
-        /*
-        TerminalLoadoutSheet(
-            repository = repository,
-            backdrop = backdrop,
-            palette = palette,
-            isDark = isDark,
-            items = items,
-            ship = loadoutShip,
-            overrides = loadouts[loadoutShipId].orEmpty(),
-            onShipSelected = { loadoutShipId = it.id },
-            onOverridesChanged = { updated ->
-                loadoutShipId?.let { id -> loadouts = HashMap(loadouts).apply { put(id, HashMap(updated)) } }
-            },
-            picker = loadoutPicker,
-            onOpenPicker = { loadoutPicker = it },
-            onClosePicker = { loadoutPicker = null },
-            onDismiss = { showLoadout = false },
-        )*/
-    }
     if (showFilter) FacetFilterSheet(backdrop, palette, "终端筛选",
         terminalFacetKeys(category).associateWith { key -> items.filter { it.category == category }.mapNotNull { it.facetValue(key) }.distinct().sorted() },
         terminalFilters, { terminalFilters = HashMap(it) }, { showFilter = false })
@@ -1586,8 +1579,8 @@ fun SettingsScreen(
 @Composable
 private fun SettingsGroup(palette: RefugePalette, title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(RefugeSpacing.xs)) {
-        Text(title, style = RefugeTypography.headline(palette))
-        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)) { Column { content() } }
+        Text(title, Modifier.padding(start = 16.dp), style = RefugeTypography.secondary(palette))
+        RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) { Column { content() } }
     }
 }
 
@@ -2551,6 +2544,13 @@ TerminalRemoteImage(
                 TerminalSpecificationCard(palette, section.title, section.rows)
             }
 
+            item.readableTerminalDescription().takeIf(String::isNotBlank)?.let { description ->
+                TerminalDetailCard(palette, "介绍") {
+                    Text(description, style = RefugeTypography.detailBody(palette),
+                        modifier = Modifier.padding(16.dp))
+                }
+            }
+
             // The action is optically floating over the final content row;
             // leave only a transparent scroll tail for its hit area.
             Spacer(Modifier.height(64.dp))
@@ -2872,5 +2872,5 @@ private fun TerminalFilterSheet(
 
 @Composable
 private fun DividerLine(palette: RefugePalette, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxWidth().height(1.dp).background(palette.divider))
+    Box(modifier.fillMaxWidth().height(.5.dp).background(palette.divider))
 }
