@@ -55,6 +55,9 @@ class RefugeRootSessionTest {
         save("root-theme-light")
         compose.onNodeWithContentDescription("深色主题").performClick()
         compose.onNodeWithText("已开启").assertIsDisplayed()
+        // Settings intentionally hides the root navbar. Leave through the
+        // page back affordance before selecting the hangar tab.
+        tapVisible("返回")
         tapVisible("机库", last = true)
         save("root-theme-dark-hangar")
         compose.activityRule.scenario.recreate()
@@ -69,6 +72,7 @@ class RefugeRootSessionTest {
         compose.waitUntil(10000) { compose.onAllNodesWithText("图片缓存已清理").fetchSemanticsNodes().isNotEmpty() }
         save("root-cache-cleared")
         assertTrue(RsiAuthDataSource(compose.activity).session() != null)
+        tapVisible("返回")
         tapVisible("机库", last = true)
         save("root-light-hangar-final")
     }

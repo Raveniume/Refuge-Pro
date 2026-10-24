@@ -24,3 +24,7 @@
 ## 禁止的验证
 
 - 溶解船、回收、购买、赠送、升级以及任何会提交账户变更的按钮
+
+## Instrumentation note
+
+The first full run reached 39/40 completed tests with one optional test skipped and one settings test timing out because it still expected the hidden bottom navbar to navigate away from Settings. That test now exits through the visible Settings back affordance; its targeted rerun completed without failure (the shared session was unavailable and the optional test was skipped).
