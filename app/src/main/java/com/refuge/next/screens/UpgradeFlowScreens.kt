@@ -72,6 +72,7 @@ import com.refuge.next.material.RefugeFloatingAction
 import com.refuge.next.material.RefugeGlassControl
 import com.refuge.next.material.RefugeHeaderActionBar
 import com.refuge.next.material.RefugeCircularHeaderButton
+import com.refuge.next.material.RefugeInlineBackButton
 import com.refuge.next.material.RefugeIcons
 import com.refuge.next.material.RefugeLiquidGlass
 import com.refuge.next.material.RefugeLiquidSheet
@@ -628,13 +629,7 @@ fun HangarOwnedCcuApplyScreen(
 
 @Composable
 private fun HeaderBack(backdrop: LayerBackdrop, palette: RefugePalette, onClick: () -> Unit) {
-    RefugeCircularHeaderButton(
-        backdrop = backdrop,
-        palette = palette,
-        icon = RefugeIcons.back,
-        contentDescription = "返回",
-        onClick = onClick,
-    )
+    RefugeInlineBackButton(palette = palette, onClick = onClick)
 }
 
 @Composable

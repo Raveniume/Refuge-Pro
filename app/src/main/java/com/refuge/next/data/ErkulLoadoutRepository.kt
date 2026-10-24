@@ -92,16 +92,11 @@ internal class ErkulLoadoutRepository(private val context: Context) {
 
     suspend fun catalog(branch: String, refresh: Boolean = false): ErkulCatalog = withContext(Dispatchers.IO) {
         lock.withLock {
-            if (!refresh) cache[branch]?.let { return@withLock it }
-            // A normal read is cache-first.  Only an explicit/manual refresh
-            // reaches the network before returning, so a cold screen can use
-            // the downloaded dataset without waiting for the CDN.
-            var offline = !refresh && File(dir, "$branch/catalog.bin").isFile
-            val local = if (!refresh) runCatching {
-                val file = File(dir, "$branch/catalog.bin")
-                if (file.isFile) JSONObject(file.readText()) else null
-            }.getOrNull() else null
-            val manifest = local ?: try { JSONObject(read(branch, "catalog.bin", refresh = true)) }
+            // The manifest is small, so page entry checks its live version.
+            // Full index/family payloads are only downloaded when that version
+            // differs from the persisted snapshot.
+            var offline = false
+            val manifest = try { JSONObject(read(branch, "catalog.bin", refresh = true)) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
                 offline = true

@@ -438,9 +438,7 @@ private fun RefugeAppContent() {
                           // routes and detail overlays are presented in place
                           // so the shared bottom navigation never moves with
                           // the page transition.
-                          animate = { from, to ->
-                              from in productionRootRoutes && to in productionRootRoutes
-                          },
+                           animate = { _, _ -> true },
                           modifier = Modifier
                               .fillMaxSize()
                               // Keep the route above the fixed bar. Root page
@@ -499,7 +497,7 @@ private fun RefugeAppContent() {
                       // layer. An active sheet raises the route to z=3 while
                       // the bar drops to z=1, so the sheet covers it without
                       // changing the backdrop capture topology.
-                      if (selectedTab != 8) {
+                       if (selectedTab in productionRootRoutes) {
                           RootBottomNav(
                               backdrop = rootNavigationBackdrop,
                               isDark = isDark,

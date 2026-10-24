@@ -57,7 +57,7 @@ internal fun KnowledgePage(backdrop: LayerBackdrop, palette: RefugePalette, titl
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(palette.background).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.back, "返回", onBack)
+            RefugeInlineBackButton(palette, onBack)
             Text(title, style = RefugeTypography.title(palette), modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
             action()
         }
@@ -335,24 +335,46 @@ private fun BlueprintMaterialCard(backdrop: LayerBackdrop, palette: RefugePalett
     val option = options.getOrNull(choice) ?: return
     val minimum = option.optInt("minQuality").coerceIn(0, 1000)
     val effectiveQuality = quality.coerceIn(minimum, 1000)
-    KnowledgeCard(palette, slot.optString("slotDisplayNameCn").ifBlank { slot.optString("slotDisplayName") }, "需要 ${slot.optInt("requiredCount", 1)} 种材料") {
-        RefugeInfoGroup(palette, "材料与用量") {
-        if (options.size > 1) KnowledgeFilter(backdrop, palette,
-            options.mapIndexed { index, value -> "$index" to value.optString("materialNameCn").ifBlank { value.optString("materialName") } },
-            "$choice", { choice = it.toInt() }, Modifier.fillMaxWidth())
-        RefugeInfoRows(palette, listOf(
-            "材料" to option.optString("materialNameCn").ifBlank { option.optString("materialName") },
-            "用量" to (option.number("standardCargoUnits")?.let { "$it SCU" } ?: "${option.optInt("quantity", 1)} 个")))
-        }
-        RefugeInfoGroup(palette, "品质调整") {
-        RefugeInfoRows(palette, listOf("当前品质" to "$effectiveQuality", "最低要求" to "$minimum"))
-        if (minimum < 1000) RefugeLiquidSlider({ effectiveQuality.toFloat() }, { quality = it.toInt() },
-            valueRange = minimum.toFloat()..1000f, visibilityThreshold = 1f,
-            backdrop = backdrop, palette = palette, label = "材料品质")
-        }
-        val modifiers = blueprintModifiers(option, effectiveQuality)
-        if (modifiers.isNotEmpty()) RefugeInfoGroup(palette, "属性变化") {
-            RefugeInfoRows(palette, modifiers.map { (name, value) -> name to String.format(Locale.US, "%+.2f%%", value) })
+    val slotName = slot.optString("slotDisplayNameCn").ifBlank { slot.optString("slotDisplayName") }
+    val materialName = option.optString("materialNameCn").ifBlank { option.optString("materialName") }
+    val amount = option.number("standardCargoUnits")?.let { String.format(Locale.US, "%.2f SCU", it) }
+        ?: "${option.optInt("quantity", 1)} 个"
+    RefugeLightweightGlassSurface(
+        palette,
+        modifier = Modifier.fillMaxWidth().background(palette.accent.copy(alpha = .10f), refugeContinuousShape(12.dp)),
+        padding = PaddingValues(14.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(slotName, style = RefugeTypography.headline(palette), modifier = Modifier.weight(1f))
+                if (options.size > 1) {
+                    KnowledgeFilter(backdrop, palette,
+                        options.mapIndexed { index, value -> "$index" to value.optString("materialNameCn").ifBlank { value.optString("materialName") } },
+                        "$choice", { choice = it.toInt() }, Modifier.widthIn(min = 110.dp, max = 180.dp))
+                }
+            }
+            Row(Modifier.fillMaxWidth().background(palette.accent.copy(alpha = .16f), refugeContinuousShape(8.dp)).padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(materialName, style = RefugeTypography.body(palette), modifier = Modifier.weight(1f))
+                Text("|", color = palette.textMuted)
+                Spacer(Modifier.width(8.dp))
+                Text(amount, style = RefugeTypography.detailValue(palette).copy(color = palette.accent))
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("品质 $effectiveQuality", style = RefugeTypography.caption(palette), modifier = Modifier.weight(1f))
+                Text("最低 $minimum", style = RefugeTypography.caption(palette))
+            }
+            if (minimum < 1000) RefugeLiquidSlider({ effectiveQuality.toFloat() }, { quality = it.toInt() },
+                valueRange = minimum.toFloat()..1000f, visibilityThreshold = 1f,
+                backdrop = backdrop, palette = palette, label = "材料品质")
+            val modifiers = blueprintModifiers(option, effectiveQuality)
+            if (modifiers.isNotEmpty()) {
+                Text("属性变化", style = RefugeTypography.caption(palette))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    modifiers.forEach { (name, value) ->
+                        Text("$name ${String.format(Locale.US, "%+.2f%%", value)}", style = RefugeTypography.caption(palette).copy(color = if (value >= 0) palette.accent else palette.error), modifier = Modifier.weight(1f))
+                    }
+                }
+            }
         }
     }
 }

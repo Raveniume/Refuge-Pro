@@ -31,18 +31,41 @@ internal class TerminalKnowledgeRepository(context: Context) {
         return value
     }
 
+    private fun readFresh(url: String): String = client.newCall(Request.Builder().url(url).build()).execute().use {
+        check(it.isSuccessful) { "资料版本服务暂时不可用（${it.code}）" }
+        it.body?.string() ?: error("资料版本响应为空")
+    }
+
     suspend fun missions(refresh: Boolean = false): MissionCatalog = withContext(Dispatchers.IO) {
-        val versions = JSONArray(read("https://scmdb.net/data/versions.json", "mission-versions.json", refresh))
+        // Version metadata is tiny and is checked on every page entry. The
+        // large mission payload stays cached when the website version is the
+        // same; a network failure falls back to the last known manifest.
+        val versions = JSONArray(runCatching {
+            readFresh("https://scmdb.net/data/versions.json")
+        }.getOrElse {
+            read("https://scmdb.net/data/versions.json", "mission-versions.json", refresh = false)
+        })
         val selected = versions.objects().firstOrNull { it.optString("version").contains("-live.", true) }
             ?: error("暂未找到 LIVE 任务资料")
         val version = selected.getString("version")
         val filename = selected.getString("file")
         require(Regex("[A-Za-z0-9_.-]+\\.json").matches(filename))
-        val source = JSONObject(read("https://scmdb.net/data/$filename", filename, refresh))
+        val sourceUrl = "https://scmdb.net/data/$filename"
+        val source = JSONObject(runCatching {
+            if (!refresh) {
+                val local = File(directory, filename)
+                if (local.isFile && JSONObject(local.readText()).optString("version").equals(version, true)) local.readText()
+                else read(sourceUrl, filename, refresh = true)
+            } else read(sourceUrl, filename, refresh = true)
+        }.getOrElse { read(sourceUrl, filename, refresh = false) })
         check(source.getString("version").equals(version, true)) { "任务资料版本不一致" }
         val language = runCatching {
-            JSONObject(read("https://raw.githubusercontent.com/Walkersifolia/SCMDB_zh_cn/main/lang-zh_CN-live.json",
-                "mission-zh.json", refresh))
+            val languageUrl = "https://raw.githubusercontent.com/Walkersifolia/SCMDB_zh_cn/main/lang-zh_CN-live.json"
+            JSONObject(if (!refresh) {
+                val local = File(directory, "mission-zh.json")
+                if (local.isFile && JSONObject(local.readText()).optString("version").equals(version, true)) local.readText()
+                else read(languageUrl, "mission-zh.json", refresh = true)
+            } else read(languageUrl, "mission-zh.json", refresh = true))
         }.getOrNull()?.takeIf { it.optString("version").equals(version, true) }
         MissionCatalog(version, source, language)
     }

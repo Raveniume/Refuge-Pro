@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.ColorFilter
@@ -140,10 +139,10 @@ internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop
                         // power toggle the same 44 dp target as every other
                         // native control. This makes tapping a group reliable
                         // on a phone without changing the Erkul geometry.
-                        Box(
-                            Modifier
-                                .size(44.dp)
-                                .semantics {
+                            Box(
+                                Modifier
+                                    .size(44.dp)
+                                    .semantics {
                                     role = Role.Button
                                     contentDescription = if (allDisabled) "启用$group" else "停用$group"
                                     if (members.isEmpty()) disabled()
@@ -156,25 +155,26 @@ internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Box(
-                                Modifier
-                                    .size(34.dp)
-                                    .then(
-                                        if (allDisabled) Modifier
-                                        else Modifier
-                                            .background(palette.accent, CircleShape),
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Image(
-                                    painter = painterResource(glyphs[index]),
-                                    contentDescription = null,
-                                    colorFilter = ColorFilter.tint(if (allDisabled) palette.textMuted else Color.White),
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
+                            Image(
+                                painter = painterResource(glyphs[index]),
+                                contentDescription = null,
+                                colorFilter = ColorFilter.tint(if (allDisabled) palette.textMuted else palette.accent),
+                                modifier = Modifier.size(24.dp),
+                            )
                         }
                         Text(group, style = RefugeTypography.caption(palette))
+                    }
+                }
+            }
+            val componentConsumers = available.consumers.filter { it.item != null && it.item.optString("type") in setOf("Cooler", "PowerPlant") }
+            if (componentConsumers.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("核心组件", style = RefugeTypography.caption(palette))
+                    componentConsumers.forEach { consumer ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(consumer.item?.itemName().orEmpty(), style = RefugeTypography.body(palette), modifier = Modifier.weight(1f), maxLines = 1)
+                            Text("${power.supplied(consumer.path)} / ${consumer.maximum} pips", style = RefugeTypography.caption(palette).copy(color = palette.accent))
+                        }
                     }
                 }
             }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.unit.dp
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeSpacing
@@ -30,7 +31,7 @@ fun ProductionLoadingState(
 ) {
     RefugeLightweightGlassSurface(
         palette = palette,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp),
         padding = PaddingValues(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {

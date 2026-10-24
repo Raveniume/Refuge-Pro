@@ -66,12 +66,12 @@ android {
     // remains upgrade-compatible during phone testing.
     buildTypes {
         getByName("debug") {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("refugeRelease") else signingConfigs.getByName("debug")
         }
         create("review") {
             initWith(getByName("release"))
             // Local performance/visual review stays compatible with installed user data.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("refugeRelease") else signingConfigs.getByName("debug")
             isDebuggable = false
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))

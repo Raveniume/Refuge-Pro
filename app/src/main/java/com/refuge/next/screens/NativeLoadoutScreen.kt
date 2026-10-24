@@ -170,7 +170,7 @@ internal fun NativeLoadoutScreen(
                 // Reserve its horizontal footprint so the title never paints
                 // underneath the control while the sheet enters or settles.
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.back, "返回", onDismiss)
+                    RefugeInlineBackButton(palette, onDismiss)
                     Spacer(Modifier.width(12.dp))
                     Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
                     Box {
@@ -424,7 +424,7 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
     ) {
         Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.back, "返回", onDismiss)
+                RefugeInlineBackButton(palette, onDismiss)
                 Spacer(Modifier.width(12.dp))
                 Text(if (ships) "选择舰船" else "更换组件", style = RefugeTypography.title(palette))
             }

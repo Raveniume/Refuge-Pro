@@ -73,6 +73,7 @@ import com.kyant.shapes.RoundedCornerStyle
 import com.refuge.next.design.RefugePalette
 import com.refuge.next.design.RefugeRadius
 import com.refuge.next.design.RefugeSpacing
+import com.refuge.next.design.RefugeTypography
 import com.refuge.next.design.refugeContinuousShape
 import com.refuge.next.reference.OfficialLiquidBottomTabsPort
 import com.refuge.next.reference.OfficialLiquidButtonPort
@@ -177,6 +178,26 @@ fun RefugeCircularHeaderButton(
             androidx.compose.material.Icon(icon, contentDescription, tint = palette.text, modifier = Modifier.size(20.dp))
         },
     )
+}
+
+/** Flat page back affordance for independent pages and details. */
+@Composable
+fun RefugeInlineBackButton(
+    palette: RefugePalette,
+    onClick: () -> Unit,
+    label: String = "返回",
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        androidx.compose.material.Icon(RefugeIcons.back, contentDescription = label, tint = palette.accent, modifier = Modifier.size(20.dp))
+        Text(label, style = RefugeTypography.body(palette).copy(color = palette.accent))
+    }
 }
 
 private fun paletteDisabledTint(iconTint: Color): Color =

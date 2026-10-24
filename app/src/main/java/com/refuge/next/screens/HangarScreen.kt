@@ -125,6 +125,7 @@ import com.refuge.next.material.RefugeFloatingActionGroup
 import com.refuge.next.material.RefugeHeaderActionBar
 import com.refuge.next.material.RefugeHeaderAvatar
 import com.refuge.next.material.RefugeCircularHeaderButton
+import com.refuge.next.material.RefugeInlineBackButton
 import com.refuge.next.material.RefugeLiquidIconButton
 import com.refuge.next.material.RefugeAnimatedSearch
 import com.refuge.next.material.RefugeLiquidGlassField
@@ -1418,12 +1419,10 @@ private fun HangarDetailSheet(
         actionBottomPadding = 36.dp,
         actionOverContent = true,
         contentUnderHandle = true,
-        leadingAction = { modalBackdrop ->
-            RefugeCircularHeaderButton(
-                backdrop = modalBackdrop,
+        leadingAction = {
+            RefugeInlineBackButton(
                 palette = palette,
-                icon = RefugeIcons.back,
-                contentDescription = "返回详情",
+                label = "返回",
                 onClick = if (page == HangarDetailPage.DETAIL) onDismiss else { { page = HangarDetailPage.DETAIL } },
             )
         },

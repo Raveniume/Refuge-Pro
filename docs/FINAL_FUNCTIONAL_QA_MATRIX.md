@@ -21,6 +21,16 @@ The regression run did not execute ship reclaiming, melting, purchases, gifts, u
 
 The native editor follows the supplied Erkul dashboard structure and uses live ship/component data. The verified Avenger Stalker fixture renders burst DPS 2,360 and sustained DPS 1,459, matching the Erkul reference. Full projectile and penetration simulation, shopping-location inventory, crafting-quality application to the ship build, specialist flight tools, and power-dependent flight dynamics remain outside this verified scope; no blanket 60 fps or complete Erkul parity claim is made.
 
+## 2026-10-25 repair pass
+
+- `adb install -r` of the debug APK succeeded over the existing `com.refuge.next.compose` installation; the authenticated 109-item hangar remained available.
+- `testDebugUnitTest`, `lintDebug`, `assembleDebug`, and `assembleReview` passed after the repair pass.
+- Detail navigation now uses a flat inline back affordance instead of a circular top-left button. The hangar detail sheet was included in this change.
+- Settings and independent routes no longer draw the root bottom navigation. Route transitions are enabled for root, detail, settings, and outfitting navigation.
+- Power groups no longer render a circular icon background; real Cooler and PowerPlant consumers are listed separately below the pip chart.
+- Blueprint material rows are grouped as a blue rounded material/SCU row followed by quality and modifier values. Loading surfaces are width constrained.
+- SCMDB and Erkul now check lightweight live version metadata before reusing persisted large payloads.
+
 ## Delivery state
 
 The release candidate (`0.3.11`, versionCode 23) was installed on the shared emulator with `adb install -r`; the user's app data and login were preserved:
