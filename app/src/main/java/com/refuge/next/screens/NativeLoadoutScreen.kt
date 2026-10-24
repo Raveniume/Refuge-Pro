@@ -133,35 +133,40 @@ internal fun NativeLoadoutScreen(
     val currentCatalog = catalog
     val editorListState = rememberLazyListState()
     BackHandler { if (picker != null) picker = null else onDismiss() }
-    blueprintQuery?.let { query ->
-        TerminalKnowledgeNavigator(backdrop, palette, isDark, "blueprints", query) { blueprintQuery = null }
-        return
-    }
-    componentInfo?.let { component ->
-        ErkulComponentDetail(backdrop, palette, component, { blueprintQuery = it }) { componentInfo = null }
-        return
-    }
     val pickerMode = picker
-    if (pickerMode != null && currentCatalog != null) {
-        val activeSlot = slots.firstOrNull { it.path == pickerMode }
-        NativeLoadoutPicker(backdrop, palette, isDark, currentCatalog, activeSlot, pickerMode == "ship",
-            onDismiss = { picker = null },
-            onPick = { selected ->
-                if (pickerMode == "ship") {
-                    selected?.optString("className")?.takeIf { it.isNotBlank() }?.let { shipId = it }
-                } else if (activeSlot != null) {
-                    val overrides = JSONObject(draft.obj("overrides").toString())
-                    overrides.keys().asSequence().filter { it.startsWith(activeSlot.path + "/") }
-                        .toList().forEach { overrides.remove(it) }
-                    overrides.put(activeSlot.path, selected?.optString("className") ?: "")
-                    update(JSONObject(draft.toString()).put("overrides", overrides))
-                }
-                picker = null
-            })
-        // This is a separate page. Do not keep the hidden editor drawing its
-        // glass or exposing a second Back action to accessibility services.
-        return
+    val page = when {
+        blueprintQuery != null -> "blueprint"
+        componentInfo != null -> "component"
+        pickerMode != null -> "picker"
+        else -> "editor"
     }
+    // These are full-page tools. Swap the route in place so entering and
+    // returning do not animate, matching the native settings/tool behavior.
+    when (page) {
+            "blueprint" -> blueprintQuery?.let { query ->
+                TerminalKnowledgeNavigator(backdrop, palette, isDark, "blueprints", query) { blueprintQuery = null }
+            }
+            "component" -> componentInfo?.let { component ->
+                ErkulComponentDetail(backdrop, palette, component, { blueprintQuery = it }) { componentInfo = null }
+            }
+            "picker" -> if (pickerMode != null && currentCatalog != null) {
+                val activeSlot = slots.firstOrNull { it.path == pickerMode }
+                NativeLoadoutPicker(backdrop, palette, isDark, currentCatalog, activeSlot, pickerMode == "ship",
+                    onDismiss = { picker = null },
+                    onPick = { selected ->
+                        if (pickerMode == "ship") {
+                            selected?.optString("className")?.takeIf { it.isNotBlank() }?.let { shipId = it }
+                        } else if (activeSlot != null) {
+                            val overrides = JSONObject(draft.obj("overrides").toString())
+                            overrides.keys().asSequence().filter { it.startsWith(activeSlot.path + "/") }
+                                .toList().forEach { overrides.remove(it) }
+                            overrides.put(activeSlot.path, selected?.optString("className") ?: "")
+                            update(JSONObject(draft.toString()).put("overrides", overrides))
+                        }
+                        picker = null
+                    })
+            }
+            else -> {
     val modalBackdrop = backdrop
     Box(Modifier.fillMaxSize().background(palette.background).statusBarsPadding().navigationBarsPadding()) {
             Box(Modifier.fillMaxSize().testTag("native-loadout")) {
@@ -170,8 +175,6 @@ internal fun NativeLoadoutScreen(
                 // Reserve its horizontal footprint so the title never paints
                 // underneath the control while the sheet enters or settles.
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RefugeInlineBackButton(palette, onDismiss)
-                    Spacer(Modifier.width(12.dp))
                     Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
                     Box {
                         RefugeHeaderActionBar(modalBackdrop, palette, listOf(
@@ -280,7 +283,9 @@ internal fun NativeLoadoutScreen(
                     Text(message, style = RefugeTypography.body(palette), modifier = Modifier.background(palette.contentSurface).padding(12.dp))
                 }
             }
+            }
     }
+}
 
 /** Compatibility entry retained for isolated rendering fixtures. */
 @Composable
@@ -424,8 +429,6 @@ private fun NativeLoadoutPicker(backdrop: com.kyant.backdrop.backdrops.LayerBack
     ) {
         Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                RefugeInlineBackButton(palette, onDismiss)
-                Spacer(Modifier.width(12.dp))
                 Text(if (ships) "选择舰船" else "更换组件", style = RefugeTypography.title(palette))
             }
         zone.ien.hig.CupertinoSearchTextField(value = query, onValueChange = { query = it },

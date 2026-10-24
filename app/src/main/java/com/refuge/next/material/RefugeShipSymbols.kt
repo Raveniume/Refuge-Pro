@@ -12,8 +12,10 @@ internal fun shipSymbol(name: String, data: String): ImageVector = ImageVector.B
 
 internal object ShipSymbols {
     val loadout = shipSymbol("ShipLoadout", "M12 3 L16 10 L21 15 L16 15 L15 20 L12 17 L9 20 L8 15 L3 15 L8 10 Z M12 7 L12 12 M18 3 L18 7 M16 5 L20 5")
-    val damage = shipSymbol("Damage", "M4 20 L9 15 M3 14 L13 4 L16 7 L6 17 Z M14 3 L21 10 M16 5 L19 8")
-    val weapons = shipSymbol("Weapons", "M4 19 L9 14 M3 14 L13 4 L16 7 L6 17 Z M9 20 L19 10 L21 12 L11 22 M15 3 L18 6")
+    // Erkul's armament mark is a compact three-slash glyph. The old crossed
+    // swords read as a game action icon and did not match the reference.
+    val damage = shipSymbol("Damage", "M3 8 L9 2 M3 15 L16 2 M8 22 L22 8")
+    val weapons = shipSymbol("Weapons", "M3 8 L9 2 M3 15 L16 2 M8 22 L22 8")
     val missile = shipSymbol("Missile", "M12 3 Q16 7 16 13 L12 21 L8 13 Q8 7 12 3 Z M8 13 L4 17 L8 18 M16 13 L20 17 L16 18 M12 8 L12 12")
     val bomb = shipSymbol("Bomb", "M12 4 L17 9 L16 16 L12 20 L8 16 L7 9 Z M10 4 L10 2 L14 2 L14 4 M9 10 L15 10 M10 14 L14 14")
     val engine = shipSymbol("Engine", "M4 5 L10 12 L4 19 M10 5 L16 12 L10 19 M16 5 L22 12 L16 19")

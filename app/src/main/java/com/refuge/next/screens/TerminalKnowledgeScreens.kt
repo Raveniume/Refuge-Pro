@@ -16,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -27,7 +28,6 @@ import com.refuge.next.design.*
 import com.refuge.next.material.*
 import com.refuge.next.reference.ReferenceSearchField
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -38,27 +38,30 @@ internal fun TerminalKnowledgeNavigator(backdrop: LayerBackdrop, palette: Refuge
     var stack by rememberSaveable { mutableStateOf(arrayListOf("$initial|${android.net.Uri.encode(initialQuery)}")) }
     val holder = rememberSaveableStateHolder()
     val route = stack.last()
-    val value = android.net.Uri.decode(route.substringAfter('|'))
     fun back() { if (stack.size == 1) onClose() else stack = ArrayList(stack.dropLast(1)) }
     fun push(type: String, value: String) { stack = ArrayList(stack + "$type|${android.net.Uri.encode(value)}") }
+    val activeValue = android.net.Uri.decode(route.substringAfter('|'))
+    // Details and database pages are swapped in place. Their only navigation
+    // affordance is the system back action (or the parent menu action).
     holder.SaveableStateProvider("${stack.size}:$route") {
-        if (route.startsWith("blueprints|")) BlueprintDatabaseScreen(backdrop, palette, isDark, value,
+        if (route.startsWith("blueprints|")) BlueprintDatabaseScreen(backdrop, palette, isDark, activeValue,
             onMission = { push("mission", it) }, onBack = ::back)
         else MissionDatabaseScreen(backdrop, palette, isDark,
-            initialQuery = if (route.startsWith("missions|")) value else "",
-            initialMission = if (route.startsWith("mission|")) value else null,
+            initialQuery = if (route.startsWith("missions|")) activeValue else "",
+            initialMission = if (route.startsWith("mission|")) activeValue else null,
             onBlueprint = { push("blueprints", it) }, onBack = ::back)
     }
 }
 
 @Composable
 internal fun KnowledgePage(backdrop: LayerBackdrop, palette: RefugePalette, title: String, onBack: () -> Unit,
+    showBack: Boolean = true,
     action: @Composable RowScope.() -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(palette.background).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            RefugeInlineBackButton(palette, onBack)
-            Text(title, style = RefugeTypography.title(palette), modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+            if (showBack) RefugeInlineBackButton(palette, onBack)
+            Text(title, style = RefugeTypography.title(palette), modifier = Modifier.weight(1f).padding(horizontal = if (showBack) 12.dp else 0.dp))
             action()
         }
         content()
@@ -108,10 +111,10 @@ internal fun MissionDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalet
     initialQuery: String = "", initialMission: String? = null, onBlueprint: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { TerminalKnowledgeRepository(context) }
-    var catalog by remember { mutableStateOf<MissionCatalog?>(null) }
+    var catalog by remember { mutableStateOf(repository.cachedMissionCatalog()) }
     var error by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(catalog == null) }
     var query by rememberSaveable(initialQuery) { mutableStateOf(initialQuery) }
     var selection by rememberSaveable(initialMission) { mutableStateOf(initialMission) }
     var system by rememberSaveable { mutableStateOf("") }
@@ -121,7 +124,11 @@ internal fun MissionDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalet
     val listState = rememberLazyListState()
     val detailState = key(selection) { rememberLazyListState() }
     LaunchedEffect(attempt) {
-        loading = true; error = null
+        error = null
+        repository.cachedMissionCatalog()?.let { cached ->
+            if (catalog == null) catalog = cached
+            loading = false
+        }
         try { catalog = repository.missions(attempt > 0) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: "任务载入失败" }
@@ -147,7 +154,7 @@ internal fun MissionDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalet
                 { chinese = !chinese }, visualHeight = 40.dp)
             Spacer(Modifier.width(8.dp))
             RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.refresh, "更新任务", { attempt++ })
-        }) {
+        }, showBack = selected == null) {
         // Do not measure a restored scroll state against a temporary loading
         // list. Its small item count would clamp the saved reading position.
         if (current == null) {
@@ -162,7 +169,6 @@ internal fun MissionDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalet
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text("SCMDB · ${current?.version.orEmpty()}" + if (current != null && current.language == null) " · 中文包不可用，显示原文" else "",
                 style = RefugeTypography.caption(palette)) }
-            if (loading) item { ProductionLoadingState(backdrop, palette, "正在读取任务") }
             error?.let { item { ProductionErrorState(backdrop, palette, it, { attempt++ }) } }
             if (destination != null && current != null && selected == null) item {
                 ProductionEmptyState(palette, "当前版本未找到这条任务，可返回任务列表搜索")
@@ -239,12 +245,12 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
     var category by rememberSaveable { mutableStateOf("") }
     var rewardOnly by rememberSaveable { mutableStateOf(false) }
     var page by remember { mutableIntStateOf(1) }
-    var rows by remember { mutableStateOf(emptyList<JSONObject>()) }
-    var total by remember { mutableIntStateOf(0) }
+    var rows by remember(initialQuery) { mutableStateOf(repository.cachedBlueprintPage(initialQuery, "", 1, false)?.rows.orEmpty()) }
+    var total by remember(initialQuery) { mutableIntStateOf(repository.cachedBlueprintPage(initialQuery, "", 1, false)?.total ?: 0) }
     var selection by rememberSaveable { mutableStateOf<Long?>(null) }
-    var detail by remember { mutableStateOf<JSONObject?>(null) }
+    var detail by remember { mutableStateOf(selection?.let(repository::cachedBlueprint)) }
     var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(rows.isEmpty() && detail == null) }
     var attempt by remember { mutableIntStateOf(0) }
     // The reading position belongs to a destination, not to the shared list
     // container. A newly opened detail starts at its title; Back restores the
@@ -252,11 +258,19 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
     val listState = rememberLazyListState()
     val detailState = key(selection) { rememberLazyListState() }
     LaunchedEffect(query, category, rewardOnly, page, selection, attempt) {
-        error = null; loading = true
+        error = null
+        if (selection == null) {
+            repository.cachedBlueprintPage(query, category, page, rewardOnly)?.let { cached ->
+                if (page == 1) rows = cached.rows else if (rows.isEmpty()) rows = cached.rows
+                total = cached.total
+                loading = false
+            }
+        } else {
+            repository.cachedBlueprint(selection!!)?.let { cached -> detail = cached; loading = false }
+        }
         try {
-            if (selection != null) { detail = null; detail = repository.blueprint(selection!!) }
+            if (selection != null) { detail = repository.blueprint(selection!!) }
             else {
-                delay(300)
                 val result = repository.blueprints(query, category, page, rewardOnly)
                 rows = if (page == 1) result.rows else (rows + result.rows).distinctBy { it.optLong("id") }
                 total = result.total
@@ -267,7 +281,7 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
     }
     val destination = selection
     KnowledgePage(backdrop, palette, if (destination == null) "制造蓝图" else "蓝图详情",
-        { if (selection != null) selection = null else onBack() }) {
+        { if (selection != null) selection = null else onBack() }, showBack = destination == null) {
         if ((destination != null && detail == null) || (destination == null && rows.isEmpty() && loading)) {
             if (loading) ProductionLoadingState(backdrop, palette, "正在读取蓝图")
             error?.let { ProductionErrorState(backdrop, palette, it, { attempt++ }) }
@@ -279,15 +293,15 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
             contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text("SCM · ${detail?.optString("dataVersion").orEmpty()}", style = RefugeTypography.caption(palette)) }
             if (destination == null) {
-                item { ReferenceSearchField(backdrop, isDark, query, { query = it; page = 1; rows = emptyList() }, RefugeIcons.search, Modifier.fillMaxWidth()) }
+                item { ReferenceSearchField(backdrop, isDark, query, { query = it; page = 1 }, RefugeIcons.search, Modifier.fillMaxWidth()) }
                 item { KnowledgeFilter(backdrop, palette, listOf("" to "全部分类", "FPSWeapons" to "武器", "FPSArmours" to "护甲", "Ammo" to "弹夹", "ShipWeapons" to "舰船武器", "Components" to "组件"), category,
-                    { category = it; page = 1; rows = emptyList() }, Modifier.fillMaxWidth()) }
+                    { category = it; page = 1 }, Modifier.fillMaxWidth()) }
                 item { Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("$total 个蓝图", style = RefugeTypography.caption(palette), modifier = Modifier.weight(1f))
                     Text("任务奖励", style = RefugeTypography.body(palette))
                     Spacer(Modifier.width(12.dp))
                     RefugeLiquidToggle(backdrop, palette, rewardOnly,
-                        { rewardOnly = !rewardOnly; page = 1; rows = emptyList() }, "只显示任务奖励蓝图")
+                        { rewardOnly = !rewardOnly; page = 1 }, "只显示任务奖励蓝图")
                 } }
                 items(rows, key = { it.optLong("id") }) { row ->
                     KnowledgeCard(palette, row.blueprintTitle(), "${blueprintCategoryLabel(row.optString("categoryName"))} · ${row.optInt("craftTimeSeconds")} 秒", { selection = row.optLong("id") })
@@ -320,7 +334,6 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
                     }
                 }
             }
-            if (loading) item { ProductionLoadingState(backdrop, palette, "正在读取蓝图") }
             error?.let { item { ProductionErrorState(backdrop, palette, it, { attempt++ }) } }
         }
         }
@@ -345,19 +358,17 @@ private fun BlueprintMaterialCard(backdrop: LayerBackdrop, palette: RefugePalett
         padding = PaddingValues(14.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(slotName, style = RefugeTypography.headline(palette), modifier = Modifier.weight(1f))
-                if (options.size > 1) {
-                    KnowledgeFilter(backdrop, palette,
-                        options.mapIndexed { index, value -> "$index" to value.optString("materialNameCn").ifBlank { value.optString("materialName") } },
-                        "$choice", { choice = it.toInt() }, Modifier.widthIn(min = 110.dp, max = 180.dp))
-                }
-            }
-            Row(Modifier.fillMaxWidth().background(palette.accent.copy(alpha = .16f), refugeContinuousShape(8.dp)).padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(materialName, style = RefugeTypography.body(palette), modifier = Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth().background(Color(0xFF1677FF).copy(alpha = .14f), refugeContinuousShape(8.dp)).padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(slotName, style = RefugeTypography.body(palette), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(materialName, style = RefugeTypography.body(palette), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("|", color = palette.textMuted)
                 Spacer(Modifier.width(8.dp))
                 Text(amount, style = RefugeTypography.detailValue(palette).copy(color = palette.accent))
+            }
+            if (options.size > 1) {
+                KnowledgeFilter(backdrop, palette,
+                    options.mapIndexed { index, value -> "$index" to value.optString("materialNameCn").ifBlank { value.optString("materialName") } },
+                    "$choice", { choice = it.toInt() }, Modifier.fillMaxWidth())
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("品质 $effectiveQuality", style = RefugeTypography.caption(palette), modifier = Modifier.weight(1f))

@@ -166,14 +166,40 @@ internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop
                     }
                 }
             }
-            val componentConsumers = available.consumers.filter { it.item != null && it.item.optString("type") in setOf("Cooler", "PowerPlant") }
-            if (componentConsumers.isNotEmpty()) {
+            // Component rows are sourced from every active installed component,
+            // not only from consumers that expose a Power flow. Some live
+            // Cooler records expose cooling/signature data without a direct
+            // Power consume flow; filtering through `consumers` silently hid
+            // those coolers and made a two-cooler ship look incomplete.
+            val componentSlots = active
+                .filter { it.item?.optString("type") in setOf("Cooler", "PowerPlant") }
+                .distinctBy { it.path }
+            val consumerByPath = available.consumers.associateBy { it.path }
+            if (componentSlots.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("核心组件", style = RefugeTypography.caption(palette))
-                    componentConsumers.forEach { consumer ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(consumer.item?.itemName().orEmpty(), style = RefugeTypography.body(palette), modifier = Modifier.weight(1f), maxLines = 1)
-                            Text("${power.supplied(consumer.path)} / ${consumer.maximum} pips", style = RefugeTypography.caption(palette).copy(color = palette.accent))
+                    componentSlots.forEach { slot ->
+                        val item = slot.item ?: return@forEach
+                        val consumer = consumerByPath[slot.path]
+                        Row(
+                            Modifier.fillMaxWidth().semantics {
+                                contentDescription = "${item.itemName()} 核心组件"
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Image(
+                                painter = painterResource(if (item.optString("type") == "Cooler") R.drawable.erkul_power_coolers else R.drawable.erkul_power_power_plant_output),
+                                contentDescription = null,
+                                colorFilter = ColorFilter.tint(palette.accent),
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(item.itemName(), style = RefugeTypography.body(palette), modifier = Modifier.weight(1f), maxLines = 1)
+                            if (consumer != null) {
+                                Text("${power.supplied(consumer.path)} / ${consumer.maximum} pips", style = RefugeTypography.caption(palette).copy(color = palette.accent))
+                            } else {
+                                Text("未列入电力流", style = RefugeTypography.caption(palette).copy(color = palette.textMuted))
+                            }
                         }
                     }
                 }

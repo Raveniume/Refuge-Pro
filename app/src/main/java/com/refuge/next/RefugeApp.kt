@@ -62,6 +62,7 @@ import com.refuge.next.data.RsiLiveCcuRepository
 import com.refuge.next.data.RsiLiveCcuPurchaseRepository
 import com.refuge.next.data.CcuPurchaseRepository
 import com.refuge.next.data.ProductionTranslationRepository
+import com.refuge.next.data.TerminalKnowledgeRepository
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.design.LocalRefugeTranslationEnabled
 import com.refuge.next.material.RefugeScene
@@ -246,6 +247,13 @@ private fun RefugeAppContent() {
         withContext(Dispatchers.IO) { runCatching { loadouts.preload("PTU") } }
         delay(900)
         withContext(Dispatchers.IO) { runCatching { terminalRepository.items() } }
+        // Warm the independent mission/blueprint snapshots so terminal pages
+        // can render local data immediately and revalidate quietly on entry.
+        val knowledge = TerminalKnowledgeRepository(context)
+        withContext(Dispatchers.IO) {
+            runCatching { knowledge.missions() }
+            runCatching { knowledge.blueprints("", "", 1, false) }
+        }
     }
     LaunchedEffect(authenticated) {
         if (authenticated && !startupReady) {
@@ -434,11 +442,10 @@ private fun RefugeAppContent() {
                       RefugeRouteTransition(
                           targetState = route,
                           order = ::productionRouteOrder,
-                          // Root destinations slide as pages. Secondary
-                          // routes and detail overlays are presented in place
-                          // so the shared bottom navigation never moves with
-                          // the page transition.
-                           animate = { _, _ -> true },
+                           // Route changes are intentionally immediate. Tool,
+                           // settings, and detail pages must not slide/fade
+                           // beneath the shared glass navigation surface.
+                            animate = { _, _ -> false },
                           modifier = Modifier
                               .fillMaxSize()
                               // Keep the route above the fixed bar. Root page

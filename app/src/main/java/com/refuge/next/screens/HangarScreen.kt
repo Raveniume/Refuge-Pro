@@ -1419,13 +1419,10 @@ private fun HangarDetailSheet(
         actionBottomPadding = 36.dp,
         actionOverContent = true,
         contentUnderHandle = true,
-        leadingAction = {
-            RefugeInlineBackButton(
-                palette = palette,
-                label = "返回",
-                onClick = if (page == HangarDetailPage.DETAIL) onDismiss else { { page = HangarDetailPage.DETAIL } },
-            )
-        },
+        // Detail sheets use the system back gesture and the sheet dismissal
+        // affordance. A second text-and-arrow control in the top-left made
+        // the detail page look like a nested navigation stack.
+        leadingAction = null,
         transparentActionArea = false,
         surfaceRefraction = false,
         action = if (page != HangarDetailPage.DETAIL) null else { modalBackdrop ->

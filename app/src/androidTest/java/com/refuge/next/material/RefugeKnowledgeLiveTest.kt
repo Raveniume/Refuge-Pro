@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.platform.app.InstrumentationRegistry
+import android.view.KeyEvent
 import com.refuge.next.data.*
 import com.refuge.next.design.RefugeColors
 import com.refuge.next.screens.*
@@ -56,7 +57,7 @@ class RefugeKnowledgeLiveTest {
         compose.onNodeWithText("任务信息").assertExists()
         compose.onNodeWithTag("mission-database").performTouchInput { swipeUp() }
         save("mission-detail-native-light")
-        compose.onNodeWithContentDescription("返回").performClick()
+        pressBack()
         compose.onNodeWithText("任务数据库").assertIsDisplayed()
         assertEquals(originalTop, listTitle.fetchSemanticsNode().boundsInRoot.top, 2f)
     }
@@ -76,7 +77,7 @@ class RefugeKnowledgeLiveTest {
         compose.onNodeWithText(expected).assertIsDisplayed()
         compose.onNodeWithTag("blueprint-database").performScrollToIndex(2)
         save("blueprint-materials-native-dark")
-        compose.onNodeWithContentDescription("返回").performClick()
+        pressBack()
         compose.onNodeWithText("制造蓝图").assertIsDisplayed()
         compose.waitUntil(60_000) { compose.onAllNodesWithText(expected).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(originalTop, compose.onNodeWithText(expected).fetchSemanticsNode().boundsInRoot.top, 2f)
@@ -92,10 +93,11 @@ class RefugeKnowledgeLiveTest {
         compose.onNodeWithTag("refuge-sheet").assertDoesNotExist()
         compose.onNodeWithText("栏位 4").assertDoesNotExist()
         compose.onNodeWithText("Erkul LIVE ·", substring = true).assertExists()
+        compose.onNodeWithContentDescription("返回").assertDoesNotExist()
         save("loadout-independent-light")
         compose.onNodeWithContentDescription("选择舰船").performClick()
         compose.onNodeWithTag("native-loadout").assertDoesNotExist()
-        compose.onNodeWithContentDescription("返回").performClick()
+        pressBack()
         compose.onNodeWithTag("native-loadout").assertIsDisplayed()
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("火力 · Damage"))
         save("dashboard-light-damage")
@@ -119,6 +121,8 @@ class RefugeKnowledgeLiveTest {
         compose.onNodeWithText("基础 › 额定加力").performScrollTo()
         save("dashboard-dark-flight")
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("电力分配"))
+        compose.onNodeWithText("核心组件").assertExists()
+        compose.onNodeWithText("散热").assertExists()
         compose.onNodeWithContentDescription("停用护盾").performScrollTo().performClick()
         compose.onNodeWithContentDescription("启用护盾").assertIsEnabled().performClick()
         compose.onNodeWithContentDescription("停用护盾").assertIsEnabled()
@@ -134,5 +138,10 @@ class RefugeKnowledgeLiveTest {
         evidenceFile("$name.txt").writeText(compose.onRoot(useUnmergedTree = true).printToString())
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
         evidenceFile("$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    private fun pressBack() {
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.waitForIdle()
     }
 }

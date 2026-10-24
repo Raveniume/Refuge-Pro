@@ -9,6 +9,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /** Public game references use a separate client: RSI cookies and tokens never leave RSI. */
@@ -16,6 +17,39 @@ internal class TerminalKnowledgeRepository(context: Context) {
     private val directory = File(context.filesDir, "terminal-knowledge").apply { mkdirs() }
     private val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS).build()
+
+    private fun cacheKey(value: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
+
+    /** Synchronous snapshot reads used to render terminal pages before network work starts. */
+    fun cachedMissionCatalog(): MissionCatalog? = runCatching {
+        val versionsFile = File(directory, "mission-versions.json")
+        if (!versionsFile.isFile) return@runCatching null
+        val versions = JSONArray(versionsFile.readText())
+        val selected = versions.objects().firstOrNull { it.optString("version").contains("-live.", true) } ?: return@runCatching null
+        val version = selected.optString("version")
+        val filename = selected.optString("file")
+        val sourceFile = File(directory, filename)
+        if (!sourceFile.isFile) return@runCatching null
+        val source = JSONObject(sourceFile.readText())
+        if (!source.optString("version").equals(version, true)) return@runCatching null
+        val language = File(directory, "mission-zh.json").takeIf { it.isFile }
+            ?.let { JSONObject(it.readText()) }
+            ?.takeIf { it.optString("version").equals(version, true) }
+        MissionCatalog(version, source, language)
+    }.getOrNull()
+
+    fun cachedBlueprintPage(query: String, category: String, page: Int, rewardOnly: Boolean): BlueprintPage? = runCatching {
+        val key = cacheKey("$query|$category|$page|$rewardOnly")
+        val file = File(directory, "blueprints-$key.json")
+        if (!file.isFile) return@runCatching null
+        val cached = JSONObject(file.readText())
+        BlueprintPage(cached.objects("rows"), cached.optInt("total"), cached.optString("version"))
+    }.getOrNull()
+
+    fun cachedBlueprint(id: Long): JSONObject? = runCatching {
+        File(directory, "blueprint-$id.json").takeIf { it.isFile }?.let { JSONObject(it.readText()) }
+    }.getOrNull()
 
     private fun read(url: String, key: String, refresh: Boolean): String {
         val file = File(directory, key)
@@ -86,16 +120,42 @@ internal class TerminalKnowledgeRepository(context: Context) {
         if (query.isNotBlank()) params["keyword"] = query.trim()
         if (category.isNotBlank()) params["categoryName"] = category
         if (rewardOnly) params["isReward"] = "true"
+        val cachedPage = cachedBlueprintPage(query, category, page, rewardOnly)
+        val versionParams = params.toMutableMap().apply {
+            this["pageNo"] = "1"
+            this["pageSize"] = "1"
+        }
+        val liveVersion = runCatching {
+            scm("page", versionParams).getJSONObject("data")
+                .let { it.optString("dataVersion").ifBlank { it.optString("version") } }
+        }.getOrNull()
+        val cachedVersion = cachedBlueprintPage(query, category, 1, rewardOnly)?.version.orEmpty()
+        if (cachedPage != null && !liveVersion.isNullOrBlank() && liveVersion == cachedVersion) {
+            return@withContext cachedPage
+        }
         val data = scm("page", params).getJSONObject("data")
-        BlueprintPage(data.objects("list"), data.optInt("total"))
+        val version = data.optString("dataVersion").ifBlank { data.optString("version") }
+        val key = cacheKey("$query|$category|$page|$rewardOnly")
+        val pending = File(directory, "blueprints-$key.json.pending")
+        pending.writeText(JSONObject()
+            .put("version", version)
+            .put("total", data.optInt("total"))
+            .put("rows", data.optJSONArray("list") ?: JSONArray())
+            .toString())
+        check(pending.renameTo(File(directory, "blueprints-$key.json"))) { "蓝图资料缓存保存失败" }
+        BlueprintPage(data.objects("list"), data.optInt("total"), version)
     }
 
     suspend fun blueprint(id: Long): JSONObject = withContext(Dispatchers.IO) {
-        scm("get-detail", mapOf("id" to "$id")).getJSONObject("data")
+        val data = scm("get-detail", mapOf("id" to "$id")).getJSONObject("data")
+        val pending = File(directory, "blueprint-$id.json.pending")
+        pending.writeText(data.toString())
+        check(pending.renameTo(File(directory, "blueprint-$id.json"))) { "蓝图详情缓存保存失败" }
+        data
     }
 }
 
-internal data class BlueprintPage(val rows: List<JSONObject>, val total: Int)
+internal data class BlueprintPage(val rows: List<JSONObject>, val total: Int, val version: String = "")
 
 internal class MissionCatalog(val version: String, val source: JSONObject, val language: JSONObject?) {
     val missions = source.objects("contracts")
