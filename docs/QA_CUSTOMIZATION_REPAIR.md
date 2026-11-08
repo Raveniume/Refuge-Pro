@@ -43,3 +43,10 @@ UI 来源核查及适配见 `LIQUID_GLASS_SOURCES.md`。新增设备用例覆盖
 当前源码使用真实在线数据，但不宣称完整 Erkul 高级模拟等价；蓝图详情按访问缓存，不宣称首次登录下载全部配方。对当前数据的回归不能证明所有舰船和未来上游版本永远无缺陷。
 
 共享设备仍使用历史 debug 证书。使用同证书 review 包 `adb install -r` 保留账户；正式包需核对与 v0.3.12/v0.3.13 的证书一致及版本递增。不得卸载共享设备上的 app 来冒充正式覆盖验收。
+
+
+## 发布核验
+
+源码提交 `a15b2b3`，标签 `v0.3.14`，GitHub Compose CI 和 Compose Release 均成功。正式 APK 已从 Release 下载复验，包名 `com.refuge.next.compose`，versionCode26；签名证书与重新下载的 v0.3.13 完全一致（SHA-256 `2eb09059426de0c732838eaaff06988e8cfd8f5a0dc7af5d740839c00b37d70c`）。APK SHA-256：`5d0820a62a73e20a84fab2717d80c5e5d48e29e193956af41f109d7936baf547`，与 GitHub 资产摘要一致。
+
+发布地址：https://github.com/Raveniume/Refuge-Pro/releases/tag/v0.3.14 。正式包满足从同签名 v0.3.13 升级的包名/证书/版本条件；共享模拟器已覆盖安装的是同本机证书的 review 包，未执行跨签名正式包覆盖。设备停留在真实数据配装定制页面，双层玻璃已打开供查看。
