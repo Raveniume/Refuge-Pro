@@ -820,7 +820,9 @@ private fun OwnedShipStack(
     // finger is moving is what caused the old card/list boundary to jump.
     // Keep equal 8dp optical insets around the square image while making the
     // hero compact enough that the list remains in the first viewport.
-    val cardHeight = 120.dp
+    // Reserve two title lines plus the complete value row. The previous
+    // 120dp viewport cropped prices/insurance for long real ship names.
+    val cardHeight = (144 * density.fontScale.coerceAtLeast(1f)).dp
     val thumbnailSize = 104.dp
     val cardInset = 8.dp
     // Keep only a compact depth cue below the active card. The rear card is
@@ -1169,7 +1171,8 @@ internal fun OwnedShipHero(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(translatedShipName(ship.name), style = RefugeTypography.title(palette).copy(fontSize = 18.sp, lineHeight = 23.sp))
+                Text(translatedShipName(ship.name), style = RefugeTypography.title(palette).copy(fontSize = 18.sp, lineHeight = 23.sp),
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     translatedShipName(ship.packageName),
                     style = RefugeTypography.body(palette),

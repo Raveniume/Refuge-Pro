@@ -42,16 +42,18 @@ internal class ErkulLoadoutRepository(private val context: Context) {
     private val cache = java.util.concurrent.ConcurrentHashMap<String, ErkulCatalog>()
     private val ships = android.util.LruCache<String, JSONObject>(3)
     private val shipLock = Mutex()
-    private val dailyRefreshMillis = 24L * 60L * 60L * 1_000L
     fun cachedCatalog(branch: String): ErkulCatalog? = cache[branch]
     fun cachedShip(catalog: ErkulCatalog, id: String): JSONObject? = ships["${catalog.branch}:${catalog.version}:$id"]
 
+    suspend fun restoreCatalog(branch: String): ErkulCatalog? = cachedCatalog(branch)
+        ?: if (File(dir, "$branch/catalog.bin").isFile) runCatching { catalog(branch, checkRemote = false) }.getOrNull() else null
+
     suspend fun preload(branch: String) {
         // Hydrate the local snapshot first.  A stale snapshot is still useful
-        // for immediate rendering while the once-per-day cloud refresh runs.
-        val current = catalog(branch)
+        // for immediate rendering while the version check runs.
+        val current = restoreCatalog(branch) ?: catalog(branch)
         warmAssembledData(branch, current)
-        if (shouldRefresh(branch)) {
+        run {
             runCatching {
                 val refreshed = catalog(branch, refresh = true)
                 warmAssembledData(branch, refreshed)
@@ -63,12 +65,6 @@ internal class ErkulLoadoutRepository(private val context: Context) {
         current.ships.firstOrNull()?.let { runCatching { ship(current, it) } }
         // Other ships load on demand. Eagerly downloading every vessel at
         // startup monopolized the network while the user was logging in.
-    }
-
-    private fun shouldRefresh(branch: String): Boolean {
-        val file = File(dir, "$branch/catalog.bin")
-        return !file.isFile ||
-            (System.currentTimeMillis() - file.lastModified()).coerceAtLeast(0L) >= dailyRefreshMillis
     }
 
     private fun decode(bytes: ByteArray): String = InflaterInputStream(bytes.inputStream(), Inflater(true)).bufferedReader().use { it.readText() }
@@ -90,13 +86,15 @@ internal class ErkulLoadoutRepository(private val context: Context) {
         return raw
     }
 
-    suspend fun catalog(branch: String, refresh: Boolean = false): ErkulCatalog = withContext(Dispatchers.IO) {
+    suspend fun catalog(branch: String, refresh: Boolean = false, checkRemote: Boolean = true): ErkulCatalog = withContext(Dispatchers.IO) {
         lock.withLock {
+            // Keep the inactive branch on disk, not as a second full JSON tree.
+            cache.keys.filter { it != branch }.forEach { cache.remove(it) }
             // The manifest is small, so page entry checks its live version.
             // Full index/family payloads are only downloaded when that version
             // differs from the persisted snapshot.
             var offline = false
-            val manifest = try { JSONObject(read(branch, "catalog.bin", refresh = true)) }
+            val manifest = try { JSONObject(read(branch, "catalog.bin", refresh = checkRemote)) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
                 offline = true

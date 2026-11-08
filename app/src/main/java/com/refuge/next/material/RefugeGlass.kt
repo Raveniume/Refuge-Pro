@@ -1,5 +1,11 @@
 package com.refuge.next.material
 
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -235,52 +241,30 @@ fun RefugeLiquidToggle(
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     val scope = rememberCoroutineScope()
     val latestChecked = rememberUpdatedState(checked)
+    val latestClick = rememberUpdatedState(onClick)
+    val haptics = LocalHapticFeedback.current
     val trackWidth = 64.dp
     val thumbWidth = 40.dp
     val dragWidth = with(density) { (trackWidth - thumbWidth - 4.dp).toPx() }
-    var didDrag by remember { mutableStateOf(false) }
+    var dragging by remember { mutableStateOf(false) }
     var fraction by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
     val drag = remember(scope) {
         DampedDragAnimation(
-            animationScope = scope,
-            initialValue = fraction,
-            valueRange = 0f..1f,
-            visibilityThreshold = .001f,
-            initialScale = 1f,
-            pressedScale = 1.5f,
-            onDragStarted = {},
-            onDragStopped = {
-                // AndroidLiquidGlass treats a tap and a drag as one gesture:
-                // the release settles the thumb and emits exactly one state
-                // change. Reading checked through the lambda avoids a stale
-                // value after the settings row recomposes.
-                if (didDrag) {
-                    val nextChecked = targetValue >= .5f
-                    fraction = if (nextChecked) 1f else 0f
-                    if (nextChecked != latestChecked.value) onClick()
-                } else {
-                    fraction = if (latestChecked.value) 0f else 1f
-                    onClick()
-                }
-                didDrag = false
-                animateToValue(fraction)
-            },
-            onDrag = { _, amount ->
-                didDrag = didDrag || amount.x != 0f
-                val delta = amount.x / dragWidth
-                fraction = (fraction + if (isLtr) delta else -delta).coerceIn(0f, 1f)
-                updateValue(fraction)
-            },
+            animationScope = scope, initialValue = fraction, valueRange = 0f..1f,
+            visibilityThreshold = .001f, initialScale = 1f, pressedScale = 1.5f,
+            onDragStarted = {}, onDragStopped = {}, onDrag = { _, _ -> },
         )
     }
-    LaunchedEffect(drag) {
-        snapshotFlow { fraction }.collectLatest { drag.updateValue(it) }
+    // Horizontal ownership leaves a vertical swipe to the settings list. A tap
+    // is handled by toggleable (including keyboard and accessibility actions).
+    val dragState = rememberDraggableState { amount ->
+        fraction = (fraction + (if (isLtr) amount else -amount) / dragWidth).coerceIn(0f, 1f)
+        drag.updateValue(fraction)
     }
-    LaunchedEffect(checked) {
-        val target = if (checked) 1f else 0f
-        if (target != fraction) {
-            fraction = target
-            drag.animateToValue(target)
+    LaunchedEffect(checked, dragging) {
+        if (!dragging) {
+            fraction = if (checked) 1f else 0f
+            if (drag.targetValue != fraction) drag.animateToValue(fraction)
         }
     }
 
@@ -292,15 +276,32 @@ fun RefugeLiquidToggle(
     }
     Box(
         modifier
-            .size(width = 64.dp, height = 36.dp)
-            .semantics {
-                role = Role.Switch
-                this.contentDescription = contentDescription
-            }
-            // The whole switch is the drag target, matching the reference
-            // control. DampedDragAnimation also handles a tap on the track;
-            // adding a second clickable here would toggle twice.
-            .then(drag.modifier),
+            .size(width = 64.dp, height = 44.dp)
+            .semantics { this.contentDescription = contentDescription }
+            .draggable(
+                state = dragState,
+                orientation = Orientation.Horizontal,
+                onDragStarted = {
+                    dragging = true
+                    fraction = drag.value
+                    drag.press()
+                },
+                onDragStopped = {
+                    val next = fraction >= .5f
+                    if (next != latestChecked.value) {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        latestClick.value()
+                    }
+                    fraction = if (next) 1f else 0f
+                    drag.animateToValue(fraction)
+                    dragging = false
+                },
+            )
+            .toggleable(value = checked, role = Role.Switch, indication = null,
+                interactionSource = remember { MutableInteractionSource() }) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                latestClick.value()
+            },
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(

@@ -2,6 +2,7 @@ package com.refuge.next.material
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,7 +21,7 @@ fun RefugeAnimatedSearch(
         visible = visible,
         modifier = modifier,
         enter = fadeIn(tween(180)) + expandVertically(
-            animationSpec = tween(220),
+            animationSpec = spring(dampingRatio = .86f, stiffness = 420f),
             expandFrom = Alignment.Top,
         ),
         exit = fadeOut(tween(140)) + shrinkVertically(

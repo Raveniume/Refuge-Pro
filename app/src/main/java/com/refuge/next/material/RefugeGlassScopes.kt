@@ -39,6 +39,10 @@ val LocalPageOverlayBackdrop = staticCompositionLocalOf<Backdrop?> { null }
  */
 val LocalOpticalGlassEnabled = staticCompositionLocalOf { true }
 
+/** Extra shell capture is opt-in and restricted to floating chrome, never list cards. */
+val LocalDoubleLayerGlass = staticCompositionLocalOf { false }
+val LocalSetDoubleLayerGlass = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+
 internal val LocalRasterizePageBackdrop = staticCompositionLocalOf { false }
 
 /**

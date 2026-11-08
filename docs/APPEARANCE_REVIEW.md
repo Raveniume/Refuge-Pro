@@ -1,5 +1,10 @@
 # Refuge appearance review
 
+## 2026-11-09: shared controls and real equipment editor
+
+See `LIQUID_GLASS_SOURCES.md` for the BiliPai/FlClash source audit and `QA_CUSTOMIZATION_REPAIR.md` for device results. Settings/filter/comparison switches use the shared Kyant toggle; navigation/search have opt-in sibling-captured double glass. Sheets have interrupted spring settling and gesture cancellation. Content groups remain opaque semantic surfaces. The original 2026-10-24 sustained-DPS mismatch below is historical: the later Avenger Stalker reference now matches 1,459; arbitrary advanced loadouts are not certified as full Erkul parity.
+
+
 ## 2026-10-24: information groups and native reference dashboard
 
 - Use `RefugeInfoGroup` for distinct concepts inside one reading card, with an outside caption, a secondary semantic surface, and 12dp inner padding. `RefugeInfoRows` pairs labels with right-aligned values and quiet separators; above 130% text scaling it stacks labels and values. Avoid adding optical effects to these reading surfaces.

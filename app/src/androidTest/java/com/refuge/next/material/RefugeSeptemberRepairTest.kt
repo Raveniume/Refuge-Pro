@@ -101,6 +101,7 @@ class RefugeSeptemberRepairTest {
     }
     @Test fun nativeOutfitterLoadsPowerAndSettingsWithoutWebView() {
         compose.setContent { RefugeScene(RefugeColors.dark) { _ -> NativeLoadoutScreen(RefugeColors.dark, true, {}) } }
+        compose.onNodeWithContentDescription("性能数据").performClick()
         compose.waitUntil(90_000) { compose.onAllNodesWithText("火力 · Damage").fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("电力分配"))
         compose.onNodeWithText("电力分配").performScrollTo().assertIsDisplayed()

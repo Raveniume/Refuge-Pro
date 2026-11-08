@@ -80,7 +80,7 @@ internal fun erkulComponentRows(item: JSONObject): List<Pair<String, String>> = 
 @Composable
 internal fun ErkulComponentDetail(backdrop: LayerBackdrop, palette: RefugePalette, item: JSONObject,
     onBlueprint: (String) -> Unit, onBack: () -> Unit) {
-    KnowledgePage(backdrop, palette, "组件详情", onBack) {
+    KnowledgePage(backdrop, palette, "组件详情", onBack, showBack = false) {
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { Text(translatedGameItemName(item.itemName(), item.optString("className")), style = RefugeTypography.largeTitle(palette)) }
             item { ErkulDataCard(palette, item.itemName(), erkulComponentRows(item)) }

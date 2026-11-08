@@ -238,22 +238,7 @@ private fun RefugeAppContent() {
         withFrameNanos { }
         delay(350)
         withContext(Dispatchers.IO) { runCatching { com.refuge.next.data.ShipReferenceCatalog.shared(context).prepare() } }
-        val loadouts = com.refuge.next.data.ErkulLoadoutRepository.shared(context)
-        delay(500)
-        withContext(Dispatchers.IO) { runCatching { loadouts.preload("LIVE") } }
-        delay(500)
-        // Keep PTU and the full terminal index in the startup queue so they do
-        // not compete with the first visible page's image and glass shaders.
-        withContext(Dispatchers.IO) { runCatching { loadouts.preload("PTU") } }
-        delay(900)
-        withContext(Dispatchers.IO) { runCatching { terminalRepository.items() } }
-        // Warm the independent mission/blueprint snapshots so terminal pages
-        // can render local data immediately and revalidate quietly on entry.
-        val knowledge = TerminalKnowledgeRepository(context)
-        withContext(Dispatchers.IO) {
-            runCatching { knowledge.missions() }
-            runCatching { knowledge.blueprints("", "", 1, false) }
-        }
+
     }
     LaunchedEffect(authenticated) {
         if (authenticated && !startupReady) {
@@ -267,6 +252,15 @@ private fun RefugeAppContent() {
     }
     LaunchedEffect(authenticated) {
         if (authenticated) {
+            // One serialized warm-up per authenticated entry. Loading LIVE and
+            // PTU plus two copies of the mission JSON exhausted a 192 MB heap.
+            // PTU is hydrated only when explicitly selected in the editor.
+            launch(Dispatchers.IO) {
+                val knowledge = TerminalKnowledgeRepository.shared(context)
+                runCatching { com.refuge.next.data.ErkulLoadoutRepository.shared(context).preload("LIVE") }
+                runCatching { knowledge.missions() }
+                runCatching { knowledge.blueprints("", "", 1, false) }
+            }
             withFrameNanos { }
             // Let the cached route and its first visible artwork settle before
             // authenticated refreshes begin competing for CPU and disk IO.
@@ -357,6 +351,12 @@ private fun RefugeAppContent() {
     }
     CompositionLocalProvider(
         LocalOpticalGlassEnabled provides opticalGlassReady,
+        com.refuge.next.material.LocalDoubleLayerGlass provides settings.doubleLayerGlass,
+        com.refuge.next.material.LocalSetDoubleLayerGlass provides { enabled ->
+            val updated = settings.copy(doubleLayerGlass = enabled)
+            settings = updated
+            settingsRepository.save(updated)
+        },
         LocalRemoteArtworkEnabled provides remoteArtworkReady,
         LocalRootScrollRegistry provides rootScrollRegistry,
         com.refuge.next.design.LocalRefugeTranslation provides translationRepository,
@@ -442,10 +442,7 @@ private fun RefugeAppContent() {
                       RefugeRouteTransition(
                           targetState = route,
                           order = ::productionRouteOrder,
-                           // Route changes are intentionally immediate. Tool,
-                           // settings, and detail pages must not slide/fade
-                           // beneath the shared glass navigation surface.
-                            animate = { _, _ -> false },
+                          animate = { from, to -> from != to },
                           modifier = Modifier
                               .fillMaxSize()
                               // Keep the route above the fixed bar. Root page

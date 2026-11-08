@@ -63,10 +63,14 @@ internal fun NativeLoadoutScreen(
     var menu by remember { mutableStateOf<String?>(null) }
     var planName by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf<String?>(null) }
+    var checkingVersion by remember { mutableStateOf(false) }
     var compare by rememberSaveable { mutableStateOf(false) }
     var showPerformance by rememberSaveable { mutableStateOf(false) }
     var componentInfo by remember { mutableStateOf<JSONObject?>(null) }
     var blueprintQuery by rememberSaveable { mutableStateOf<String?>(null) }
+    var section by rememberSaveable { mutableIntStateOf(0) }
+    var collapsedGroups by remember { mutableStateOf(setOf("其他设备 · Equipment")) }
+    var loadedShipId by remember { mutableStateOf(shipId) }
 
     fun normalizeShipIdentity(value: String?): String = value.orEmpty()
         .trim()
@@ -91,15 +95,26 @@ internal fun NativeLoadoutScreen(
     LaunchedEffect(branch, attempt) {
         error = null
         busy = true
+        checkingVersion = true
+        val previousVersion = catalog?.version
         if (catalog?.branch != branch) { catalog = repository.cachedCatalog(branch); ship = null }
         try {
+            if (catalog == null) repository.restoreCatalog(branch)?.let { cached ->
+                catalog = cached
+                shipId = resolveShipId(shipId, cached) ?: cached.ships.firstOrNull()?.optString("className").orEmpty()
+            }
             val loaded = repository.catalog(branch, refresh = attempt > 0)
             catalog = loaded
             shipId = resolveShipId(shipId, loaded)
                 ?: loaded.ships.firstOrNull()?.optString("className").orEmpty()
+            if (attempt > 0) notice = when {
+                loaded.offline -> "暂时无法连接 Erkul，保留已保存数据"
+                previousVersion == loaded.version -> "已是最新版本 · ${loaded.version}"
+                else -> "已更新 · ${loaded.version}"
+            }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: "目录载入失败" }
-        finally { busy = false }
+        finally { busy = false; checkingVersion = false }
     }
     LaunchedEffect(catalog, shipId) {
         val current = catalog ?: return@LaunchedEffect
@@ -108,7 +123,8 @@ internal fun NativeLoadoutScreen(
             ?: return@LaunchedEffect
         if (summary.optString("className") != shipId) shipId = summary.optString("className")
         busy = true; error = null
-        ship = repository.cachedShip(current, shipId)
+        if (loadedShipId != shipId) { ship = null; loadedShipId = shipId }
+        repository.cachedShip(current, shipId)?.let { ship = it }
         try { ship = repository.ship(current, summary) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: "舰船载入失败" }
@@ -116,9 +132,6 @@ internal fun NativeLoadoutScreen(
     }
     LaunchedEffect(catalog?.version, shipId, buildSlot) {
         val current = catalog ?: return@LaunchedEffect
-        // Components are active by default. Older drafts may still contain
-        // the removed disabled list; ignore it so every installed component
-        // participates in the simulated metrics.
         // Keep the factory snapshot enabled by default, while preserving a
         // user's explicit component toggles when the draft is reopened.
         draft = JSONObject(repository.loadDraft(branch, current.version, shipId, buildSlot).toString())
@@ -132,7 +145,14 @@ internal fun NativeLoadoutScreen(
     val stock = remember(ship, catalog) { if (ship != null && catalog != null) calculateErkulMetrics(ship!!, resolveErkulSlots(ship!!, catalog!!, JSONObject()), JSONObject()) else null }
     val currentCatalog = catalog
     val editorListState = rememberLazyListState()
-    BackHandler { if (picker != null) picker = null else onDismiss() }
+    BackHandler {
+        when {
+            blueprintQuery != null -> blueprintQuery = null
+            componentInfo != null -> componentInfo = null
+            picker != null -> picker = null
+            else -> onDismiss()
+        }
+    }
     val pickerMode = picker
     val page = when {
         blueprintQuery != null -> "blueprint"
@@ -140,9 +160,8 @@ internal fun NativeLoadoutScreen(
         pickerMode != null -> "picker"
         else -> "editor"
     }
-    // These are full-page tools. Swap the route in place so entering and
-    // returning do not animate, matching the native settings/tool behavior.
-    when (page) {
+    com.refuge.next.motion.RefugeRouteTransition(page, order = { if (it == "editor") 0 else 1 }) { visiblePage ->
+    when (visiblePage) {
             "blueprint" -> blueprintQuery?.let { query ->
                 TerminalKnowledgeNavigator(backdrop, palette, isDark, "blueprints", query) { blueprintQuery = null }
             }
@@ -171,21 +190,19 @@ internal fun NativeLoadoutScreen(
     Box(Modifier.fillMaxSize().background(palette.background).statusBarsPadding().navigationBarsPadding()) {
             Box(Modifier.fillMaxSize().testTag("native-loadout")) {
             Column(Modifier.fillMaxSize()) {
-                // The circular back control is anchored to the sheet corner.
-                // Reserve its horizontal footprint so the title never paints
-                // underneath the control while the sheet enters or settles.
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("改船", style = RefugeTypography.title(palette), modifier = Modifier.weight(1f))
                     Box {
                         RefugeHeaderActionBar(modalBackdrop, palette, listOf(
-                            RefugeFloatingAction(RefugeIcons.refresh, "重置配装", { update(JSONObject()) }),
+                            RefugeFloatingAction(RefugeIcons.refresh, "更新改船数据", { if (!checkingVersion || attempt == 0) attempt++ }),
                             RefugeFloatingAction(RefugeIcons.more, "更多操作", { menu = "more" }),
                         ))
                         zone.ien.hig.CupertinoDropdownMenu(expanded = menu == "more", onDismissRequest = { menu = null },
                             backdrop = backdrop, containerColor = palette.contentSurfaceStrong, width = 220.dp,
                             modifier = Modifier.widthIn(max = 284.dp),
                             offset = androidx.compose.ui.unit.DpOffset(0.dp, 52.dp)) {
-                            MenuAction({ attempt++; menu = null }, onClickLabel = "更新数据") { Text("更新数据", color = palette.text) }
+                            MenuAction({ if (!checkingVersion || attempt == 0) attempt++; menu = null }, onClickLabel = "更新数据") { Text("更新数据", color = palette.text) }
+                            MenuAction({ menu = "reset" }, onClickLabel = "恢复原厂配装") { Text("恢复原厂配装", color = palette.text) }
                             MenuAction({ showPerformance = true; menu = null }, onClickLabel = "性能总览") { Text("性能总览", color = palette.text) }
                             MenuAction({ planName = ""; menu = "save" }, onClickLabel = "保存方案") { Text("保存方案", color = palette.text) }
                             MenuAction({ menu = "load" }, onClickLabel = "调用方案") { Text("调用方案", color = palette.text) }
@@ -194,11 +211,14 @@ internal fun NativeLoadoutScreen(
                     }
                 }
                 LazyColumn(
-                    Modifier.fillMaxWidth().weight(1f),
+                    Modifier.fillMaxWidth().weight(1f).testTag("loadout-list"),
                     state = editorListState,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    if (checkingVersion && attempt > 0) item {
+                        Text("正在检查 Erkul 版本…", style = RefugeTypography.caption(palette))
+                    }
                     item {
                         val reference = rememberShipReference(ship?.itemName().orEmpty())
                         RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), onClick = { picker = "ship" }, contentDescription = "选择舰船", padding = PaddingValues(10.dp)) {
@@ -209,7 +229,9 @@ internal fun NativeLoadoutScreen(
                                 }
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                     Text(translatedShipName(ship?.itemName() ?: "选择舰船"), style = RefugeTypography.title(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(translatedShipName(reference?.manufacturer.orEmpty()), style = RefugeTypography.caption(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    reference?.manufacturer?.takeIf { it.isNotBlank() }?.let {
+                                        Text(translatedShipName(it), style = RefugeTypography.caption(palette), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
                                 ship?.let { vessel ->
                                     Text("S${vessel.optInt("size")} · ${vessel.obj("vehicle").optInt("crewSize")} 人 · ${vessel.obj("precomputed").optInt("cargo")} SCU", style = RefugeTypography.caption(palette))
                                 }
@@ -226,9 +248,41 @@ internal fun NativeLoadoutScreen(
                     error?.let { message ->
                         item { ProductionErrorState(backdrop, palette, message, { attempt++ }) }
                     }
-                    if (ship != null && metrics != null) {
+                    item {
+                        RefugeLiquidModeSelector(backdrop, palette, listOf("配装定制", "性能数据"), section,
+                            { section = it }, modifier = Modifier.fillMaxWidth(), fixedWidth = true)
+                    }
+                    if (ship != null && metrics != null && section == 1) {
                         item { ErkulDashboard(backdrop, palette, ship!!, slots, catalog!!, draft, metrics!!, ::update) }
                         item { ErkulPowerCard(backdrop, palette, ship!!, slots, draft, metrics!!, ::update, showTelemetry = true) }
+                    }
+                    if (ship != null && section == 0) {
+                        val groups = slots.filter { it.item != null || it.port.objects("accepts").isNotEmpty() }
+                            .groupBy(::equipmentGroup)
+                        val order = listOf("武器", "弹药", "护盾", "发电机", "散热器", "航行", "雷达", "维生", "其他设备")
+                        groups.entries.sortedBy { order.indexOf(it.key.substringBefore(" ·")) }.forEach { (group, members) ->
+                            item(key = group) {
+                                TextButton({ collapsedGroups = if (group in collapsedGroups) collapsedGroups - group else collapsedGroups + group },
+                                    Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 4.dp)) {
+                                    Text("$group · ${members.size}", style = RefugeTypography.headline(palette), modifier = Modifier.weight(1f))
+                                    Text(if (group in collapsedGroups) "展开" else "收起", color = palette.accent)
+                                }
+                            }
+                            if (group !in collapsedGroups) items(members, key = { "slot:${it.path}" }) { slot ->
+                                fun replace(restore: Boolean) {
+                                    val overrides = JSONObject(draft.obj("overrides").toString())
+                                    overrides.keys().asSequence().filter { it == slot.path || it.startsWith(slot.path + "/") }
+                                        .toList().forEach { overrides.remove(it) }
+                                    if (!restore) overrides.put(slot.path, "")
+                                    update(JSONObject(draft.toString()).put("overrides", overrides))
+                                }
+                                val enabled = draft.strings("disabled").none { slot.path == it || slot.path.startsWith("$it/") }
+                                ErkulEquipmentCard(palette, slot, enabled,
+                                    onChoose = { picker = slot.path }, onDetail = { componentInfo = slot.item },
+                                    onToggle = { update(togglePowerSlot(draft, slot.path, enabled)) },
+                                    onRemove = { replace(false) }, onRestore = { replace(true) })
+                            }
+                        }
                     }
                 }
             }
@@ -270,6 +324,15 @@ internal fun NativeLoadoutScreen(
                     }) { Text("保存", color = if (planName.isNotBlank()) palette.accent else palette.textMuted) }
                     })
             }
+            if (menu == "reset") {
+                zone.ien.hig.CupertinoAlertDialog(onDismissRequest = { menu = null },
+                    title = { Text("恢复原厂配装？", color = palette.text) },
+                    message = { Text("当前编辑中的组件和电力设置将恢复原厂，已命名保存的方案不受影响。", color = palette.textSecondary) },
+                    containerColor = palette.contentSurfaceStrong, buttons = {
+                        action(onClick = { menu = null }, style = zone.ien.hig.AlertActionStyle.Cancel) { Text("取消", color = palette.accent) }
+                        action(onClick = { update(JSONObject()); menu = null; notice = "已恢复原厂配装" }) { Text("恢复原厂", color = palette.accent) }
+                    })
+            }
             if (menu == "load") {
                 val saved = catalog?.let { repository.savedPlans(branch, it.version, shipId) }.orEmpty()
                 RefugeLiquidSheet(backdrop, palette, "调用方案", { menu = null }, sheetHeight = 520.dp) { _ ->
@@ -285,6 +348,8 @@ internal fun NativeLoadoutScreen(
             }
             }
     }
+}
+
 }
 
 /** Compatibility entry retained for isolated rendering fixtures. */
@@ -347,14 +412,14 @@ private fun LoadoutPerformanceSheet(
     onCompareChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    RefugeLiquidSheet(backdrop, palette, "性能总览", onDismiss, sheetHeight = 780.dp) { _ ->
+    RefugeLiquidSheet(backdrop, palette, "性能总览", onDismiss, sheetHeight = 780.dp) { modalBackdrop ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("当前配装", style = RefugeTypography.headline(palette))
             }
             Text("对比原厂", style = RefugeTypography.body(palette))
             Spacer(Modifier.width(8.dp))
-            zone.ien.hig.CupertinoSwitch(compare, onCheckedChange = onCompareChanged)
+            RefugeLiquidToggle(modalBackdrop, palette, compare, { onCompareChanged(!compare) }, "对比原厂")
         }
         listOf("火力", "防御", "电力与散热", "航行").forEachIndexed { section, title ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

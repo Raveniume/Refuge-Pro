@@ -196,21 +196,10 @@ fun ReferenceSearchField(
         textStyle = RefugeTypography.body(if (isDark) RefugeColors.dark else RefugeColors.light).copy(color = textColor),
         modifier = modifier.semantics { contentDescription = "搜索" },
         decorationBox = { inner ->
+            com.refuge.next.material.RefugeFloatingGlass(backdrop, palette, Modifier.fillMaxWidth()) {
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { RoundedRectangle(16.dp, RoundedCornerStyle.Continuous) },
-                        effects = { vibrancy(); blur(2.dp.toPx()); lens(8.dp.toPx(), 12.dp.toPx()) },
-                        highlight = { com.refuge.next.material.RefugeGlassStyle.controlHighlight },
-                        shadow = null,
-                        innerShadow = null,
-                        onDrawSurface = {
-                            drawRect(palette.contentSurface.copy(alpha = if (isDark) .72f else .60f))
-                        },
-                    )
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 6.dp)
+                    .height(48.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(searchIcon, contentDescription = null, tint = palette.textSecondary, modifier = Modifier.size(20.dp))
@@ -218,6 +207,12 @@ fun ReferenceSearchField(
                     if (value.isEmpty()) Text("搜索", color = palette.textSecondary)
                     inner()
                 }
+                if (value.isNotEmpty()) {
+                    androidx.compose.material.IconButton(onClick = { onValueChange("") }, modifier = Modifier.size(44.dp)) {
+                        Text("×", style = RefugeTypography.title(palette), modifier = Modifier.semantics { contentDescription = "清空搜索" })
+                    }
+                }
+            }
             }
         },
     )

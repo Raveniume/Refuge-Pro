@@ -56,8 +56,10 @@ internal fun TerminalKnowledgeNavigator(backdrop: LayerBackdrop, palette: Refuge
 @Composable
 internal fun KnowledgePage(backdrop: LayerBackdrop, palette: RefugePalette, title: String, onBack: () -> Unit,
     showBack: Boolean = true,
+    destination: Any? = null,
     action: @Composable RowScope.() -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
     BackHandler(onBack = onBack)
+    com.refuge.next.motion.RefugeDetailMotion(destination) {
     Column(Modifier.fillMaxSize().background(palette.background).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             if (showBack) RefugeInlineBackButton(palette, onBack)
@@ -65,6 +67,7 @@ internal fun KnowledgePage(backdrop: LayerBackdrop, palette: RefugePalette, titl
             action()
         }
         content()
+    }
     }
 }
 
@@ -110,7 +113,7 @@ private fun KnowledgeFilter(backdrop: LayerBackdrop, palette: RefugePalette, val
 internal fun MissionDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalette, isDark: Boolean,
     initialQuery: String = "", initialMission: String? = null, onBlueprint: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
-    val repository = remember { TerminalKnowledgeRepository(context) }
+    val repository = remember { TerminalKnowledgeRepository.shared(context) }
     var catalog by remember { mutableStateOf(repository.cachedMissionCatalog()) }
     var error by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
@@ -121,18 +124,30 @@ internal fun MissionDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalet
     var type by rememberSaveable { mutableStateOf("") }
     var chinese by rememberSaveable { mutableStateOf(true) }
     var rewardSort by rememberSaveable { mutableStateOf(false) }
+    var refreshStatus by remember { mutableStateOf<String?>(null) }
+    var checkingVersion by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val detailState = key(selection) { rememberLazyListState() }
     LaunchedEffect(attempt) {
         error = null
+        checkingVersion = true
+        if (attempt > 0) refreshStatus = "正在检查任务版本…"
         repository.cachedMissionCatalog()?.let { cached ->
             if (catalog == null) catalog = cached
             loading = false
         }
-        try { catalog = repository.missions(attempt > 0) }
+        try {
+            val previous = catalog?.version
+            catalog = repository.missions(attempt > 0)
+            if (attempt > 0) refreshStatus = when {
+                !repository.versionCheckSucceeded -> "暂时离线，继续显示已保存任务"
+                previous == catalog?.version -> "任务数据已是最新版本"
+                else -> "任务数据已更新"
+            }
+        }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: "任务载入失败" }
-        finally { loading = false }
+        finally { loading = false; checkingVersion = false }
     }
     val current = catalog
     // Lazy layout may measure its outgoing content before recomposition removes
@@ -153,8 +168,9 @@ internal fun MissionDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalet
             RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.language, if (chinese) "EN" else "中文",
                 { chinese = !chinese }, visualHeight = 40.dp)
             Spacer(Modifier.width(8.dp))
-            RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.refresh, "更新任务", { attempt++ })
-        }, showBack = selected == null) {
+            RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.refresh, "更新任务", { if (!checkingVersion || attempt == 0) attempt++ })
+        }, showBack = selected == null, destination = destination) {
+        refreshStatus?.let { Text(it, style = RefugeTypography.caption(palette), modifier = Modifier.padding(horizontal = 16.dp)) }
         // Do not measure a restored scroll state against a temporary loading
         // list. Its small item count would clamp the saved reading position.
         if (current == null) {
@@ -240,10 +256,15 @@ internal fun MissionDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalet
 internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePalette, isDark: Boolean,
     initialQuery: String = "", onMission: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
-    val repository = remember { TerminalKnowledgeRepository(context) }
+    val repository = remember { TerminalKnowledgeRepository.shared(context) }
     var query by rememberSaveable(initialQuery) { mutableStateOf(initialQuery) }
     var category by rememberSaveable { mutableStateOf("") }
     var rewardOnly by rememberSaveable { mutableStateOf(false) }
+    var chinese by rememberSaveable { mutableStateOf(true) }
+    var sourceVersion by remember { mutableStateOf(repository.cachedBlueprintPage(initialQuery, "", 1, false)?.version.orEmpty()) }
+    var refreshStatus by remember { mutableStateOf<String?>(null) }
+    var checkingVersion by remember { mutableStateOf(false) }
+    var handledRefresh by remember { mutableIntStateOf(0) }
     var page by remember { mutableIntStateOf(1) }
     var rows by remember(initialQuery) { mutableStateOf(repository.cachedBlueprintPage(initialQuery, "", 1, false)?.rows.orEmpty()) }
     var total by remember(initialQuery) { mutableIntStateOf(repository.cachedBlueprintPage(initialQuery, "", 1, false)?.total ?: 0) }
@@ -259,6 +280,11 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
     val detailState = key(selection) { rememberLazyListState() }
     LaunchedEffect(query, category, rewardOnly, page, selection, attempt) {
         error = null
+        checkingVersion = true
+        val manualRefresh = attempt > handledRefresh
+        handledRefresh = attempt
+        if (manualRefresh) refreshStatus = "正在检查蓝图版本…" else refreshStatus = null
+        val previousVersion = sourceVersion
         if (selection == null) {
             repository.cachedBlueprintPage(query, category, page, rewardOnly)?.let { cached ->
                 if (page == 1) rows = cached.rows else if (rows.isEmpty()) rows = cached.rows
@@ -274,14 +300,27 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
                 val result = repository.blueprints(query, category, page, rewardOnly)
                 rows = if (page == 1) result.rows else (rows + result.rows).distinctBy { it.optLong("id") }
                 total = result.total
+                sourceVersion = result.version
+            }
+            if (manualRefresh) refreshStatus = when {
+                !repository.versionCheckSucceeded -> "暂时离线，继续显示已保存蓝图"
+                previousVersion == sourceVersion -> "蓝图数据已是最新版本"
+                else -> "蓝图数据已更新"
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: "蓝图载入失败" }
-        finally { loading = false }
+        finally { loading = false; checkingVersion = false }
     }
     val destination = selection
     KnowledgePage(backdrop, palette, if (destination == null) "制造蓝图" else "蓝图详情",
-        { if (selection != null) selection = null else onBack() }, showBack = destination == null) {
+        { if (selection != null) selection = null else onBack() }, showBack = destination == null, destination = destination,
+        action = {
+            RefugeCompactUtilityPill(backdrop, palette, RefugeIcons.language, if (chinese) "EN" else "中文",
+                { chinese = !chinese }, visualHeight = 40.dp)
+            Spacer(Modifier.width(8.dp))
+            RefugeCircularHeaderButton(backdrop, palette, RefugeIcons.refresh, "更新蓝图", { if (!checkingVersion || attempt == 0) attempt++ })
+        }) {
+        refreshStatus?.let { Text(it, style = RefugeTypography.caption(palette), modifier = Modifier.padding(horizontal = 16.dp)) }
         if ((destination != null && detail == null) || (destination == null && rows.isEmpty() && loading)) {
             if (loading) ProductionLoadingState(backdrop, palette, "正在读取蓝图")
             error?.let { ProductionErrorState(backdrop, palette, it, { attempt++ }) }
@@ -291,7 +330,7 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
         LazyColumn(Modifier.weight(1f).testTag("blueprint-database"),
             state = if (destination == null) listState else detailState,
             contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item { Text("SCM · ${detail?.optString("dataVersion").orEmpty()}", style = RefugeTypography.caption(palette)) }
+            item { Text("SCM · ${if (destination == null) sourceVersion else detail?.optString("dataVersion").orEmpty().ifBlank { detail?.optString("_cacheVersion").orEmpty() }}", style = RefugeTypography.caption(palette)) }
             if (destination == null) {
                 item { ReferenceSearchField(backdrop, isDark, query, { query = it; page = 1 }, RefugeIcons.search, Modifier.fillMaxWidth()) }
                 item { KnowledgeFilter(backdrop, palette, listOf("" to "全部分类", "FPSWeapons" to "武器", "FPSArmours" to "护甲", "Ammo" to "弹夹", "ShipWeapons" to "舰船武器", "Components" to "组件"), category,
@@ -304,7 +343,12 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
                         { rewardOnly = !rewardOnly; page = 1 }, "只显示任务奖励蓝图")
                 } }
                 items(rows, key = { it.optLong("id") }) { row ->
-                    KnowledgeCard(palette, row.blueprintTitle(), "${blueprintCategoryLabel(row.optString("categoryName"))} · ${row.optInt("craftTimeSeconds")} 秒", { selection = row.optLong("id") })
+                    KnowledgeCard(palette, row.blueprintTitle(chinese), "${blueprintCategoryLabel(row.optString("categoryName"))} · ${row.optInt("craftTimeSeconds")} 秒", {
+                        val id = row.optLong("id")
+                        detail = repository.cachedBlueprint(id)
+                        loading = detail == null
+                        selection = id
+                    })
                 }
                 if (!loading && error == null && rows.isEmpty()) item { ProductionEmptyState(palette, "没有匹配的蓝图") }
                 if (!loading && rows.size < total) item {
@@ -313,7 +357,7 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
                     }
                 }
             } else detail?.let { blueprint ->
-                item { KnowledgeCard(palette, blueprint.blueprintTitle(), blueprint.optString("blueprintName")) {
+                item { KnowledgeCard(palette, blueprint.blueprintTitle(chinese), if (chinese) blueprint.optString("blueprintName") else blueprint.optString("blueprintNameCn")) {
                     blueprint.optString("thumbnailUrlHd").takeIf(String::isNotBlank)?.let { url ->
                         var imageFailed by remember(url) { mutableStateOf(false) }
                         if (imageFailed) Text("图片暂不可用", style = RefugeTypography.caption(palette))
@@ -323,7 +367,7 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
                     Text("制造时间：${blueprint.optInt("craftTimeSeconds")} 秒", style = RefugeTypography.body(palette))
                 } }
                 items(blueprint.objects("slots"), key = { it.optInt("slotIndex") }) { slot ->
-                    BlueprintMaterialCard(backdrop, palette, slot)
+                    BlueprintMaterialCard(backdrop, palette, slot, chinese)
                 }
                 val ids = runCatching { JSONArray(blueprint.optString("rewardMissionIds")) }.getOrNull()
                 val titles = runCatching { JSONArray(blueprint.optString("rewardMissionsCn").ifBlank { blueprint.optString("rewardMissions") }) }.getOrNull()
@@ -341,15 +385,16 @@ internal fun BlueprintDatabaseScreen(backdrop: LayerBackdrop, palette: RefugePal
 }
 
 @Composable
-private fun BlueprintMaterialCard(backdrop: LayerBackdrop, palette: RefugePalette, slot: JSONObject) {
+private fun BlueprintMaterialCard(backdrop: LayerBackdrop, palette: RefugePalette, slot: JSONObject, chinese: Boolean) {
     var choice by rememberSaveable(slot.optInt("id")) { mutableIntStateOf(0) }
     var quality by rememberSaveable(slot.optInt("id")) { mutableIntStateOf(500) }
     val options = slot.objects("options")
     val option = options.getOrNull(choice) ?: return
     val minimum = option.optInt("minQuality").coerceIn(0, 1000)
     val effectiveQuality = quality.coerceIn(minimum, 1000)
-    val slotName = slot.optString("slotDisplayNameCn").ifBlank { slot.optString("slotDisplayName") }
-    val materialName = option.optString("materialNameCn").ifBlank { option.optString("materialName") }
+    fun label(value: JSONObject, field: String) = if (chinese) value.optString(field + "Cn").ifBlank { value.optString(field) } else value.optString(field).ifBlank { value.optString(field + "Cn") }
+    val slotName = label(slot, "slotDisplayName")
+    val materialName = label(option, "materialName")
     val amount = option.number("standardCargoUnits")?.let { String.format(Locale.US, "%.2f SCU", it) }
         ?: "${option.optInt("quantity", 1)} 个"
     RefugeLightweightGlassSurface(
@@ -367,7 +412,7 @@ private fun BlueprintMaterialCard(backdrop: LayerBackdrop, palette: RefugePalett
             }
             if (options.size > 1) {
                 KnowledgeFilter(backdrop, palette,
-                    options.mapIndexed { index, value -> "$index" to value.optString("materialNameCn").ifBlank { value.optString("materialName") } },
+                    options.mapIndexed { index, value -> "$index" to label(value, "materialName") },
                     "$choice", { choice = it.toInt() }, Modifier.fillMaxWidth())
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -377,7 +422,7 @@ private fun BlueprintMaterialCard(backdrop: LayerBackdrop, palette: RefugePalett
             if (minimum < 1000) RefugeLiquidSlider({ effectiveQuality.toFloat() }, { quality = it.toInt() },
                 valueRange = minimum.toFloat()..1000f, visibilityThreshold = 1f,
                 backdrop = backdrop, palette = palette, label = "材料品质")
-            val modifiers = blueprintModifiers(option, effectiveQuality)
+            val modifiers = blueprintModifiers(option, effectiveQuality, chinese)
             if (modifiers.isNotEmpty()) {
                 Text("属性变化", style = RefugeTypography.caption(palette))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

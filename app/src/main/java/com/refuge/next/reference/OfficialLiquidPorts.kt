@@ -417,9 +417,12 @@ private fun OfficialLiquidTabsCore(
             }
         }
         val tabsBackdrop = rememberLayerBackdrop()
+        val doubleLayer = com.refuge.next.material.LocalDoubleLayerGlass.current
+        val shellBackdrop = rememberLayerBackdrop()
         Row(
             Modifier
                 .graphicsLayer { translationX = panelOffset }
+                .then(if (doubleLayer) Modifier.layerBackdrop(shellBackdrop) else Modifier)
                 .drawBackdrop(
                     backdrop = backdrop,
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
@@ -510,10 +513,11 @@ private fun OfficialLiquidTabsCore(
                     }
                 }
                 .drawBackdrop(
-                    backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
+                    backdrop = if (doubleLayer) rememberCombinedBackdrop(backdrop, shellBackdrop, tabsBackdrop)
+                        else rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { Capsule(RoundedCornerStyle.Continuous) },
                     effects = {
-                        val progress = drag.pressProgress
+                        val progress = if (doubleLayer) lerp(.32f, 1f, drag.pressProgress) else drag.pressProgress
                         lens(
                             10.dp.toPx() * progress,
                             14.dp.toPx() * progress,

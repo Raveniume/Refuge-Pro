@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.ColorFilter
@@ -44,8 +46,16 @@ internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop
         val maximum = settings.number("distanceMaxAssignment") ?: minimum
         if (power.supplied(it.path) <= 0) 0.0 else minimum + (maximum - minimum) * powerOutputRatio(it.item, power.supplied(it.path))
     }
-    val groups = listOf("武器", "引擎", "护盾", "量子", "雷达", "维生", "散热") + if (power.consumers.any { it.group == "其他" }) listOf("其他") else emptyList()
-    val chartMaximum = groups.maxOf { group -> available.consumers.filter { it.group == group }.sumOf { it.maximum } }.coerceAtLeast(1)
+    val coolers = slots.filter { it.item?.optString("type") == "Cooler" }
+    val groups = listOf("武器", "引擎", "护盾", "量子", "雷达", "维生") +
+        coolers.indices.map { "散热 ${it + 1}" } + if (power.consumers.any { it.group == "其他" }) listOf("其他") else emptyList()
+    fun members(group: String): List<PowerConsumer> {
+        if (!group.startsWith("散热 ")) return available.consumers.filter { it.group == group }
+        val slot = coolers[group.substringAfter(' ').toInt() - 1]
+        return listOf(available.consumers.firstOrNull { it.path == slot.path }
+            ?: PowerConsumer(slot.path, group, 0, 0, slot.item))
+    }
+    val chartMaximum = groups.maxOf { group -> members(group).sumOf { it.maximum } }.coerceAtLeast(1)
     val glyphs = listOf(
         R.drawable.erkul_power_weapons,
         R.drawable.erkul_power_engines,
@@ -97,20 +107,25 @@ internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop
             // 48dp columns overflowed when a ship exposed eight groups, so the
             // last pips and icon were clipped instead of being usable.
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.Top,
             ) {
                 groups.forEachIndexed { index, group ->
-                    val members = available.consumers.filter { it.group == group }
+                    val members = members(group)
                     val maximum = members.sumOf { it.maximum }
                     val value = members.sumOf { power.supplied(it.path) }
-                    val onChange by rememberUpdatedState<(Int) -> Unit>({ update(setPowerGroup(power, draft, group, it)) })
+                    val onChange by rememberUpdatedState<(Int) -> Unit>({ value ->
+                        val paths = members.map { it.path }.toSet()
+                        update(setPowerGroup(power.copy(consumers = power.consumers.map {
+                            if (it.path in paths) it.copy(group = group) else it
+                        }), draft, group, value))
+                    })
                     Column(
                         // Let the row divide the available width evenly. A
                         // fixed 46dp cap made eight groups exceed a compact
                         // phone and clipped the last power icon.
-                        Modifier.weight(1f),
+                        Modifier.width(44.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
@@ -156,7 +171,7 @@ internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop
                             contentAlignment = Alignment.Center,
                         ) {
                             Image(
-                                painter = painterResource(glyphs[index]),
+                                painter = painterResource(glyphs[if (group.startsWith("散热")) 6 else if (group == "其他") 7 else index]),
                                 contentDescription = null,
                                 colorFilter = ColorFilter.tint(if (allDisabled) palette.textMuted else palette.accent),
                                 modifier = Modifier.size(24.dp),
@@ -171,7 +186,7 @@ internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop
             // Cooler records expose cooling/signature data without a direct
             // Power consume flow; filtering through `consumers` silently hid
             // those coolers and made a two-cooler ship look incomplete.
-            val componentSlots = active
+            val componentSlots = slots
                 .filter { it.item?.optString("type") in setOf("Cooler", "PowerPlant") }
                 .distinctBy { it.path }
             val consumerByPath = available.consumers.associateBy { it.path }
@@ -195,10 +210,14 @@ internal fun ErkulPowerCard(backdrop: com.kyant.backdrop.backdrops.LayerBackdrop
                                 modifier = Modifier.size(20.dp),
                             )
                             Text(item.itemName(), style = RefugeTypography.body(palette), modifier = Modifier.weight(1f), maxLines = 1)
-                            if (consumer != null) {
+                            if (item.optString("type") == "PowerPlant") {
+                                val enabled = active.any { it.path == slot.path }
+                                val output = resourceUnits(item, output = true, resource = "Power", unit = "powerSegment").roundToInt()
+                                Text(if (enabled) "输出 $output pips" else "已停用", style = RefugeTypography.caption(palette).copy(color = palette.accent))
+                            } else if (consumer != null) {
                                 Text("${power.supplied(consumer.path)} / ${consumer.maximum} pips", style = RefugeTypography.caption(palette).copy(color = palette.accent))
                             } else {
-                                Text("未列入电力流", style = RefugeTypography.caption(palette).copy(color = palette.textMuted))
+                                Text("无需分配电力", style = RefugeTypography.caption(palette).copy(color = palette.textMuted))
                             }
                         }
                     }

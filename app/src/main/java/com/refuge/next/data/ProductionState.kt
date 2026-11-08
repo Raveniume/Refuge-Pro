@@ -29,6 +29,7 @@ val productionCacheManifest = ProductionCacheManifest(
 data class AppSettings(
     val darkTheme: Boolean = true,
     val translationEnabled: Boolean = true,
+    val doubleLayerGlass: Boolean = false,
 )
 
 internal data class AppSettingsMigration(
@@ -40,6 +41,7 @@ internal fun migrateAppSettings(values: Map<String, *>): AppSettingsMigration = 
     settings = AppSettings(
         darkTheme = values[KEY_DARK_THEME] as? Boolean ?: true,
         translationEnabled = values[KEY_TRANSLATION_ENABLED] as? Boolean ?: true,
+        doubleLayerGlass = values[KEY_DOUBLE_LAYER_GLASS] as? Boolean ?: false,
     ),
     obsoleteKeys = LEGACY_SETTINGS_KEYS.filterTo(linkedSetOf()) { it in values },
 )
@@ -69,6 +71,7 @@ class PreferencesSettingsRepository(context: Context) : SettingsRepository {
         preferences.edit()
             .putBoolean(KEY_DARK_THEME, settings.darkTheme)
             .putBoolean(KEY_TRANSLATION_ENABLED, settings.translationEnabled)
+            .putBoolean(KEY_DOUBLE_LAYER_GLASS, settings.doubleLayerGlass)
             .remove(KEY_SYNC_LOGS)
             .remove(KEY_LOCAL_ONLY)
             .apply()
@@ -88,6 +91,7 @@ class PreferencesSettingsRepository(context: Context) : SettingsRepository {
 
 private const val KEY_DARK_THEME = "dark_theme"
 private const val KEY_TRANSLATION_ENABLED = "translation_enabled"
+private const val KEY_DOUBLE_LAYER_GLASS = "double_layer_glass"
 private const val KEY_SYNC_LOGS = "sync_logs"
 private const val KEY_LOCAL_ONLY = "local_only"
 private val LEGACY_SETTINGS_KEYS = setOf(KEY_SYNC_LOGS, KEY_LOCAL_ONLY)

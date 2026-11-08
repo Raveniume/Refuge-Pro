@@ -36,7 +36,12 @@ private fun DashboardPanel(
     RefugeLightweightGlassSurface(palette, Modifier.fillMaxWidth(), padding = PaddingValues(12.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(icon, null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                when (icon) {
+                    ShipSymbols.damage, ShipSymbols.weapons -> Icon(androidx.compose.ui.res.painterResource(com.refuge.next.R.drawable.erkul_power_weapons), null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                    ShipSymbols.shield, ShipSymbols.defense -> Icon(androidx.compose.ui.res.painterResource(com.refuge.next.R.drawable.erkul_power_shields), null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                    ShipSymbols.flight -> Icon(androidx.compose.ui.res.painterResource(com.refuge.next.R.drawable.erkul_power_engines), null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                    else -> Icon(icon, null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                }
                 Text(title, style = RefugeTypography.headline(palette))
                 Spacer(Modifier.weight(1f))
                 source?.let { Text(it, style = RefugeTypography.caption(palette), color = palette.textMuted) }
@@ -77,7 +82,14 @@ private fun MetricTiles(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             (icons?.getOrNull(values.indexOf(entry)) ?: icon)?.let {
-                                Icon(it, null, tint = if (highlighted) palette.accent else palette.textMuted, modifier = Modifier.size(17.dp))
+                                val resource = when (it) {
+                                    ShipSymbols.missile -> com.refuge.next.R.drawable.erkul_power_missiles
+                                    ShipSymbols.bomb -> com.refuge.next.R.drawable.erkul_power_bombs
+                                    else -> null
+                                }
+                                if (resource != null) Icon(androidx.compose.ui.res.painterResource(resource), null,
+                                    tint = palette.accent, modifier = Modifier.size(17.dp))
+                                else Icon(it, null, tint = if (highlighted) palette.accent else palette.textMuted, modifier = Modifier.size(17.dp))
                             }
                             Text(entry.second, style = RefugeTypography.value(palette).copy(
                                 fontSize = 21.sp,
@@ -151,7 +163,7 @@ internal fun ErkulDashboard(
                 { update(JSONObject(draft.toString()).put("gimbalMode", if (it == 0) "LOCK" else "GIMBAL")) },
                 modifier = Modifier.fillMaxWidth(), fixedWidth = true,
             )
-            MetricTiles(palette, listOf("Σ ALPHA" to alpha, "持续 DPS" to metrics.sustained.metric(), "爆发 DPS" to metrics.burst.metric()), emphasis = 1, icon = ShipSymbols.weapons)
+            MetricTiles(palette, listOf("Σ ALPHA" to alpha, "持续 DPS" to metrics.sustained.metric(), "爆发 DPS" to metrics.burst.metric()), emphasis = 1)
             DashboardSection(palette, "武器来源 · Weapon source") {
                 DamageTableRow(palette, listOf("来源", "Σ ALPHA", "持续", "爆发"), header = true)
                 listOf("驾驶员" to "Pilot", "有人炮塔" to "Manned turret", "遥控炮塔" to "Remote turret", "PDS" to "PDS").forEach { (key, name) ->
@@ -176,7 +188,7 @@ internal fun ErkulDashboard(
 
     val defensePanel: @Composable () -> Unit = {
         DashboardPanel(palette, ShipSymbols.defense, "防御 · Defense", sourceLabel) {
-            MetricTiles(palette, listOf("护盾 HP" to metrics.shield.metric(), "回复 HP/s" to metrics.shieldRegen.metric()), emphasis = 1, icon = ShipSymbols.shield)
+            MetricTiles(palette, listOf("护盾 HP" to metrics.shield.metric(), "回复 HP/s" to metrics.shieldRegen.metric()), emphasis = 1)
             RefugeInfoRows(palette, listOf("护盾形状" to ship.optString("shield").ifBlank { "—" }))
             fun shieldValues(field: String) = listOf("physical" to "Phys", "energy" to "Energy", "distortion" to "Distort").map { (key, title) ->
                 val values = shields.mapNotNull { it.item!!.obj("shield").obj(field).obj(key).number("max") }.distinct()
@@ -189,7 +201,7 @@ internal fun ErkulDashboard(
             AttributeChips(palette, "抗性 · Resistance", shieldValues("resistance"))
             AttributeChips(palette, "吸收 · Absorption", shieldValues("absorption"))
             DashboardSection(palette, "装甲 · Armor") {
-                MetricTiles(palette, listOf("ARMOR HP" to (armorItem?.obj("health")?.number("hp")?.metric() ?: "—")), icon = ShipSymbols.hull)
+                MetricTiles(palette, listOf("ARMOR HP" to (armorItem?.obj("health")?.number("hp")?.metric() ?: "—")))
                 listOf("deflectionValue" to "偏转 · Deflection", "damageMultiplier" to "减伤 · Damage reduction", "selfResistance" to "自身抗性 · Self resistance").forEach { (field, label) ->
                     AttributeChips(palette, label, listOf("physical" to "Phys", "energy" to "Energy").map { (key, name) ->
                         name to (armor.obj(field).number(key)?.let { if (field == "deflectionValue") it.precise() else "${((1 - it) * 100).precise()}%" } ?: "—")
@@ -275,7 +287,7 @@ internal fun ErkulDashboard(
                 return if (base == null) "—" else "${base.precise()} › ${boost?.precise() ?: base.precise()}"
             }
             Text("基础 › 额定加力", style = RefugeTypography.caption(palette))
-            MetricTiles(palette, listOf("PITCH · °/s" to angular("x", "pitch", "boostedPitch"), "YAW · °/s" to angular("z", "yaw", "boostedYaw"), "ROLL · °/s" to angular("y", "roll", "boostedRoll")), emphasis = 0, icon = ShipSymbols.flight)
+            MetricTiles(palette, listOf("PITCH · °/s" to angular("x", "pitch", "boostedPitch"), "YAW · °/s" to angular("z", "yaw", "boostedYaw"), "ROLL · °/s" to angular("y", "roll", "boostedRoll")), emphasis = 0)
             RefugeInfoRows(palette, listOf(
                 "SCM 速度" to "${(params.number("scmSpeed") ?: stockFlight.number("scmSpeed"))?.precise() ?: "—"} m/s",
                 "前向加力" to "${(params.number("boostSpeedForward") ?: stockFlight.number("boostSpeedForward"))?.precise() ?: "—"} m/s",

@@ -20,6 +20,13 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.semantics.dismiss
+import androidx.compose.foundation.layout.widthIn
+import kotlinx.coroutines.Job
 import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.tween
 import com.kyant.shapes.Capsule
@@ -130,6 +137,12 @@ fun RefugeLiquidSheet(
             val scope = rememberCoroutineScope()
             val maxHeightPx = with(density) { maxHeight.toPx() }
             val sheetOffset = remember { androidx.compose.animation.core.Animatable(maxHeightPx) }
+            var pointerOffset by remember { mutableStateOf<Float?>(null) }
+            var closing by remember { mutableStateOf(false) }
+            var settleJob by remember { mutableStateOf<Job?>(null) }
+            val currentDismiss = rememberUpdatedState(onDismiss)
+            val sheetHeightPx = with(density) { targetSheetHeight.toPx() }
+            val sheetSpring = spring<Float>(dampingRatio = .88f, stiffness = 380f)
             val shape = refugeContinuousShape(
                 topStart = 28.dp,
                 topEnd = 28.dp,
@@ -143,14 +156,17 @@ fun RefugeLiquidSheet(
             // underneath while the glass surface moves over it.
             val scrimProgress = remember { androidx.compose.animation.core.Animatable(0f) }
             val dismissWithAnimation: () -> Unit = {
-                scope.launch {
-                    kotlinx.coroutines.coroutineScope {
-                        val sheetJob = launch { sheetOffset.animateTo(maxHeightPx, tween(150, easing = EaseIn)) }
-                        val scrimJob = launch { scrimProgress.animateTo(0f, tween(150, easing = EaseIn)) }
-                        sheetJob.join()
-                        scrimJob.join()
+                if (!closing) {
+                    closing = true
+                    settleJob?.cancel()
+                    settleJob = scope.launch {
+                        pointerOffset?.let { sheetOffset.snapTo(it); pointerOffset = null }
+                        kotlinx.coroutines.coroutineScope {
+                            launch { sheetOffset.animateTo(maxHeightPx, tween(190, easing = EaseIn)) }
+                            launch { scrimProgress.animateTo(0f, tween(190, easing = EaseIn)) }
+                        }
+                        currentDismiss.value()
                     }
-                    onDismiss()
                 }
             }
             LaunchedEffect(dismissSignal) {
@@ -164,7 +180,7 @@ fun RefugeLiquidSheet(
                 sheetOffset.snapTo(maxHeightPx)
                 scrimProgress.snapTo(0f)
                 kotlinx.coroutines.coroutineScope {
-                    val sheetJob = launch { sheetOffset.animateTo(0f, zone.ien.hig.cupertinoTween()) }
+                    val sheetJob = launch { sheetOffset.animateTo(0f, sheetSpring) }
                     val scrimJob = launch { scrimProgress.animateTo(1f, zone.ien.hig.cupertinoTween()) }
                     sheetJob.join()
                     scrimJob.join()
@@ -173,34 +189,47 @@ fun RefugeLiquidSheet(
             val dragHandle: @Composable () -> Unit = {
                 Box(
                     Modifier
-                        .width(34.dp)
+                        .width(72.dp)
                         .height(44.dp)
-                        .pointerInput(maxHeightPx) {
+                        .testTag("sheet-drag-handle")
+                        .semantics { dismiss { dismissWithAnimation(); true } }
+                        .pointerInput(maxHeightPx, sheetHeightPx) {
                             val velocityTracker = VelocityTracker()
                             detectVerticalDragGestures(
                                 onVerticalDrag = { change, dragAmount ->
-                                    change.consumePositionChange()
-                                    velocityTracker.addPosition(change.uptimeMillis, change.position)
-                                    scope.launch {
-                                        sheetOffset.snapTo((sheetOffset.value + dragAmount).coerceIn(0f, maxHeightPx))
+                                    if (!closing) {
+                                        change.consume()
+                                        velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                        val next = (pointerOffset ?: sheetOffset.value) + dragAmount
+                                        pointerOffset = if (next < 0f) (next * .35f).coerceAtLeast(-48.dp.toPx()) else next.coerceAtMost(maxHeightPx)
                                     }
                                 },
                                 onDragStart = { offset ->
+                                    settleJob?.cancel()
+                                    pointerOffset = sheetOffset.value
+                                    scope.launch { sheetOffset.stop() }
                                     velocityTracker.resetTracking()
                                     velocityTracker.addPosition(android.os.SystemClock.uptimeMillis(), offset)
                                 },
                                 onDragEnd = {
                                     val velocity = velocityTracker.calculateVelocity().y
-                                    scope.launch {
-                                        if (sheetOffset.value > maxHeightPx * .24f || velocity > 1100f) {
-                                            dismissWithAnimation()
-                                        } else {
-                                            sheetOffset.animateTo(0f, zone.ien.hig.cupertinoTween())
+                                    val position = pointerOffset ?: sheetOffset.value
+                                    if (position + velocity * .12f > sheetHeightPx * .28f) {
+                                        dismissWithAnimation()
+                                    } else {
+                                        settleJob = scope.launch {
+                                            sheetOffset.snapTo(position)
+                                            pointerOffset = null
+                                            sheetOffset.animateTo(0f, sheetSpring, initialVelocity = velocity)
                                         }
                                     }
                                 },
                                 onDragCancel = {
-                                    scope.launch { sheetOffset.animateTo(0f, zone.ien.hig.cupertinoTween()) }
+                                    settleJob = scope.launch {
+                                        sheetOffset.snapTo(pointerOffset ?: sheetOffset.value)
+                                        pointerOffset = null
+                                        sheetOffset.animateTo(0f, sheetSpring)
+                                    }
                                 },
                             )
                         },
@@ -225,9 +254,15 @@ fun RefugeLiquidSheet(
             )
             ModalGlassScope(
                 modifier
+                    .widthIn(max = 640.dp)
                     .fillMaxWidth()
                     .height(targetSheetHeight)
-                    .offset { IntOffset(0, sheetOffset.value.roundToInt()) },
+                    .graphicsLayer {
+                        val offset = pointerOffset ?: sheetOffset.value
+                        translationY = offset.coerceAtLeast(0f)
+                        transformOrigin = TransformOrigin(.5f, 1f)
+                        scaleY = 1f + (-offset / sheetHeightPx).coerceIn(0f, .025f)
+                    },
                 underlay = pageBackdrop,
                 base = {
                     val isDark = palette.background.luminance() < .5f

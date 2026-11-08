@@ -65,6 +65,7 @@ import androidx.compose.ui.res.painterResource
 import coil3.compose.AsyncImage
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -237,7 +238,7 @@ fun BoxScope.RootBottomNav(
         isDark = isDark,
         tabsCount = rootTabs.size,
         selectedIndex = selectedIndex,
-        onSelected = { index -> onNavigate(rootTabs[index.coerceIn(rootTabs.indices)].route) },
+        onSelected = { index -> if (!coveredBySheet) onNavigate(rootTabs[index.coerceIn(rootTabs.indices)].route) },
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
@@ -245,6 +246,7 @@ fun BoxScope.RootBottomNav(
             // content sits below it, while a sheet uses zIndex 1000 to cover
             // it in place during presentation.
             .zIndex(if (coveredBySheet) 1f else 2f)
+            .then(if (coveredBySheet) Modifier.clearAndSetSemantics { } else Modifier)
             .padding(horizontal = 28.dp)
             .navigationBarsPadding()
             .padding(bottom = 8.dp),
@@ -393,15 +395,17 @@ fun TerminalScreen(
         if (sortDescending) filtered.sortedByDescending { it.name } else filtered.sortedBy { it.name }
     }
 
-    if (showLoadout) {
+    val toolRoute = if (showLoadout) "loadout" else knowledgeRoute ?: "terminal"
+    com.refuge.next.motion.RefugeRouteTransition(toolRoute, order = { if (it == "terminal") 0 else 1 }) { activeTool ->
+    if (activeTool == "loadout") {
         NativeLoadoutScreen(backdrop, palette, isDark,
             initialShipId = loadoutShip?.className ?: loadoutShip?.id,
             onDismiss = { showLoadout = false })
-        return
+        return@RefugeRouteTransition
     }
-    knowledgeRoute?.let { destination ->
-        TerminalKnowledgeNavigator(backdrop, palette, isDark, destination, query) { knowledgeRoute = null }
-        return
+    if (activeTool != "terminal") {
+        TerminalKnowledgeNavigator(backdrop, palette, isDark, activeTool, query) { knowledgeRoute = null }
+        return@RefugeRouteTransition
     }
 
     PageGlassScope(
@@ -553,6 +557,7 @@ fun TerminalScreen(
     if (showFilter) FacetFilterSheet(backdrop, palette, "终端筛选",
         terminalFacetKeys(category).associateWith { key -> items.filter { it.category == category }.mapNotNull { it.facetValue(key) }.distinct().sorted() },
         terminalFilters, { terminalFilters = HashMap(it) }, { showFilter = false })
+    }
 }
 
 @Composable
@@ -1461,6 +1466,8 @@ fun SettingsScreen(
     var clearingCache by remember { mutableStateOf(false) }
     var cacheError by remember { mutableStateOf<String?>(null) }
     val settingsScope = rememberCoroutineScope()
+    val doubleLayerGlass = com.refuge.next.material.LocalDoubleLayerGlass.current
+    val setDoubleLayerGlass = com.refuge.next.material.LocalSetDoubleLayerGlass.current
     var showLicense by remember { mutableStateOf(false) }
     var release by remember { mutableStateOf<AppRelease?>(null) }
     var updateState by remember { mutableStateOf("检查更新") }
@@ -1481,6 +1488,10 @@ fun SettingsScreen(
             item {
                 SettingsGroup(palette, "外观") {
                     SettingsToggleRow(backdrop, palette, "深色主题", if (isDark) "已开启" else "已关闭", isDark, onToggleTheme)
+                    DividerLine(palette)
+                    SettingsToggleRow(backdrop, palette, "双层液态玻璃", "导航与搜索的叠层折射", doubleLayerGlass) {
+                        setDoubleLayerGlass(!doubleLayerGlass)
+                    }
                     DividerLine(palette)
                     SettingsToggleRow(
                         backdrop = backdrop,
@@ -1510,7 +1521,7 @@ fun SettingsScreen(
                         }
                     }
                     DividerLine(palette)
-                    SettingsActionRow(palette, "数据版本", cacheInfo.label) { showAbout = true }
+                    SettingsActionRow(palette, "数据来源与版本", "各资料页显示当前来源和版本") { showAbout = true }
                 }
             }
             item {
@@ -1571,7 +1582,8 @@ fun SettingsScreen(
         },
         overlay = { _ -> },
     )
-    if (showAbout) ProductionNoticeSheet(backdrop, palette, "RefugeNext", "${cacheInfo.source}\n${cacheInfo.label}") { showAbout = false }
+    if (showAbout) ProductionNoticeSheet(backdrop, palette, "RefugeNext ${BuildConfig.VERSION_NAME}",
+        "机库与账户：RSI\n改船：Erkul LIVE / PTU\n制造蓝图：SCM\n任务数据库：SCMDB\n\n资料页优先显示本地缓存，并在后台检查来源版本；新版本下载成功后替换。各页面显示实际使用的数据版本。") { showAbout = false }
     if (showLicense) ProductionNoticeSheet(backdrop, palette, "GNU AGPLv3",
         "GNU Affero General Public License, version 3\nhttps://www.gnu.org/licenses/agpl-3.0.html") { showLicense = false }
 }
@@ -1600,7 +1612,7 @@ private fun SettingsToggleRow(backdrop: LayerBackdrop, palette: RefugePalette, t
             Text(title, style = RefugeTypography.body(palette).copy(color = palette.text))
             Text(subtitle, style = RefugeTypography.caption(palette))
         }
-        zone.ien.hig.CupertinoSwitch(checked = checked, onCheckedChange = { onClick() }, modifier = Modifier.semantics { contentDescription = title })
+        RefugeLiquidToggle(backdrop, palette, checked, onClick, title)
     }
 }
 

@@ -31,7 +31,7 @@ fun ProductionLoadingState(
 ) {
     RefugeLightweightGlassSurface(
         palette = palette,
-        modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp),
+        modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 320.dp),
         padding = PaddingValues(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RefugeSpacing.sm)) {

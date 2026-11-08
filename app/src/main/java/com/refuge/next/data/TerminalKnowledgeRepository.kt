@@ -14,6 +14,15 @@ import java.util.concurrent.TimeUnit
 
 /** Public game references use a separate client: RSI cookies and tokens never leave RSI. */
 internal class TerminalKnowledgeRepository(context: Context) {
+    companion object {
+        @Volatile private var instance: TerminalKnowledgeRepository? = null
+        fun shared(context: Context): TerminalKnowledgeRepository = instance ?: synchronized(this) {
+            instance ?: TerminalKnowledgeRepository(context.applicationContext).also { instance = it }
+        }
+    }
+    @Volatile private var missionSnapshot: MissionCatalog? = null
+    @Volatile var versionCheckSucceeded: Boolean = false
+        private set
     private val directory = File(context.filesDir, "terminal-knowledge").apply { mkdirs() }
     private val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS).build()
@@ -22,7 +31,8 @@ internal class TerminalKnowledgeRepository(context: Context) {
         .digest(value.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
 
     /** Synchronous snapshot reads used to render terminal pages before network work starts. */
-    fun cachedMissionCatalog(): MissionCatalog? = runCatching {
+    @Synchronized fun cachedMissionCatalog(): MissionCatalog? = runCatching {
+        missionSnapshot?.let { return@runCatching it }
         val versionsFile = File(directory, "mission-versions.json")
         if (!versionsFile.isFile) return@runCatching null
         val versions = JSONArray(versionsFile.readText())
@@ -36,7 +46,7 @@ internal class TerminalKnowledgeRepository(context: Context) {
         val language = File(directory, "mission-zh.json").takeIf { it.isFile }
             ?.let { JSONObject(it.readText()) }
             ?.takeIf { it.optString("version").equals(version, true) }
-        MissionCatalog(version, source, language)
+        MissionCatalog(version, source, language).also { missionSnapshot = it }
     }.getOrNull()
 
     fun cachedBlueprintPage(query: String, category: String, page: Int, rewardOnly: Boolean): BlueprintPage? = runCatching {
@@ -59,7 +69,7 @@ internal class TerminalKnowledgeRepository(context: Context) {
             it.body?.string() ?: error("资料响应为空")
         }
         if (value.trimStart().startsWith("[")) JSONArray(value) else JSONObject(value)
-        val pending = File(directory, "$key.pending")
+        val pending = File.createTempFile("snapshot-", ".pending", directory)
         pending.writeText(value)
         check(pending.renameTo(file)) { "资料缓存保存失败" }
         return value
@@ -71,37 +81,42 @@ internal class TerminalKnowledgeRepository(context: Context) {
     }
 
     suspend fun missions(refresh: Boolean = false): MissionCatalog = withContext(Dispatchers.IO) {
+        versionCheckSucceeded = false
         // Version metadata is tiny and is checked on every page entry. The
         // large mission payload stays cached when the website version is the
         // same; a network failure falls back to the last known manifest.
         val versions = JSONArray(runCatching {
-            readFresh("https://scmdb.net/data/versions.json")
+            readFresh("https://scmdb.net/data/versions.json").also { versionCheckSucceeded = true }
         }.getOrElse {
             read("https://scmdb.net/data/versions.json", "mission-versions.json", refresh = false)
         })
         val selected = versions.objects().firstOrNull { it.optString("version").contains("-live.", true) }
             ?: error("暂未找到 LIVE 任务资料")
         val version = selected.getString("version")
+        cachedMissionCatalog()?.takeIf { it.version.equals(version, true) && it.language != null }
+            ?.let { return@withContext it }
         val filename = selected.getString("file")
         require(Regex("[A-Za-z0-9_.-]+\\.json").matches(filename))
         val sourceUrl = "https://scmdb.net/data/$filename"
         val source = JSONObject(runCatching {
-            if (!refresh) {
+            run {
                 val local = File(directory, filename)
                 if (local.isFile && JSONObject(local.readText()).optString("version").equals(version, true)) local.readText()
                 else read(sourceUrl, filename, refresh = true)
-            } else read(sourceUrl, filename, refresh = true)
+            }
         }.getOrElse { read(sourceUrl, filename, refresh = false) })
         check(source.getString("version").equals(version, true)) { "任务资料版本不一致" }
         val language = runCatching {
             val languageUrl = "https://raw.githubusercontent.com/Walkersifolia/SCMDB_zh_cn/main/lang-zh_CN-live.json"
-            JSONObject(if (!refresh) {
+            JSONObject(run {
                 val local = File(directory, "mission-zh.json")
                 if (local.isFile && JSONObject(local.readText()).optString("version").equals(version, true)) local.readText()
                 else read(languageUrl, "mission-zh.json", refresh = true)
-            } else read(languageUrl, "mission-zh.json", refresh = true))
+            })
         }.getOrNull()?.takeIf { it.optString("version").equals(version, true) }
-        MissionCatalog(version, source, language)
+        // Commit metadata only after the matching payload has been validated.
+        File(directory, "mission-versions.json").writeText(versions.toString())
+        MissionCatalog(version, source, language).also { missionSnapshot = it }
     }
 
     private fun scm(path: String, params: Map<String, String>): JSONObject {
@@ -115,28 +130,31 @@ internal class TerminalKnowledgeRepository(context: Context) {
         return response
     }
 
+    /** Same website-config endpoint used by SCM's websiteConfig store. Page
+     * responses do not contain a version; an empty guessed field is not one. */
+    private fun blueprintVersion(): String {
+        versionCheckSucceeded = false
+        val response = JSONObject(readFresh("https://scms.flowcld.com/app-api/system/website/config"))
+        check(response.optInt("code", -1) == 0) { "蓝图版本读取失败" }
+        return response.getJSONObject("data").getString("gameVersion").also {
+            check(it.isNotBlank()); versionCheckSucceeded = true
+        }
+    }
+
     suspend fun blueprints(query: String, category: String, page: Int, rewardOnly: Boolean): BlueprintPage = withContext(Dispatchers.IO) {
         val params = mutableMapOf("pageNo" to "$page", "pageSize" to "40", "usageMode" to "fabricate")
         if (query.isNotBlank()) params["keyword"] = query.trim()
         if (category.isNotBlank()) params["categoryName"] = category
         if (rewardOnly) params["isReward"] = "true"
         val cachedPage = cachedBlueprintPage(query, category, page, rewardOnly)
-        val versionParams = params.toMutableMap().apply {
-            this["pageNo"] = "1"
-            this["pageSize"] = "1"
-        }
-        val liveVersion = runCatching {
-            scm("page", versionParams).getJSONObject("data")
-                .let { it.optString("dataVersion").ifBlank { it.optString("version") } }
-        }.getOrNull()
-        val cachedVersion = cachedBlueprintPage(query, category, 1, rewardOnly)?.version.orEmpty()
-        if (cachedPage != null && !liveVersion.isNullOrBlank() && liveVersion == cachedVersion) {
+        val liveVersion = runCatching { blueprintVersion() }.getOrNull()
+        if (cachedPage != null && (liveVersion == null || (liveVersion.isNotBlank() && liveVersion == cachedPage.version))) {
             return@withContext cachedPage
         }
         val data = scm("page", params).getJSONObject("data")
-        val version = data.optString("dataVersion").ifBlank { data.optString("version") }
+        val version = liveVersion.orEmpty()
         val key = cacheKey("$query|$category|$page|$rewardOnly")
-        val pending = File(directory, "blueprints-$key.json.pending")
+        val pending = File.createTempFile("blueprints-", ".pending", directory)
         pending.writeText(JSONObject()
             .put("version", version)
             .put("total", data.optInt("total"))
@@ -147,8 +165,12 @@ internal class TerminalKnowledgeRepository(context: Context) {
     }
 
     suspend fun blueprint(id: Long): JSONObject = withContext(Dispatchers.IO) {
+        val cached = cachedBlueprint(id)
+        val version = runCatching { blueprintVersion() }.getOrNull()
+        if (cached != null && (version == null || (version.isNotBlank() && cached.optString("_cacheVersion") == version))) return@withContext cached
         val data = scm("get-detail", mapOf("id" to "$id")).getJSONObject("data")
-        val pending = File(directory, "blueprint-$id.json.pending")
+        data.put("_cacheVersion", version.orEmpty())
+        val pending = File.createTempFile("blueprint-", ".pending", directory)
         pending.writeText(data.toString())
         check(pending.renameTo(File(directory, "blueprint-$id.json"))) { "蓝图详情缓存保存失败" }
         data
@@ -174,8 +196,8 @@ internal class MissionCatalog(val version: String, val source: JSONObject, val l
     }
 }
 
-internal fun JSONObject.blueprintTitle(): String = optString("blueprintNameCn").ifBlank { optString("blueprintName") }
-internal fun blueprintModifiers(option: JSONObject, quality: Int): List<Pair<String, Double>> {
+internal fun JSONObject.blueprintTitle(chinese: Boolean = true): String = if (chinese) optString("blueprintNameCn").ifBlank { optString("blueprintName") } else optString("blueprintName").ifBlank { optString("blueprintNameCn") }
+internal fun blueprintModifiers(option: JSONObject, quality: Int, chinese: Boolean = true): List<Pair<String, Double>> {
     val rows = when (val raw = option.opt("modifiers")) {
         is JSONArray -> raw.objects()
         is String -> runCatching { JSONArray(raw).objects() }.getOrDefault(emptyList())
@@ -187,6 +209,6 @@ internal fun blueprintModifiers(option: JSONObject, quality: Int): List<Pair<Str
         val fraction = if (end == start) 0.0 else (quality - start).toDouble() / (end - start)
         val value = range.optDouble("modifierAtStart") + fraction * (range.optDouble("modifierAtEnd") - range.optDouble("modifierAtStart"))
         val delta = if (range.optString("modifierType") == "multiplicative") (value - 1.0) * 100 else value * 100
-        range.optString("property_cn").ifBlank { range.optString("property") } to delta
+        (if (chinese) range.optString("property_cn").ifBlank { range.optString("property") } else range.optString("property")) to delta
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -86,7 +87,7 @@ fun RefugePullToRefresh(
     fun atTop(): Boolean = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
     val connection = remember(listState) {
         object : NestedScrollConnection {
-            var settling = false
+            var settling by mutableStateOf(false)
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source == NestedScrollSource.UserInput && available.y > 0f && atTop() && !latestRefreshing && !settling) {
@@ -153,7 +154,9 @@ fun RefugePullToRefresh(
         }
     }
 
-    LaunchedEffect(isRefreshing) {
+    // A cached refresh may begin and finish within a single frame. Observe the
+    // release animation too, so the indicator cannot remain pinned forever.
+    LaunchedEffect(isRefreshing, connection.settling) {
         if (isRefreshing) {
             pullDistance = thresholdPx
         } else if (pullDistance > 0f && !connection.settling) {

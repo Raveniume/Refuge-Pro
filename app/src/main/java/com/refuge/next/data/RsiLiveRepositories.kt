@@ -457,7 +457,9 @@ class RsiLiveHangarRepository(
             val m80 = finalShip.equals("M80", true)
             OwnedShip(
                 name = finalShip,
-                packageName = ship.typeLabel,
+                // A typed ship may be bundled with a paint. Its hero must
+                // never inherit the cosmetic label from a legacy snapshot.
+                packageName = if (ship.typeLabel == "涂装") "舰船 / 游戏包" else ship.typeLabel,
                 currentValue = ship.currentValue,
                 paidValue = ship.price,
                 insurance = ship.insurance,
@@ -810,7 +812,7 @@ class RsiLiveHangarRepository(
     private fun isM80(title: String) = title.contains("M80", true)
     private fun isUpgradeTitle(title: String) = Regex("(?i)\\b(upgrade|ccu)\\b|升级").containsMatchIn(title)
 
-    private fun isCosmeticTitle(title: String) = Regex(
+    private fun isCosmeticTitle(title: String) = !Regex("(?i)^standalone\\s+ships?\\b|^单船").containsMatchIn(title) && Regex(
         "(?i)(paint|paints|livery|skin|涂装|油漆|纹理|涂层)",
     ).containsMatchIn(title)
 

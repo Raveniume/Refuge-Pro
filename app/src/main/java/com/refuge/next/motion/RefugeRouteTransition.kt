@@ -16,6 +16,26 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+
+/** Move the existing reading surface without duplicating its large data tree. */
+@Composable
+fun RefugeDetailMotion(destination: Any?, content: @Composable () -> Unit) {
+    val offset = remember { Animatable(0f) }
+    var previous by remember { mutableStateOf(destination) }
+    LaunchedEffect(destination) {
+        if (destination != previous) {
+            offset.snapTo(if (destination == null) -60f else 90f)
+            previous = destination
+            offset.animateTo(0f, tween(240))
+        }
+    }
+    Box(Modifier.fillMaxSize().offset { IntOffset(offset.value.roundToInt(), 0) }) { content() }
+}
 
 /**
  * A single-tree route reveal. Liquid Glass pages allocate GPU backdrop layers;
